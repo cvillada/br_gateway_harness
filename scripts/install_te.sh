@@ -49,20 +49,20 @@ chmod +x "$DIR/abrir-teo.sh"
 if [ "$(uname)" = "Darwin" ]; then
     DESK="$HOME/Desktop"
     mkdir -p "$DESK"
-    cat > "$DESK/Abrir TEO.command" <<EOF
+    cat > "$DESK/TEO.command" <<EOF
 #!/usr/bin/env bash
 cd "$DIR"
 source .venv/bin/activate
 exec bgh
 EOF
-    chmod +x "$DESK/Abrir TEO.command"
-    echo "Atalho criado na Area de trabalho do Finder: 'Abrir TEO.command' (dois cliques)."
+    chmod +x "$DESK/TEO.command"
+    echo "Icone criado na Area de trabalho do Finder: TEO (dois cliques)."
     echo "Se o Terminal pedir uma permissao na primeira vez, aceite ('Abrir')."
 else
     DESK=$(xdg-user-dir DESKTOP 2>/dev/null || true)
     if [ -z "$DESK" ]; then DESK="$HOME/Desktop"; fi
     mkdir -p "$DESK"
-    cat > "$DESK/teo.desktop" <<EOF
+    cat > "$DESK/TEO.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=TEO
@@ -71,8 +71,8 @@ Exec=bash "$DIR/abrir-teo.sh"
 Terminal=true
 Categories=Utility;
 EOF
-    chmod +x "$DESK/teo.desktop"
-    gio set "$DESK/teo.desktop" metadata::trusted true 2>/dev/null || true
+    chmod +x "$DESK/TEO.desktop"
+    gio set "$DESK/TEO.desktop" metadata::trusted true 2>/dev/null || true
     echo "Atalho 'TEO' criado na Area de trabalho. Se ele aparecer apagado, clique com o"
     echo "botao direito e escolha 'Permitir Lancamento' / 'Confiar' uma unica vez."
 fi

@@ -94,8 +94,8 @@ bash install_te.sh
 
 O script faz tudo sozinho: baixa o wheel do Release mais novo, cria a pasta `~/TEO`,
 cria o ambiente virtual, copia o wheel para dentro dela, roda o pip install, cria um
-atalho para abrir o TEO sem terminal (no macOS: `Abrir TEO.command` na Area de
-trabalho do Finder; no Linux: lancador `TEO` na Area de trabalho) e abre o programa
+atalho para abrir o TEO sem terminal: um icone chamado **TEO** na Area de
+trabalho (no macOS, `TEO.command` no Finder; no Linux, lancador `TEO`) e abre o programa
 (na primeira vez, o assistente de configuracao comeca sozinho).
 
 #### macOS (metodo manual, se preferir fazer passo a passo)
