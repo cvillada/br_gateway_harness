@@ -804,4 +804,46 @@ ok("modelo que so pensa e devolve texto vazio ganha aviso na tela",
    any("sem texto de resposta" in l for l in _sink_vazio.lines[_n_vazio:]))
 ok("canal de aviso do cliente esta ligado na tela", _core_vazio.llm.on_note is not None)
 
+# ---------- v0.2.5: /ctx com numero define o limite -----------------------------
+from bgh.chat_core import help_lines as _help_lines
+from bgh.chat_core import parse_budget as _parse_budget
+
+ok("aceita numero puro", _parse_budget("65000") == 65000)
+ok("aceita 65k", _parse_budget("65k") == 65000)
+ok("aceita milhar com ponto (65.000)", _parse_budget("65.000") == 65000)
+ok("aceita '65 mil'", _parse_budget("65 mil") == 65000)
+ok("letra nao e numero", _parse_budget("abc") is None)
+ok("numero pequeno demais e recusado", _parse_budget("100") is None)
+ok("numero absurdo e recusado", _parse_budget("2000000") is None)
+
+_sink_ctx = RecSink()
+_core_ctx = ChatCore(dict(core_cfg), _sink_ctx,
+                     llm=FakeLLM([{"role": "assistant", "content": "ok"}]))
+_orcamento_antes = _core_ctx.agent.ctx_usage()["budget"]
+_core_ctx.submit("/ctx 65000")
+ok("/ctx 65000 muda o limite que o medidor mostra",
+   _orcamento_antes != 65000 and _core_ctx.agent.ctx_usage()["budget"] == 65000)
+ok("mudanca e anunciada na tela", any("ajustado para 65000" in l for l in _sink_ctx.lines))
+ok("limite novo vai para o config.json (sobrevive ao reabrir o TEO)",
+   load_config()["context_budget_chars"] == 65000)
+
+_sink_reaberto = RecSink()
+_core_reaberto = ChatCore(dict(load_config()), _sink_reaberto,
+                          llm=FakeLLM([{"role": "assistant", "content": "ok"}]))
+ok("reabrir o chat ja vem com o limite salvo",
+   _core_reaberto.cfg["context_budget_chars"] == 65000)
+_linhas_antes = len(_sink_reaberto.lines)
+_core_reaberto.submit("/ctx abc")
+ok("numero invalido ganha aviso em vez de silencio",
+   any("Esse numero nao vale" in l for l in _sink_reaberto.lines[_linhas_antes:]))
+ok("numero invalido nao altera o limite guardado",
+   _core_reaberto.cfg["context_budget_chars"] == 65000)
+_linhas_ctx = len(_sink_reaberto.lines)
+_ok_ctx_sozinho = _core_reaberto.submit("/ctx")
+ok("/ctx sozinho continua sendo so o medidor (sem numero nao muda nada)",
+   _ok_ctx_sozinho == "continue" and _core_reaberto.cfg["context_budget_chars"] == 65000
+   and not any("Esse numero nao vale" in l for l in _sink_reaberto.lines[_linhas_ctx:]))
+ok("ajuda menciona o /ctx com numero",
+   any("/ctx <numero>" in "".join(seg for seg, _ in row) for row in _help_lines()))
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

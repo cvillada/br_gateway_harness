@@ -21,6 +21,10 @@ Silencio deixou de parecer trava, e "parar" passou a valer dentro das ferramenta
   o teto ela diz onde parou e pede uma pasta mais especifica.
 - Assistente de configuracao sugere orçamento de contexto por provedor (45000 para
   servidor remoto NubesBR) e sobe `max_tokens` para 3072 nesse perfil.
+- `/ctx 65000` agora define o limite de contexto na hora e salva no config.json
+  (aceita 65k, 65.000 e 65 mil). Antes o numero era ignorado em silencio, o que na
+  maquina do cliente parecia comando quebrado. `/ctx` sozinho segue sendo so o
+  medidor; numero invalido ganha aviso com o uso correto.
 
 ## 0.2.4
 

@@ -66,6 +66,7 @@ HELP_SECTIONS = [
         ("/provedor <nome ou numero>", "troca o provedor em uso na hora (fica salvo)"),
         ("/thinking <nivel>", "nivel: auto off minimum low medium high xhigh max ultra"),
         ("/ctx", "medidor do contexto atual"),
+        ("/ctx <numero>", "define o limite de contexto e fica salvo (ex.: /ctx 65000)"),
         ("/skills", "lista as skills conhecidas"),
         ("/sair", "encerra"),
     ]),
@@ -103,6 +104,27 @@ def parse_approval_choice(raw: str, codes: list[str], default: str = "d") -> str
     if raw.isdigit() and 1 <= int(raw) <= len(codes):
         return codes[int(raw) - 1]
     return default
+
+
+def parse_budget(raw: str) -> int | None:
+    """Aceita '65000', '65k', '65.000', '65 mil' e devolve o numero de caracteres.
+
+    None quando nao e numero ou esta fora do intervalo util (8000 a 1000000).
+    """
+    texto = str(raw or "").strip().lower().replace(" ", "")
+    if not texto:
+        return None
+    multiplicador = 1
+    for sufixo in ("mil", "k"):
+        if texto.endswith(sufixo):
+            multiplicador = 1000
+            texto = texto[: -len(sufixo)]
+            break
+    texto = texto.replace(".", "").replace(",", "")
+    if not texto.isdigit():
+        return None
+    valor = int(texto) * multiplicador
+    return valor if 8000 <= valor <= 1000000 else None
 
 
 class ConsoleSink:
@@ -411,6 +433,20 @@ class ChatCore:
                         "Nivel desconhecido. Use: "
                         "/thinking auto|off|minimum|low|medium|high|xhigh|max|ultra")
             elif name == "/ctx":
+                if rest:
+                    novo = parse_budget(rest)
+                    if novo is None:
+                        # Silenciar argumento era lido como bug na maquina do cliente.
+                        self.sink.line("Esse numero nao vale. Uso: /ctx 65000 (aceita 65k, "
+                                       "65.000, 65 mil). Intervalo: 8000 a 1000000.", style="yellow")
+                    else:
+                        self.cfg["context_budget_chars"] = novo
+                        for dono in (self.agent, self.llm):
+                            if getattr(dono, "cfg", None) is not None and dono.cfg is not self.cfg:
+                                dono.cfg["context_budget_chars"] = novo
+                        save_config(self.cfg)
+                        self.sink.line(f"Orcamento de contexto ajustado para {novo} caracteres "
+                                       "(salvo). Vale ja na proxima resposta.", style="cyan")
                 self.print_ctx()
             else:
                 self.sink.line("Comando desconhecido. /ajuda mostra a lista.")
