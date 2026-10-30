@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 $repo = "cvillada/br_gateway_harness"
 
 Write-Host "Procurando a versao mais recente do TEO..."
-$rel = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest"
+$rel = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 30
 $whl = $rel.assets | Where-Object { $_.name -like "bgh_motor-*.whl" } | Select-Object -First 1
 if (-not $whl) { throw "Nao encontrei arquivo .whl no Release mais novo." }
 
@@ -26,7 +26,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $wheel_local = Join-Path $dir $whl.name
 Write-Host ("Baixando " + $whl.name + " ...")
-Invoke-WebRequest -Uri $whl.browser_download_url -OutFile $wheel_local
+Invoke-WebRequest -Uri $whl.browser_download_url -OutFile $wheel_local -TimeoutSec 120
 
 Write-Host "Instalando no ambiente virtual..."
 & "$dir\.venv\Scripts\pip.exe" install --upgrade pip | Out-Null
