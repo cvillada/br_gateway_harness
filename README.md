@@ -84,7 +84,8 @@ recursos visuais.
 
 ### macOS (instalacao pratica: 2 linhas)
 
-Requisito: Python 3.11 ou mais novo (se falta: `brew install python@3.12`).
+Requisito: Python 3.11 ou mais novo (se falta: instale de https://python.org/downloads ou,
+se tiver o brew, `brew install python@3.12`).
 Abra o Terminal e cole, uma linha de cada vez:
 
 ```bash
@@ -139,7 +140,10 @@ Ou o metodo manual com venv (copiando o wheel para `~/TEO`), igual ao do macOS a
 ### Sem Python (qualquer sistema)
 
 Cada Release traz o binario pronto do seu sistema: `motor.exe` (Windows),
-`motor-macos` (macOS) e `motor` (Linux). E baixar e rodar.
+`motor-macos` (macOS, para Macs com chip Apple - M1, M2, M3, M4) e `motor` (Linux).
+E baixar e rodar. Mac com chip Intel: use o passo a passo com Python acima (funciona
+em qualquer Mac). No Linux, rode o `motor` na mesma distribuicao em que ele foi gerado
+(ou use o passo a passo com Python, que funciona em qualquer uma).
 
 O assistente pode ser refeito a qualquer momento com `bgh setup`. Se o cliente abrir
 o TEO sem nunca ter configurado, o assistente comeca sozinho na hora (nao precisa

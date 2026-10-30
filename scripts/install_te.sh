@@ -27,6 +27,9 @@ else
 fi
 
 echo "Criando ambiente virtual (.venv)..."
+if [ "$(uname)" = "Darwin" ]; then
+    echo "  (se o macOS oferecer 'Instalar ferramentas do desenvolvedor', clique em Instalar e aguarde)"
+fi
 "$PY" -m venv .venv
 
 echo "Baixando $NAME ..."
