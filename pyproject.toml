@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bgh-motor"
+version = "0.2.4"
+description = "Motor (bgh) - agente CLI local para a maquina do usuario"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "cvillada" }]
+dependencies = [
+    "openai>=1.40.0",
+    "requests>=2.31.0",
+    "rich>=13.7.0",
+    "prompt_toolkit>=3.0",
+]
+
+[project.scripts]
+bgh = "bgh.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["bgh*"]
+
+[tool.setuptools.package-data]
+bgh = ["skills_default/**/*"]

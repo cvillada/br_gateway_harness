@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Lancador do Motor: roda o pacote com o python do venv do projeto.
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+if [ ! -x "$HERE/.venv/bin/python" ]; then
+    echo "Falta o ambiente virtual. Rode primeiro: bash install.sh" >&2
+    exit 1
+fi
+exec "$HERE/.venv/bin/python" -m bgh "$@"
