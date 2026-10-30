@@ -193,6 +193,9 @@ class ChatCore:
         self._pend = ""  # '*' do fim de um pedaco aguarda o proximo ('**' dividido)
         self.agent.on_reasoning_delta = self._on_reasoning
         self.agent.on_text_delta = self._on_text
+        # Avisos do cliente (espera longa, fallback sem streaming) viram linha na tela:
+        # espera nunca pode ser lida como programa travado.
+        self.llm.on_note = lambda texto: self.sink.line(texto, style="yellow")
 
     # ----- streaming -> sink ---------------------------------------------------
     def _on_reasoning(self, chunk: str) -> None:
@@ -448,5 +451,12 @@ class ChatCore:
             elif not self.st["resposta"]:
                 self.sink.sep("resposta")
             self.sink.line(md_clean(answer))
+        if (not answer and answer != STOPPED_NOTE and not self.agent.last_streamed
+                and not self.st["resposta"]):
+            # Caso medido no servidor: o pensamento comeu todo o max_tokens e o pedido
+            # voltou sem texto. Sem esta linha a pessoa acha que o programa travou.
+            self.sink.line("O modelo terminou sem texto de resposta (apenas pensou). Pergunte "
+                           "de novo ou aumente o limite de saida (max_tokens no config.json).",
+                           style="yellow")
         self.print_ctx()
         return "continue"

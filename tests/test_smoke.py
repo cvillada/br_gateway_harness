@@ -683,4 +683,125 @@ _ts.border()
 ok("divisor da tela usa a largura da janela (com folga)",
    _seen[-1][0] == "=" * 88 and _seen[-1][1] == "class:rule")
 
+# ---------- v0.2.5: espera do servidor, parada dentro de ferramenta, busca com teto ----------
+import threading as _th
+import time as _t
+
+from bgh.llm import LLM as LLM25
+from bgh.llm import _timeout_for as _timeout_for25
+from bgh.tools import Ctx as Ctx25
+from bgh.tools import files as files25
+from bgh.tools.guard import STOPPED_NOTE as NOTE_PARADO
+from bgh.tools.guard import limit_n as _limit_n, limit_s as _limit_s
+
+ok("modelo local tem teto de espera de 120s",
+   _timeout_for25({"base_url": "http://127.0.0.1:30000/v1"}) == 120.0)
+ok("servidor remoto tem teto de espera de 300s (contexto grande demora a ser lido)",
+   _timeout_for25({"base_url": "https://ia.nubesbr.com/v1/"}) == 300.0)
+ok("request_timeout_s do config manda no teto",
+   _timeout_for25({"base_url": "https://x/v1/", "request_timeout_s": 45}) == 45.0)
+_llm_remote = LLM25({"base_url": "https://ia.nubesbr.com/v1/", "model": "m"})
+ok("o cliente OpenAI recebe o teto calculado", float(_llm_remote.client.timeout) == 300.0)
+ok("uma pergunta nao vira fila de pedidos: retries padrao = 1",
+   _llm_remote.retries == 1 and int(_llm_remote.client.max_retries) == 1)
+ok("LLM tem canal de aviso para a tela (espera nunca e silencio)", _llm_remote.on_note is None)
+ok("tetos de busca vem do config e tem piso/teto proprios",
+   _limit_s({"search_time_limit_s": 9999}, "search_time_limit_s", 20) == 600
+   and _limit_n({}, "search_max_files", 20000) == 20000)
+
+# arvore de teste: 400 arquivos sem nenhum match (pior caso da busca)
+_arvore = TMP / "arvore_busca"
+for _i in range(400):
+    _d = _arvore / f"pasta{_i % 20}"
+    _d.mkdir(parents=True, exist_ok=True)
+    (_d / f"arquivo{_i}.txt").write_text("conteudo sem o padrao procurado\n", encoding="utf-8")
+_ctx_lim = Ctx25(cfg={"search_max_files": 100, "search_time_limit_s": 5}, gate=None, stop_event=None)
+_res_lim = files25.search_files({"pattern": "zzqx_inexistente", "path": str(_arvore)}, _ctx_lim)
+ok("busca para no teto de arquivos e explica em vez de caminhar a arvore inteira",
+   "parei depois de" in _res_lim and "pasta mais especifica" in _res_lim)
+(_arvore / "alvo.txt").write_text("linha_procurada_aqui\n", encoding="utf-8")
+_ctx_sem_limite = Ctx25(cfg={}, gate=None, stop_event=None)
+_res_ok = files25.search_files({"pattern": "linha_procurada_aqui", "path": str(_arvore)},
+                               _ctx_sem_limite)
+ok("busca normal (sem teto apertado) continua achando e sem aviso de limite",
+   "alvo.txt" in _res_ok and "parei depois de" not in _res_ok)
+
+_ev_ja_parado = _th.Event()
+_ev_ja_parado.set()
+_ctx_parado = Ctx25(cfg={}, gate=None, stop_event=_ev_ja_parado)
+ok("search_files obedece o 'parar' antes de comecar",
+   files25.search_files({"pattern": "qualquer", "path": str(_arvore)}, _ctx_parado)
+   .startswith("PARADO"))
+ok("read_file obedece o 'parar'",
+   files25.read_file({"path": str(_arvore / "alvo.txt")}, _ctx_parado).startswith("PARADO"))
+ok("nota de parada e a mesma em toda ferramenta", NOTE_PARADO.startswith("PARADO"))
+
+
+class FakeLLMParado:
+    """Modelo pede uma ferramenta; a ferramenta obedece o 'parar' e devolve PARADO."""
+
+    def __init__(self):
+        self.rodadas = 0
+
+    def chat(self, messages, tools=None):
+        self.rodadas += 1
+        if self.rodadas == 1:
+            return {"role": "assistant", "content": "",
+                    "tool_calls": [{"id": "p1", "type": "function",
+                                    "function": {"name": "search_files",
+                                                 "arguments": '{"pattern": "abc"}'}}]}
+        return {"role": "assistant", "content": "resposta final"}
+
+    def chat_stream(self, messages, tools=None, on_text=None, on_reasoning=None, should_stop=None):
+        return self.chat(messages, tools)
+
+    def summarize(self, text):
+        return ""
+
+
+_llm_par = FakeLLMParado()
+_ag_par = Agent(dict(cfg_s), _llm_par, Gate(dict(cfg_s), ask_d))
+_ag_par.new_session()
+_ag_par.tools.handlers["search_files"] = lambda args, ctx: NOTE_PARADO
+_ans_par = _ag_par.run_turn("procure isso")
+ok("ferramenta que obedece o 'parar' fecha o turno na hora", _ans_par == _STOPPED)
+ok("turno parado nao emenda nova rodada de pergunta ao modelo", _llm_par.rodadas == 1)
+
+_tb_par = ToolBox(dict(cfg), Gate(dict(cfg), ask_o), stop_event=None)
+_ev_py = _th.Event()
+_th.Timer(0.4, _ev_py.set).start()
+_tb_par.ctx.stop_event = _ev_py
+_t0_py = _t.time()
+_res_py = _tb_par.dispatch("run_python", '{"code": "import time\\nprint(1)\\ntime.sleep(12)"}')
+_dt_py = _t.time() - _t0_py
+ok("run_python e derrubado quando o usuario manda parar (antes era esperar o script)",
+   _res_py.startswith("PARADO") and _dt_py < 3.0)
+_ev_py.clear()  # parada anterior so vale para o comando de antes
+_res_py_ok = _tb_par.dispatch("run_python", '{"code": "print(2+2)"}')
+ok("run_python normal continua funcionando", "exit_code=0" in _res_py_ok and "4" in _res_py_ok)
+
+from bgh.tui import _status_text as _status_text25
+
+_st_busy = {"busy": True, "approval": None, "spin": 0, "ctx": None, "stop_hits": 0,
+            "busy_since": _t.time() - 47, "tool": "search_files", "tool_since": _t.time() - 12}
+_barra = "".join(seg for _style, seg in _status_text25(_st_busy))
+ok("barra de baixo conta os segundos da espera", "rodando... 47s" in _barra)
+ok("barra mostra a ferramenta em andamento e ha quanto tempo", "search_files 12s" in _barra)
+
+from bgh.setup_wizard import BUDGET_SUGESTAO, MAX_TOKENS_PRESET
+
+ok("assistente sugere budget menor para servidor remoto", BUDGET_SUGESTAO["nubesbr"] == "45000")
+ok("perfil remoto vem com saida maior que o pensamento do modelo",
+   MAX_TOKENS_PRESET["nubesbr"] == 3072)
+ok("config novo traz teto de busca e timeout automatico",
+   DEFAULTS.get("search_time_limit_s") == 20 and DEFAULTS.get("request_timeout_s") == 0)
+
+_sink_vazio = RecSink()
+_core_vazio = ChatCore(dict(core_cfg), _sink_vazio, llm=FakeLLM([{"role": "assistant", "content": ""}]))
+_n_vazio = len(_sink_vazio.lines)
+_core_vazio.submit("pergunta sem resposta")
+ok("modelo que so pensa e devolve texto vazio ganha aviso na tela",
+   any("sem texto de resposta" in l for l in _sink_vazio.lines[_n_vazio:]))
+ok("canal de aviso do cliente esta ligado na tela", _core_vazio.llm.on_note is not None)
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

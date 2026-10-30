@@ -148,6 +148,10 @@ class Agent:
                 self.messages.append(
                     {"role": "tool", "tool_call_id": tc["id"], "content": result}
                 )
+                if result.startswith("PARADO"):
+                    # A ferramenta obedeceu ao 'parar': o turno fecha agora, sem
+                    # emendar outra rodada de ferramentas atrasada.
+                    user_stopped = True
             if user_stopped:
                 self._save_session()
                 return STOPPED_NOTE

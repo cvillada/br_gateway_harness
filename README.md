@@ -105,7 +105,7 @@ trabalho (no macOS, `TEO.command` no Finder; no Linux, lancador `TEO`) e abre o 
 mkdir TEO && cd TEO
 python3 -m venv .venv
 source .venv/bin/activate
-pip install /caminho/para/bgh_motor-0.2.4-py3-none-any.whl
+pip install /caminho/para/bgh_motor-0.2.5-py3-none-any.whl
 bgh
 ```
 

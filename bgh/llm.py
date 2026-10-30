@@ -7,6 +7,9 @@ Extras:
   desliga o recurso sozinho e segue funcionando.
 """
 
+import time
+from typing import Callable
+
 from openai import OpenAI
 
 from bgh.config import load_config
@@ -26,18 +29,52 @@ class LLMError(Exception):
     """Erro de conexao/resposta do modelo, ja traduzido para mensagem legivel."""
 
 
+def _timeout_for(cfg: dict) -> float:
+    """Segundos que o cliente espera pelo modelo antes de desistir.
+
+    Modelo na propria maquina responde em segundos -> 120 s chegam.
+    Servidor remoto (API hospedada) pode levar mais de um minuto apenas para ler
+    um contexto grande -> 300 s, senao a pessoa ve 'travou' e depois um erro.
+    request_timeout_s no config.json manda em qualquer valor acima de zero.
+    """
+    try:
+        explicito = int(cfg.get("request_timeout_s") or 0)
+    except (TypeError, ValueError):
+        explicito = 0
+    if explicito > 0:
+        return float(max(10, min(explicito, 900)))
+    url = str(cfg.get("base_url", "")).lower()
+    if "127.0.0.1" in url or "localhost" in url or "::1" in url:
+        return 120.0
+    return 300.0
+
+
 class LLM:
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or load_config()
+        self.timeout_s = _timeout_for(self.cfg)
+        # Uma pergunta do usuario nao pode virar uma fila de pedidos atrasados no
+        # servidor: cada nova tentativa paga a leitura do contexto de novo.
+        raw_retries = self.cfg.get("max_retries")
+        self.retries = max(0, min(1 if raw_retries is None else int(raw_retries), 4))
         self.client = OpenAI(
             base_url=self.cfg["base_url"],
             api_key=self.cfg.get("api" + "_key") or "none",
-            timeout=120.0,
-            max_retries=2,
+            timeout=self.timeout_s,
+            max_retries=self.retries,
         )
+        # Aviso para a tela (ex.: "o servidor demorou; tentei sem streaming").
+        self.on_note: Callable[[str], None] | None = None
         # vao para False quando o servidor rejeita cada recurso (queda em escada)
         self._template_ok = True   # chat_template_kwargs (thinking / thinking_budget)
         self._effort_ok = True     # reasoning_effort
+
+    def _note(self, text: str) -> None:
+        if self.on_note is not None:
+            try:
+                self.on_note(text)
+            except Exception:  # noqa: BLE001 - aviso nunca derruba o turno
+                pass
 
     def _apply_thinking(self, kwargs: dict) -> None:
         """Traduz o nivel de pensamento para os campos que os servidores entendem."""
@@ -79,6 +116,12 @@ class LLM:
                     self._template_ok = False
                     kwargs.pop("extra_body", None)
                     continue
+                if "timeout" in text:
+                    raise LLMError(
+                        f"O modelo nao respondeu em {int(self.timeout_s)}s de espera. "
+                        "Em servidor remoto isso costuma ser contexto grande demais: "
+                        "baixe o orcamento de contexto ou ajuste request_timeout_s no config.json."
+                    ) from exc
                 raise LLMError(f"Falha ao falar com o modelo ({type(exc).__name__}): {exc}") from exc
         raise LLMError("Falha ao falar com o modelo (fallback esgotado).")
 
@@ -149,10 +192,14 @@ class LLM:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
         self._apply_thinking(kwargs)
+        t0 = time.time()
         try:
             resp = self.client.chat.completions.create(**kwargs)
-        except Exception:  # noqa: BLE001
-            # Servidor sem streaming (ou sem o campo de nivel): segue pelo caminho normal.
+        except Exception as exc:  # noqa: BLE001
+            # Servidor sem streaming (ou sem o campo de nivel): segue pelo caminho normal,
+            # mas avisando na tela - espera dupla nao pode ser lida como trava.
+            self._note("O servidor nao aceitou a resposta em pedacos "
+                       f"({type(exc).__name__}); vou responder de uma vez (mais uma espera).")
             kwargs.pop("stream", None)
             kwargs.pop("extra_body", None)
             return self.chat(messages, tools)
@@ -190,8 +237,15 @@ class LLM:
                         if tc.function.arguments:
                             slot["function"]["arguments"] += tc.function.arguments
         except Exception as exc:  # noqa: BLE001
+            esperado = int(time.time() - t0)
             if content_parts or reasoning_parts:
-                raise LLMError(f"Streaming caiu no meio da resposta: {exc}") from exc
+                raise LLMError(
+                    f"A resposta caiu no meio depois de {esperado}s de espera "
+                    f"({type(exc).__name__}: {exc}). O texto que apareceu ficou guardado; "
+                    "pergunte de novo ou use um orcamento de contexto menor."
+                ) from exc
+            self._note(f"Nada chegou do servidor em {esperado}s; vou tentar sem streaming "
+                       "(uma espera a mais, e o pedido vai de novo para a fila).")
             kwargs.pop("stream", None)
             return self.chat(messages, tools)
 

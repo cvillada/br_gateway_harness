@@ -53,6 +53,14 @@ DEFAULTS = {
     # (on continua aceito como antigo). Vira reasoning_effort e/ou
     # thinking_budget conforme o que o servidor aceitar (queda em escada).
     "thinking": "auto",
+    # Segundos de espera pelo modelo antes de desistir. 0 = automatico:
+    # 120 para modelo na propria maquina, 300 para servidor remoto (contexto grande
+    # pode levar mais de um minuto so para ser lido).
+    "request_timeout_s": 0,
+    # Tetos da busca em arquivos: sem eles uma pasta gigante (AppData, Documents)
+    # anda a arvore inteira e o turno parece travado.
+    "search_time_limit_s": 20,
+    "search_max_files": 20000,
     # Orcamento de contexto em caracteres (~3.5 chars/token em pt+codigo).
     # Para modelos de 27B ou maiores, mantenha >= 60000 (ctx do servidor >= 24k tokens).
     "context_budget_chars": 60000,

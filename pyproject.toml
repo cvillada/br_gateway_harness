@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bgh-motor"
-version = "0.2.4"
+version = "0.2.5"
 description = "Motor (bgh) - agente CLI local para a maquina do usuario"
 readme = "README.md"
 requires-python = ">=3.10"

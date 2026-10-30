@@ -5,4 +5,4 @@ Pacote enxuto em Python puro: loop de agente + endpoint OpenAI-compativel
 skills em SKILL.md e pesquisa web sem API paga.
 """
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"

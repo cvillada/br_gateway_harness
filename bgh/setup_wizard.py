@@ -28,6 +28,14 @@ def _ask(prompt: str, default: str = "", secret: bool = False) -> str:
     return raw or default
 
 
+# Orcamento de contexto sugerido por provedor (medido no servidor hospedado:
+# 60 mil chars custam ~37 s so para o motor ler o prompt; 125 mil custam ~77 s).
+BUDGET_SUGESTAO = {"nubesbr": "45000", "deepseek": "60000", "local": "60000", "custom": "60000"}
+# Limite de saida por provedor: nos servidores que 'pensam' antes de responder,
+# 2048 tokens podem ser todos gastos no pensamento e o pedido volta sem resposta.
+MAX_TOKENS_PRESET = {"nubesbr": 3072, "deepseek": 2048, "local": 2048, "custom": 2048}
+
+
 def run(non_interactive: bool = False, provider: str | None = None, api_key: str | None = None) -> int:
     print("Configuracao do TEO\n" + "-" * 40)
 
@@ -82,8 +90,13 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
             "api_key": key,
         }
     )
+    # Servidor que pensa antes de responder precisa de saida maior que o pensamento.
+    cfg["max_tokens"] = max(int(cfg.get("max_tokens") or 2048),
+                            MAX_TOKENS_PRESET.get(choice, 2048))
     if not non_interactive:
-        budget = _ask("Orcamento de contexto em caracteres (27B+ use 60000)", "60000")
+        sugestao = BUDGET_SUGESTAO.get(choice, "60000")
+        budget = _ask(f"Orcamento de contexto em caracteres (servidor remoto use {sugestao})",
+                      sugestao)
         try:
             cfg["context_budget_chars"] = int(budget)
         except ValueError:

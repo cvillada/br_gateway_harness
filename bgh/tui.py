@@ -25,6 +25,7 @@ import asyncio
 import shutil
 import textwrap
 import threading
+import time
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.run_in_terminal import run_in_terminal
@@ -186,6 +187,10 @@ class TuiSink:
         self.emit(text, newline=False, style="an")
 
     def tool_event(self, name: str, preview: str) -> None:
+        # guarda o que esta rodando agora: a barra de baixo mostra a ferramenta e ha
+        # quantos segundos ela esta em andamento (espera longa deixa de parecer trava)
+        self.state["tool"] = name
+        self.state["tool_since"] = time.time()
         self.emit(f"> {name}: {preview}", style="tool")
 
     def status(self, text: str) -> None:
@@ -246,7 +251,8 @@ def run_tui(cfg: dict) -> int:
     # Historico estilo bash: setas cima/baixo repetem o que ja foi digitado;
     # sobrevive ao fechar/abrir (arquivo em ~/.bgh/input_history.txt).
     in_buf = Buffer(multiline=False, history=FileHistory(str(INPUT_HISTORY_FILE)))
-    state = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0, "ctx": None}
+    state = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0, "ctx": None,
+             "busy_since": 0.0, "tool": None, "tool_since": 0.0}
     printed = {"n": 0, "cols": 0}
     app: Application | None = None
 
@@ -373,6 +379,8 @@ def run_tui(cfg: dict) -> int:
             return
         state["busy"] = True
         state["stop_hits"] = 0
+        state["busy_since"] = time.time()   # a barra de baixo conta os segundos da espera
+        state["tool"] = None
         emit(f"voce> {text}", style="voce")  # eco na hora: a tela nunca fica muda
 
         def _worker():
@@ -385,6 +393,7 @@ def run_tui(cfg: dict) -> int:
             finally:
                 state["busy"] = False
                 state["stop_hits"] = 0
+                state["tool"] = None
                 _schedule(app.invalidate)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -464,7 +473,15 @@ def _status_text(state: dict):
         return [("class:footer.hot", fit(hot))]
     ctx = state.get("ctx")
     if state["busy"]:
-        pieces = [FRAMES[state["spin"]], "rodando...", "PARA PARAR: CTRL+C ou ESC"]
+        # Espera vira numero visivel: 'rodando... 47s' + a ferramenta em andamento.
+        # Sem isso, silencio na tela e lido como programa travado (reclamacao real).
+        decorrido = int(time.time() - float(state.get("busy_since") or time.time()))
+        pieces = [FRAMES[state["spin"]], f"rodando... {decorrido}s"]
+        tool = state.get("tool")
+        if tool:
+            tool_s = int(time.time() - float(state.get("tool_since") or time.time()))
+            pieces.append(f"{tool} {tool_s}s")
+        pieces.append("PARA PARAR: CTRL+C ou ESC")
         if ctx:
             pieces.append(ctx)
         return [("class:footer.hot", fit(" | ".join(pieces)))]

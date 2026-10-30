@@ -7,6 +7,8 @@ from html.parser import HTMLParser
 
 import requests
 
+from .guard import STOPPED_NOTE, stopped
+
 UA = "Mozilla/5.0 (X11; Linux x86_64) bgh-motor/0.1 (agente local)"
 
 SEARCH_SPEC = {
@@ -93,6 +95,8 @@ def web_search(args: dict, ctx) -> str:
     query = str(args.get("query", "")).strip()
     if not query:
         return "ERRO: busca sem termos"
+    if stopped(ctx):
+        return STOPPED_NOTE
     top_k = min(int(args.get("top_k") or 6), 10)
     endpoints = [
         ("https://lite.duckduckgo.com/lite/", parse_lite),
@@ -147,6 +151,8 @@ def web_extract(args: dict, ctx) -> str:
     url = str(args.get("url", "")).strip()
     if not url.startswith(("http://", "https://")):
         return "ERRO: URL invalida"
+    if stopped(ctx):
+        return STOPPED_NOTE
     try:
         resp = requests.get(url, headers={"User-Agent": UA}, timeout=20, allow_redirects=True)
     except requests.RequestException as exc:

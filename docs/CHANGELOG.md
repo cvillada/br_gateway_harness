@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.5
+
+Silencio deixou de parecer trava, e "parar" passou a valer dentro das ferramentas.
+
+- Espera do modelo virou numero na tela: a barra de baixo mostra "rodando... 47s"
+  e a ferramenta em andamento ha quantos segundos ("search_files 12s").
+- Teto de espera por perfil: 120 s para modelo na propria maquina, 300 s para
+  servidor remoto (contexto grande demora ate 1 minuto so para ser lido). Ajustavel
+  com `request_timeout_s` no config.json.
+- Uma pergunta nao vira fila no servidor: `max_retries` caiu de 2 para 1 (antes, um
+  timeout injetava 4 pedidos identicos na fila de quem divide o mesmo motor).
+- Queda sem streaming agora avisa na tela em vez de repetir escondido.
+- Modelo que gasta tudo no pensamento e devolve texto vazio ganha aviso ("apenas
+  pensou; pergunte de novo ou suba max_tokens") em vez de tela muda.
+- "Parar" (CTRL+C / ESC) agora derruba a ferramenta no meio: leitura de arquivo,
+  busca, comando e run_python param na hora e o turno fecha sem nova rodada.
+- Busca em arquivos ganhou teto (`search_time_limit_s` 20 s, `search_max_files`
+  20000) e ignora pastas gigantes (AppData, Library, snap, venv, caches); ao bater
+  o teto ela diz onde parou e pede uma pasta mais especifica.
+- Assistente de configuracao sugere orçamento de contexto por provedor (45000 para
+  servidor remoto NubesBR) e sobe `max_tokens` para 3072 nesse perfil.
+
 ## 0.2.4
 
 - Preset NubesBR (opcao 2 do assistente) passou a vir com a URL publica
