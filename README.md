@@ -20,15 +20,17 @@ virtual dentro dela e instalar o wheel baixado na pagina de Releases do repo.
 2. Abra esta pagina no navegador e baixe o arquivo `INSTALAR_TEO.bat`:
    https://github.com/cvillada/br_gateway_harness/releases/latest
 3. De DOIS CLIQUES no arquivo `INSTALAR_TEO.bat` que esta na pasta Downloads.
-   Pronto: ele baixa o TEO, cria a pasta TEO, instala e abre o programa sozinho.
+   Pronto: ele baixa o TEO, cria a pasta TEO, instala, cria um icone **TEO** na area
+   de trabalho e abre o programa sozinho. Da proxima vez em diante e so dar dois
+   cliques no icone TEO da area de trabalho - nao precisa mexer em Prompt de Comando
+   nunca mais. (Fechar a janela do TEO fecha so aquela conversa; o icone reabre tudo.)
 
 Se o Windows mostrar o aviso azul "O Windows protegeu seu computador", clique em
 "Mais informacoes" e depois no botao "Executar assim mesmo" (e porque o arquivo
 ainda nao tem assinatura digital; o codigo esta neste proprio repo).
 
-Para conversar de novo depois: menu Iniciar, digite `cmd`, Enter, e ai:
-`cd %USERPROFILE%\TEO` Enter, `.venv\Scripts\activate` Enter, `bgh` Enter.
-(ou peca para alguem deixar um atalho na area de trabalho)
+Para conversar de novo depois: dois cliques no icone **TEO** da area de trabalho.
+(Se o icone nao aparecer, o atalho tambem esta em `C:\Users\SEU_USUARIO\TEO\abrir-teo.bat`.)
 
 #### Windows (rota tecnica: 2 linhas no Prompt de Comando)
 
@@ -91,8 +93,10 @@ bash install_te.sh
 ```
 
 O script faz tudo sozinho: baixa o wheel do Release mais novo, cria a pasta `~/TEO`,
-cria o ambiente virtual, copia o wheel para dentro dela, roda o pip install e abre o
-TEO (na primeira vez, o assistente de configuracao comeca sozinho).
+cria o ambiente virtual, copia o wheel para dentro dela, roda o pip install, cria um
+atalho para abrir o TEO sem terminal (no macOS: `Abrir TEO.command` na Area de
+trabalho do Finder; no Linux: lancador `TEO` na Area de trabalho) e abre o programa
+(na primeira vez, o assistente de configuracao comeca sozinho).
 
 #### macOS (metodo manual, se preferir fazer passo a passo)
 

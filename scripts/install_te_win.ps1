@@ -33,6 +33,28 @@ Write-Host "Instalando no ambiente virtual..."
 & "$dir\.venv\Scripts\pip.exe" install $wheel_local
 if ($LASTEXITCODE -ne 0) { throw "O pip install falhou." }
 
+Write-Host "Criando atalho com icone na area de trabalho..."
+$bat = Join-Path $dir "abrir-teo.bat"
+Set-Content -Path $bat -Encoding ASCII -Value @"
+@echo off
+rem Abre o TEO numa janela nova do Prompt de Comando (pode fechar as outras).
+cd /d "$dir"
+call "$dir\.venv\Scripts\activate.bat"
+bgh
+"@
+try {
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $ws = New-Object -ComObject WScript.Shell
+    $lnk = $ws.CreateShortcut((Join-Path $desktop "TEO.lnk"))
+    $lnk.TargetPath = $bat
+    $lnk.WorkingDirectory = $dir
+    $lnk.Description = "Abrir o TEO"
+    $lnk.Save()
+    Write-Host "Pronto: existe um icone TEO na area de trabalho. Dois cliques nele = conversar."
+} catch {
+    Write-Host "O icone nao saiu, mas o atalho funciona: de dois cliques em $dir\abrir-teo.bat"
+}
+
 Write-Host ""
 Write-Host "TEO instalado em $dir"
 Write-Host "Para conversar outra vez, abra o Prompt de Comando e digite:"
