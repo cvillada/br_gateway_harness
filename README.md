@@ -190,6 +190,7 @@ Parar e reler (pensado para idoso e crianca - um toque so):
 | Tecla | O que faz |
 |-------|-----------|
 | CTRL+C ou ESC durante a resposta | PARA de responder e do comando na hora |
+| ENTER com texto durante a resposta | avisa o turno em andamento; o modelo le na proxima rodada |
 | CTRL+C duas vezes seguidas | saida de seguranca se algo travar |
 | Roda do mouse ou barra lateral do seu terminal | reler o texto que subiu |
 | CTRL+C com a linha vazia | fecha o TEO (ESC nunca fecha sozinho) |

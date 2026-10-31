@@ -403,7 +403,16 @@ def run_tui(cfg: dict) -> int:
             resolve_approval(text)
             return
         if state["busy"]:
-            in_buf.text = text  # nao deixa a pessoa perder o que digitou
+            digitado = text.strip()
+            if digitado and not digitado.startswith("/"):
+                core.steer(digitado)  # estilo Hermes: o modelo recebe na proxima rodada
+                emit(f"voce> {digitado}", style="voce")
+                emit("(avisado no meio do turno; o modelo le na proxima rodada)", style="cyan")
+                return
+            if digitado:
+                in_buf.text = text  # comando / fica na linha, para enviar depois
+                emit("(estou respondendo; comandos / funcionam quando o turno terminar)")
+                return
             emit("(estou respondendo; para parar: CTRL+C ou ESC)")
             return
         if not text.strip():

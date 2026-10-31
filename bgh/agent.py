@@ -35,6 +35,10 @@ class Agent:
         self.on_note: Callable[[str], None] | None = None
         # Cada chamada do modelo comeca um bloco novo na UI (reset de cabecalhos).
         self.on_round_start: Callable[[], None] | None = None
+        # Mensagem do usuario digitada NO MEIO do processamento (estilo Hermes):
+        # chega agora, sera entregue ao modelo na proxima fronteira de rodada.
+        self.steer_queue: list[str] = []
+        self._steer_lock = threading.Lock()
         # Botao de parar: a UI seta este evento e o agente interrompe streaming,
         # ferramentas e rodadas na hora (igual ao CTRL+C do Hermes).
         self.stop_event = threading.Event()
@@ -169,6 +173,7 @@ class Agent:
             if user_stopped:
                 self._save_session()
                 return STOPPED_NOTE
+            self._drain_steers()  # steering do meio do turno chega entre as rodadas
             rounds += 1
             if self._compress_if_needed():
                 self.last_compressed = True
@@ -245,6 +250,32 @@ class Agent:
                 self.on_note(text)
             except Exception:  # noqa: BLE001 - aviso nunca derruba o turno
                 pass
+
+    def steer(self, text: str) -> None:
+        """Mensagem do meio do turno: entra na fila, o modelo recebe apos os
+        resultados de ferramenta, sem derrubar o trabalho em andamento."""
+        text = str(text).strip()
+        if text:
+            with self._steer_lock:
+                self.steer_queue.append(text)
+
+    def pop_steer(self) -> str | None:
+        """Steer que chegou tarde (turno ja fechando): vira o proximo turno."""
+        with self._steer_lock:
+            return self.steer_queue.pop(0) if self.steer_queue else None
+
+    def _drain_steers(self) -> int:
+        with self._steer_lock:
+            pending, self.steer_queue = self.steer_queue, []
+        for t in pending:
+            self.messages.append({
+                "role": "user",
+                "content": f"(mensagem do usuario durante o processamento): {t}",
+            })
+        if pending:
+            self._note(f"{len(pending)} mensagem(s) recebida(s) no meio do turno; "
+                       "entregue(s) ao modelo agora.")
+        return len(pending)
 
     def _round_start(self) -> None:
         if self.on_round_start is not None:

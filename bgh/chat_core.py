@@ -54,6 +54,7 @@ HELP_SECTIONS = [
     ]),
     ("Parar e reler:", [
         ("CTRL+C ou ESC durante a resposta", "para de responder na hora (igual ao Hermes)"),
+        ("digitar ENTER durante a resposta", "avisa o turno em andamento; o modelo le na proxima rodada"),
         ("Roda do mouse ou PageUp/PageDown", "reler o texto que subiu na tela"),
         ("CTRL+C com a linha vazia", "fecha o TEO"),
         ("Seta para cima / para baixo", "repete o que voce ja digitou (historico guardado)"),
@@ -244,6 +245,11 @@ class ChatCore:
         """Cabecalhos de pensamento/resposta valem por chamada do modelo, nao por turno."""
         self._flush_pend()
         self.st = {"thinking": False, "resposta": False}
+
+    def steer(self, text: str) -> None:
+        """Mensagem digitada durante o processamento: vai ao modelo na proxima
+        fronteira de rodada (estilo Hermes), sem derrubar o turno."""
+        self.agent.steer(text)
 
     def _on_reasoning(self, chunk: str) -> None:
         if not self.st["thinking"]:
@@ -529,47 +535,68 @@ class ChatCore:
             return "continue"
 
         # Turno normal do modelo (com anexo pendente, se houver).
-        self.st["thinking"] = False
-        self.st["resposta"] = False
-        self._pend = ""
         user_text = f"{self.pending_attach}\n\n{text}" if self.pending_attach else text
         self.pending_attach = None
-        try:
-            answer = self.agent.run_turn(user_text)
-        except KeyboardInterrupt:
-            # CTRL+C no modo classico tambem para o turno.
-            self.agent.stop_event.set()
-            answer = STOPPED_NOTE
-        except LLMError as exc:
-            self.sink.line(str(exc), style="red")
-            self.sink.line("Dica: digite /configurar aqui mesmo para conferir URL e chave "
-                           "(ou /doctor para o diagnostico completo).", style="yellow")
-            return "continue"
+        # Continuacao estilo Hermes: mensagens digitadas durante o turno que chegaram
+        # tarde viram o proximo turno automaticamente (nada se perde).
+        fila_turnos: list[str] = [user_text]
+        while fila_turnos:
+            turno = fila_turnos.pop(0)
+            self.st["thinking"] = False
+            self.st["resposta"] = False
+            self._pend = ""
+            try:
+                answer = self.agent.run_turn(turno)
+            except KeyboardInterrupt:
+                # CTRL+C no modo classico tambem para o turno.
+                self.agent.stop_event.set()
+                answer = STOPPED_NOTE
+            except LLMError as exc:
+                self.sink.line(str(exc), style="red")
+                self.sink.line("Dica: digite /configurar aqui mesmo para conferir URL e chave "
+                               "(ou /doctor para o diagnostico completo).", style="yellow")
+                return "continue"
 
-        self._flush_pend()
-        if self.st["thinking"]:
-            self.sink.line("")
-        if answer == STOPPED_NOTE:
-            # Usuario mandou parar: confirmar em uma linha proprio visivel.
-            self.sink.line(STOPPED_NOTE, style="yellow")
-        elif self.agent.last_streamed:
-            self.sink.line("")  # fecha a linha do texto que ja apareceu ao vivo
-        else:
-            if self.agent.last_reasoning:
-                self.sink.sep("pensamento do modelo (raciocinio; pode ignorar e ir direto para a resposta)")
-                for r in self.agent.last_reasoning:
-                    trecho = r if len(r) <= 1200 else r[:1200] + "..."
-                    self.sink.line(trecho, style="#808080 italic")
-                self.sink.sep("resposta")
-            elif not self.st["resposta"]:
-                self.sink.sep("resposta")
-            self.sink.line(md_clean(answer))
-        if (not answer and answer != STOPPED_NOTE and not self.agent.last_streamed
-                and not self.st["resposta"]):
-            # Caso medido no servidor: o pensamento comeu todo o max_tokens e o pedido
-            # voltou sem texto. Sem esta linha a pessoa acha que o programa travou.
-            self.sink.line("O modelo terminou sem texto de resposta (apenas pensou). Pergunte "
-                           "de novo ou aumente o limite de saida (max_tokens no config.json).",
-                           style="yellow")
+            self._flush_pend()
+            if self.st["thinking"]:
+                self.sink.line("")
+            if answer == STOPPED_NOTE:
+                # Usuario mandou parar: confirmar em uma linha proprio visivel.
+                self.sink.line(STOPPED_NOTE, style="yellow")
+            elif self.agent.last_streamed:
+                self.sink.line("")  # fecha a linha do texto que ja apareceu ao vivo
+            else:
+                if self.agent.last_reasoning:
+                    self.sink.sep("pensamento do modelo (raciocinio; pode ignorar e ir direto para a resposta)")
+                    for r in self.agent.last_reasoning:
+                        trecho = r if len(r) <= 1200 else r[:1200] + "..."
+                        self.sink.line(trecho, style="#808080 italic")
+                    self.sink.sep("resposta")
+                elif not self.st["resposta"]:
+                    self.sink.sep("resposta")
+                self.sink.line(md_clean(answer))
+            if (not answer and answer != STOPPED_NOTE and not self.agent.last_streamed
+                    and not self.st["resposta"]):
+                # Caso medido no servidor: o pensamento comeu todo o max_tokens e o pedido
+                # voltou sem texto. Sem esta linha a pessoa acha que o programa travou.
+                self.sink.line("O modelo terminou sem texto de resposta (apenas pensou). Pergunte "
+                               "de novo ou aumente o limite de saida (max_tokens no config.json).",
+                               style="yellow")
+            if answer == STOPPED_NOTE:
+                # Turno parado nao emenda as mensagens guardadas: quem mandou parar
+                # decide se quer continuar. Elas sao devolvidas como aviso.
+                descartadas = 0
+                while self.agent.pop_steer() is not None:
+                    descartadas += 1
+                if descartadas:
+                    self.sink.line(f"({descartadas} mensagem(s) digitadas durante o turno parado "
+                                   "nao foram enviadas; digite de novo quando quiser)", style="yellow")
+                break
+            while True:
+                sobra = self.agent.pop_steer()
+                if sobra is None:
+                    break
+                self.sink.line(f"voce> {sobra}", style="cyan")
+                fila_turnos.append(sobra)
         self.print_ctx()
         return "continue"

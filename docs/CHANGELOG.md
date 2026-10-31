@@ -44,6 +44,13 @@ de quem entrega sem parar mais a tela.
 - Cabecalho "resposta" agora vale por chamada do modelo, nao por turno: em turnos
   com varias rodadas de ferramenta a resposta final saia colada no bloco de
   pensamento porque o cabecalho da primeira rodada ficava preso na tela.
+- Steering no meio do processamento (estilo Hermes): digitar texto e dar ENTER
+  enquanto o TEO trabalha entrega a mensagem ao modelo na proxima rodada de
+  ferramenta (eco na tela + aviso de entrega), sem derrubar o turno. Mensagem que
+  chega tarde demais vira o proximo turno automaticamente; nada se perde. Comandos
+  de barra continuam valendo somente quando o turno termina, e um turno que o usuario
+  mandou parar nao emenda as mensagens guardadas. No modo classico sem tela o
+  input bloqueia - steering e exclusivo da tela interativa.
 - Sugestao do servidor hospedado subiu de 45000 para 156000 chars (~45 mil tokens;
   o motor la aceita 262144 tokens; leitura medida: 125 mil chars custam ~77 s).
   Config novo comeca em 156000 (antes 60000). Modelo local continua em 60000.

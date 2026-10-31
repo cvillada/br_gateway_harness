@@ -1104,6 +1104,99 @@ _core_cab26._on_text("resp B")
 ok("chamada nova do modelo ganha cabecalho 'resposta' de novo",
    sum(1 for s in _sink_cab26.seps if s == "resposta") == 2)
 
+# Steering estilo Hermes: mensagem digitada no meio do processamento chega ao
+# modelo na proxima fronteira de rodada, sem derrubar o turno.
+class _SteerLLM26:
+    def __init__(self, agent_ref):
+        self.agent_ref = agent_ref
+        self.chamadas = 0
+        self.msgs_vistas: list[int] = []
+
+    def chat(self, messages, tools=None):
+        return {"role": "assistant", "content": "sem streaming"}
+
+    def chat_stream(self, messages, tools=None, on_text=None, on_reasoning=None,
+                    should_stop=None):
+        self.chamadas += 1
+        self.msgs_vistas.append(len(messages))
+        if self.chamadas == 1:
+            # o usuario "digita" enquanto o modelo ainda esta respondendo
+            self.agent_ref[0].steer("muda de plano: foca no log")
+            return {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "st1", "type": "function",
+                 "function": {"name": "fantasma", "arguments": "{}"}}]}
+        return {"role": "assistant", "content": "entendido, ajustei o plano"}
+
+    def summarize(self, transcript):
+        return "resumo"
+
+
+_holder26: list = []
+_llm_steer26 = _SteerLLM26(_holder26)
+_cfg_steer26 = dict(core_cfg)
+_cfg_steer26["stream"] = True  # steering via streaming, como na tela real
+_ag_steer26 = _Agent26(_cfg_steer26, _llm_steer26, Gate(dict(_cfg_steer26), ask_d))
+_holder26.append(_ag_steer26)
+_notas_steer26: list[str] = []
+_ag_steer26.on_note = _notas_steer26.append
+_ans_steer26 = _ag_steer26.run_turn("trabalho longo")
+ok("steering do meio do turno e injetado entre ferramentas e a proxima chamada do modelo",
+   _ans_steer26 == "entendido, ajustei o plano"
+   and any("durante o processamento" in str(m.get("content", ""))
+           and "foca no log" in str(m.get("content", ""))
+           for m in _ag_steer26.messages if m.get("role") == "user")
+   and _llm_steer26.msgs_vistas[1] >= _llm_steer26.msgs_vistas[0] + 2
+   and any("no meio do turno" in n for n in _notas_steer26))
+
+# Steer que chegou tarde (turno ja fechando) vira o proximo turno sozinho.
+class _LateLLM26:
+    def __init__(self):
+        self.chamadas = 0
+        self.agent_ref: list = []
+
+    def chat(self, messages, tools=None):
+        return {"role": "assistant", "content": "sem streaming"}
+
+    def chat_stream(self, messages, tools=None, on_text=None, on_reasoning=None,
+                    should_stop=None):
+        self.chamadas += 1
+        if self.chamadas == 1:
+            self.agent_ref[0].steer("qual a sua versao?")
+            if on_text:
+                on_text("primeira resposta")
+            return {"role": "assistant", "content": "primeira resposta"}
+        if on_text:
+            on_text("versao 0.2.6")
+        return {"role": "assistant", "content": "versao 0.2.6"}
+
+    def summarize(self, transcript):
+        return "resumo"
+
+
+class _SinkLate26(_SinkCab26):
+    def __init__(self):
+        super().__init__()
+        self.textos: list[str] = []
+
+    def line(self, *a, **k):
+        self.textos.append(str(a[0] if a else ""))
+
+    def answer(self, *a, **k):
+        self.textos.append(str(a[0] if a else ""))
+
+
+_sink_late26 = _SinkLate26()
+_llm_late26 = _LateLLM26()
+_cfg_late26 = dict(core_cfg)
+_cfg_late26["stream"] = True
+_core_late26 = _ChatCore26(_cfg_late26, _sink_late26, llm=_llm_late26)
+_llm_late26.agent_ref.append(_core_late26.agent)
+_core_late26.submit("pergunta original")
+ok("steering tardio vira o proximo turno automaticamente (nada se perde)",
+   _llm_late26.chamadas == 2
+   and any("voce> qual a sua versao?" in ln for ln in _sink_late26.textos)
+   and any("versao 0.2.6" in ln for ln in _sink_late26.textos))
+
 # assistente pergunta ao servidor quanto ele entrega e sugere o valor dele (com teto)
 _orig_probe26 = wiz_mod._probe_context_tokens
 wiz_mod._probe_context_tokens = lambda probe_cfg: 262144  # motor publicando 262144 tokens
