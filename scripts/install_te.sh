@@ -32,12 +32,24 @@ if [ "$(uname)" = "Darwin" ]; then
 fi
 "$PY" -m venv .venv
 
+# Wheels de instalacoes anteriores sobram na pasta e confundem (a pessoa acha
+# que o arquivo velho e o programa novo). Limpa antes de baixar o atual.
+rm -f "$DIR"/bgh_motor-*.whl
+
 echo "Baixando $NAME ..."
 curl -L -o "$DIR/$NAME" "$URL"
 
 echo "Instalando no ambiente virtual..."
 "$DIR/.venv/bin/pip" install --upgrade pip > /dev/null
-"$DIR/.venv/bin/pip" install "$DIR/$NAME"
+curl -L -o "$DIR/requirements.txt" \
+  "https://raw.githubusercontent.com/$REPO/main/requirements.txt"
+"$DIR/.venv/bin/pip" install -r "$DIR/requirements.txt" > /dev/null
+# '--no-deps --force-reinstall' e obrigatorio: sem isso o pip ve a MESMA versao ja
+# instalada, diz 'requirement already satisfied' e deixa o codigo velho no lugar
+# (reinstalar nao atualizava; medido com o Nei). As dependencias vem do pip anterior.
+"$DIR/.venv/bin/pip" install --no-deps --force-reinstall "$DIR/$NAME"
+VER=$("$DIR/.venv/bin/pip" show bgh-motor 2>/dev/null | sed -n 's/^Version: //p')
+echo "Versao instalada: ${VER:-desconhecida}"
 
 echo "Criando atalho para abrir sem terminal..."
 cat > "$DIR/abrir-teo.sh" <<EOF

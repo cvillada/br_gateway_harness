@@ -25,13 +25,22 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $wheel_local = Join-Path $dir $whl.name
+Write-Host "Removendo wheels de instalacoes anteriores..."
+Remove-Item -Path (Join-Path $dir "bgh_motor-*.whl") -Force -ErrorAction SilentlyContinue
 Write-Host ("Baixando " + $whl.name + " ...")
 Invoke-WebRequest -Uri $whl.browser_download_url -OutFile $wheel_local -TimeoutSec 120
 
 Write-Host "Instalando no ambiente virtual..."
 & "$dir\.venv\Scripts\pip.exe" install --upgrade pip | Out-Null
-& "$dir\.venv\Scripts\pip.exe" install $wheel_local
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/$repo/main/requirements.txt" -OutFile (Join-Path $dir "requirements.txt") -TimeoutSec 30
+& "$dir\.venv\Scripts\pip.exe" install -r (Join-Path $dir "requirements.txt") | Out-Null
+# '--no-deps --force-reinstall' e obrigatorio: sem isso o pip ve a MESMA versao ja
+# instalada, diz 'requirement already satisfied' e deixa o codigo velho no lugar
+# (reinstalar nao atualizava; medido com o Nei). As dependencias vem do passo anterior.
+& "$dir\.venv\Scripts\pip.exe" install --no-deps --force-reinstall $wheel_local
 if ($LASTEXITCODE -ne 0) { throw "O pip install falhou." }
+$versao = (& "$dir\.venv\Scripts\pip.exe" show bgh-motor | Select-String "^Version:")
+Write-Host ("Versao instalada: " + $(if ($versao) { ($versao -split "\s+")[1] } else { "desconhecida" }))
 
 Write-Host "Criando atalho com icone na area de trabalho..."
 $bat = Join-Path $dir "abrir-teo.bat"
