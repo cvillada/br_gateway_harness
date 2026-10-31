@@ -196,10 +196,35 @@ class TuiSink:
     def status(self, text: str) -> None:
         pass  # a barra de baixo monta o status sozinha a partir do estado
 
-    def set_ctx(self, text: str) -> None:
+    def set_ctx(self, text: str, pct: int | None = None, hot_pct: int | None = None) -> None:
         """Medidor de contexto vai na ULTIMA linha da tela, nao no historico."""
         self.state["ctx"] = text
+        self.state["ctx_pct"] = pct
+        self.state["ctx_hot_pct"] = hot_pct
         self.emit("", newline=False)  # payload vazio so forca o repaint da barra
+
+    def ask_line(self, prompt: str, default: str = "", secret: bool = False) -> str:
+        """Pergunta de texto livre na tela fixa (assistente do /configurar).
+
+        A pergunta sai no historico e a resposta entra pela MESMA linha de sempre
+        (embaixo): Enter sozinho = valor padrao, ESC = padrao tambem. Na tela fixa
+        o que se digita aparece na linha; para chave em segredo, o caminho segue
+        sendo 'bgh setup' na janela de comando (usa getpass la).
+        """
+        self.line("")
+        self.line(prompt + (f" (padrao: {default})" if default else ""))
+        if secret:
+            self.line("(se preferir digitar a chave sem ela aparecer na tela, cancele com "
+                      "ESC e rode 'bgh setup' na janela de comando)")
+        ev = threading.Event()
+        holder = {"codes": [], "choice": default, "ev": ev, "deny_code": default,
+                  "free_text": True, "default": default,
+                  "hot": "CONFIGURANDO: digite a resposta e ENTER (Enter sozinho = padrao)"}
+        self.state["approval"] = holder  # GIL: atribuir dict simples e seguro
+        self.emit("", newline=False)  # payload vazio so forca o repaint da barra
+        ev.wait()
+        self.state["approval"] = None
+        return holder["choice"]
 
     def ask_approval(self, label: str, detail: str, allow_always: bool) -> str:
         """Menu de licenca impresso no historico; o worker aguarda a resposta."""
@@ -252,6 +277,7 @@ def run_tui(cfg: dict) -> int:
     # sobrevive ao fechar/abrir (arquivo em ~/.bgh/input_history.txt).
     in_buf = Buffer(multiline=False, history=FileHistory(str(INPUT_HISTORY_FILE)))
     state = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0, "ctx": None,
+             "ctx_pct": None,
              "busy_since": 0.0, "tool": None, "tool_since": 0.0}
     printed = {"n": 0, "cols": 0}
     app: Application | None = None
@@ -335,8 +361,13 @@ def run_tui(cfg: dict) -> int:
         holder = state.get("approval")
         if holder is None:
             return
-        holder["choice"] = parse_approval_choice(
-            raw_text, holder["codes"], holder.get("deny_code", "d"))
+        if holder.get("free_text"):
+            # Texto livre (assistente /configurar): o que foi digitado e a resposta;
+            # Enter sozinho ou ESC fica com o padrao da pergunta.
+            holder["choice"] = raw_text.strip() or holder.get("default", "")
+        else:
+            holder["choice"] = parse_approval_choice(
+                raw_text, holder["codes"], holder.get("deny_code", "d"))
         state["approval"] = None
         holder["ev"].set()
 
@@ -454,10 +485,11 @@ def run_tui(cfg: dict) -> int:
     try:
         app.run(pre_run=_start_ui)
     finally:
-        # Se a pessoa fechou o app com uma licenca pendente, nega e libera o worker.
+        # Se a pessoa fechou o app com uma pergunta/licenca pendente, devolve o
+        # padrao dela (negar no menu, valor padrao no assistente) e libera o worker.
         holder = state.get("approval")
         if holder is not None:
-            holder["choice"] = "d"
+            holder["choice"] = holder.get("deny_code", "d")
             holder["ev"].set()
     return 0
 
@@ -490,4 +522,9 @@ def _status_text(state: dict):
     if ctx and len(ctx) + len(base) + 3 > width:
         # com o medidor de contexto na frente, encurta a explicacao para caber
         base = "ENTER = falar | CTRL+C vazio = sair | /ajuda"
-    return [("class:footer", fit(f"{ctx} | {base}" if ctx else base))]
+    # Contexto perto do limite: a barra fica na cor de alerta (amarelo) tambem
+    # quando esta parada, no MESMO ponto em que a compactacao vai comecar.
+    pct = state.get("ctx_pct") or 0
+    hot = state.get("ctx_hot_pct") or 85
+    estilo = "class:footer.hot" if pct >= hot else "class:footer"
+    return [(estilo, fit(f"{ctx} | {base}" if ctx else base))]

@@ -225,7 +225,7 @@ answer = agent.run_turn("rode um echo ai")
 ok("loop ferramenta->resposta", "ola_mundo" in answer or "certo" in answer)
 ok("reasoning do modelo capturado", agent.last_reasoning and "listar" in agent.last_reasoning[0])
 usage = agent.ctx_usage()
-ok("medidor de contexto funciona", usage["pct"] >= 0 and usage["budget"] == 60000 and usage["messages"] > 2)
+ok("medidor de contexto funciona", usage["pct"] >= 0 and usage["budget"] == 156000 and usage["messages"] > 2)
 tool_msgs = [m for m in agent.messages if m.get("role") == "tool"]
 ok("resultado da ferramenta voltou ao modelo", tool_msgs and "ola_mundo" in tool_msgs[0]["content"])
 ok("sessao persistida", Path(os.environ["BGH_HOME"], "session.json").is_file())
@@ -440,19 +440,24 @@ ok("trocar perfil ativo muda top-level", set_active_profile(cfg_old, "local") an
 # wizard duas vezes (2a simulada interativa) acumula perfis no config.json
 import bgh.setup_wizard as wiz_mod
 
-answers = iter(["n", "1", "", "", "", "s", "n"])  # manter? | opcao | url | modelo | budget | atualizar deepseek? sim | testar? nao
+answers = iter(["n", "1", "", "", "s", "n"])  # manter? | opcao | url | modelo | atualizar deepseek? sim | testar? nao (orcamento nao pergunta mais)
 orig_getpass = wiz_mod.getpass
+orig_probe = wiz_mod._probe_context_tokens
 wiz_mod.input = lambda prompt="": next(answers)
-wiz_mod.getpass = types.SimpleNamespace(getpass=lambda prompt="": "")
+wiz_mod.getpass = types.SimpleNamespace(getpass=lambda prompt: "")
+wiz_mod._probe_context_tokens = lambda probe_cfg: None  # teste hermetico: sem rede
 try:
     wiz_mod.run(non_interactive=True, provider="local", api_key="")
     wiz_mod.run()
 finally:
     del wiz_mod.input
     wiz_mod.getpass = orig_getpass
+    wiz_mod._probe_context_tokens = orig_probe
 saved = json.loads((TMP / "config.json").read_text(encoding="utf-8"))
 ok("wizard acumula provedores", set(saved["profiles"]) == {"local", "deepseek"} and saved["active_profile"] == "deepseek")
-ok("load ativa o ultimo salvo", load_config()["model"] == "deepseek-chat")
+ok("load ativa o ultimo salvo", load_config()["model"] == "deepseek-v4-flash")
+ok("wizard define o orcamento sem perguntar numero ao usuario",
+   saved["context_budget_chars"] == 60000)
 
 # ---------- parada do usuario + nucleo compartilhado -----------------------------
 import threading
@@ -790,7 +795,8 @@ ok("barra mostra a ferramenta em andamento e ha quanto tempo", "search_files 12s
 
 from bgh.setup_wizard import BUDGET_SUGESTAO, MAX_TOKENS_PRESET
 
-ok("assistente sugere budget menor para servidor remoto", BUDGET_SUGESTAO["nubesbr"] == "45000")
+ok("assistente sugere budget maior para o servidor hospedado (cabem 45 mil tokens)",
+   BUDGET_SUGESTAO["nubesbr"] == "156000")
 ok("perfil remoto vem com saida maior que o pensamento do modelo",
    MAX_TOKENS_PRESET["nubesbr"] == 3072)
 ok("config novo traz teto de busca e timeout automatico",
@@ -845,5 +851,351 @@ ok("/ctx sozinho continua sendo so o medidor (sem numero nao muda nada)",
    and not any("Esse numero nao vale" in l for l in _sink_reaberto.lines[_linhas_ctx:]))
 ok("ajuda menciona o /ctx com numero",
    any("/ctx <numero>" in "".join(seg for seg, _ in row) for row in _help_lines()))
+
+# ---------- v0.2.6: /configurar e /doctor na tela, contexto do servidor ---------
+from bgh.agent import Agent as _Agent26
+from bgh.config import ConfigError as _CE26
+from bgh.llm import ContextOverflowError as _COE26
+from bgh.llm import LLM as _LLM26
+
+ok("config novo ja nasce com orcamento grande e compactacao antecipada",
+   DEFAULTS.get("context_budget_chars") == 156000
+   and DEFAULTS.get("context_compress_pct") == 85
+   and DEFAULTS.get("context_auto_cap_chars") == 160000)
+
+
+class _OkLLM26:
+    def chat(self, messages, tools=None):
+        return {"role": "assistant", "content": "ok_normal"}
+
+    def summarize(self, text):
+        return "resumo X"
+
+
+class _OverLLM26:
+    """1o pedido estoura o limite do servidor; depois de compactar responde normal."""
+
+    def __init__(self):
+        self.calls = 0
+        self.summarizes = 0
+
+    def chat(self, messages, tools=None):
+        self.calls += 1
+        if self.calls == 1:
+            raise _COE26("O contexto passou do limite que o servidor aceita.")
+        return {"role": "assistant", "content": "resposta depois de compactar"}
+
+    def summarize(self, text):
+        self.summarizes += 1
+        return "resumo curto"
+
+_cfg_soft = dict(core_cfg)
+_cfg_soft.update({"context_budget_chars": 12000, "context_compress_pct": 85})
+_ag_soft = _Agent26(_cfg_soft, _OkLLM26(), Gate(dict(_cfg_soft), ask_d))
+_notas_soft: list[str] = []
+_ag_soft.on_note = _notas_soft.append
+for _i26 in range(12):
+    _ag_soft.messages.append({"role": "user", "content": "x" * 1500})
+_ans_soft = _ag_soft.run_turn("pergunta final")
+ok("contexto comecando a encher compacta ANTES de esbarrar no teto",
+   _ans_soft == "ok_normal" and _ag_soft.last_compressed
+   and any("Compactando a conversa em resumo" in n for n in _notas_soft))
+
+# abaixo do ponto de compactacao (85%) nao se mexe na conversa
+_cfg_calmo = dict(core_cfg)
+_cfg_calmo.update({"context_compress_pct": 85})
+_ag_calmo = _Agent26(_cfg_calmo, _OkLLM26(), Gate(dict(_cfg_calmo), ask_d))
+_notas_calmo: list[str] = []
+_ag_calmo.on_note = _notas_calmo.append
+for _i26 in range(12):
+    _ag_calmo.messages.append({"role": "user", "content": "z" * 1500})
+# orçamento = 125% do tamanho real medido -> medidor em 80%, um pouco antes dos 85%
+_est_calmo = _ag_calmo._estimate_chars()
+_cfg_calmo["context_budget_chars"] = int(_est_calmo * 1.25)
+_msgs_antes = len(_ag_calmo.messages)
+_usage_calmo = _ag_calmo.ctx_usage()
+ok("antes dos 85% a conversa fica intacta (compactar tarde demais e raro, cedo demais irrita)",
+   75 <= _usage_calmo["pct"] < 85 and _ag_calmo._compress_if_needed() is False
+   and not _notas_calmo and _ag_calmo.last_compressed is False
+   and len(_ag_calmo.messages) == _msgs_antes)
+
+_cfg_over = dict(core_cfg)
+_cfg_over.update({"context_budget_chars": 12000, "context_compress_pct": 85})
+_ag_over = _Agent26(_cfg_over, _OverLLM26(), Gate(dict(_cfg_over), ask_d))
+_notas_over: list[str] = []
+_ag_over.on_note = _notas_over.append
+for _i26 in range(12):
+    _ag_over.messages.append({"role": "user", "content": "y" * 1500})
+_ans_over = _ag_over.run_turn("pergunta final")
+ok("servidor recusando o tamanho: compacta e tenta de novo sem derrubar o turno",
+   _ans_over == "resposta depois de compactar"
+   and any("recusou o tamanho do contexto" in n for n in _notas_over))
+
+
+class _BoomClient26:
+    class _Completions:
+        def __init__(self, msg):
+            self._msg = msg
+
+        def create(self, **kwargs):
+            raise Exception(self._msg)
+
+    class _Chat:
+        def __init__(self, comp):
+            self.completions = comp
+
+    def __init__(self, msg):
+        self.chat = self._Chat(self._Completions(msg))
+
+
+_llm_boom = _LLM26({"base_url": "http://fake/v1", "model": "m", "max_retries": 0})
+_llm_boom.client = _BoomClient26("This exceeds the available context size, try increasing it")
+try:
+    _llm_boom.chat([{"role": "user", "content": "oi"}])
+    _detectou = False
+except _COE26:
+    _detectou = True
+ok("erro de contexto do servidor vira caso tratavel (ContextOverflowError)", _detectou)
+
+# API fechada que nao publica contexto na propria API (DeepSeek): vem do catalogo
+# models.dev, a mesma fonte de metadados que o Hermes usa.
+from bgh import llm as _llmmod26
+from bgh.config import PRESETS as _PRESETS26
+
+_orig_requests26 = _llmmod26.requests
+_orig_cache26 = _llmmod26._models_dev_cache
+
+
+class _RespSemAchado26:
+    status_code = 404
+
+
+def _boom_lista26():
+    raise RuntimeError("teste hermetico: sem rede")
+
+
+_llmmod26.requests = types.SimpleNamespace(get=lambda *a, **k: _RespSemAchado26())
+_llmmod26._models_dev_cache = {
+    "deepseek": {"models": {"deepseek-v4-flash": {"limit": {"context": 1048576}}}},
+}
+try:
+    _llm_md26 = _LLM26({"base_url": "https://api.deepseek.com/v1",
+                        "model": "deepseek-v4-flash", "max_retries": 0})
+    _llm_md26.client = types.SimpleNamespace(
+        models=types.SimpleNamespace(list=_boom_lista26))
+    _achado26 = _llm_md26.discover_context()
+finally:
+    _llmmod26.requests = _orig_requests26
+    _llmmod26._models_dev_cache = _orig_cache26
+ok("API fechada sem publicacao (DeepSeek): contexto sai do catalogo models.dev",
+   _achado26 == 1048576
+   and _llmmod26._provider_hint("https://api.deepseek.com/v1") == "deepseek")
+ok("preset deepseek veio do nome aposentado para o modelo atual do provedor",
+   _PRESETS26["deepseek"]["model"] == "deepseek-v4-flash")
+ok("teto de saida por resposta subiu para caber documento HTML numa rodada",
+   DEFAULTS["max_tokens"] == 8192)
+
+# Rodape diz quando o numero exibido e teto do TEO, nao o limite do servidor.
+from bgh.chat_core import ChatCore as _ChatCore26
+
+_usage26 = {"pct": 3, "budget": 160000, "messages": 3}
+_teto_txt = _ChatCore26._ctx_footer_text(
+    types.SimpleNamespace(cfg={"server_context_tokens": 1048576}), _usage26)
+ok("rodape avisa 'teto' quando o servidor entrega mais que o orcamento",
+   "teto" in _teto_txt and "1.048.576 tokens" in _teto_txt)
+_normal_txt = _ChatCore26._ctx_footer_text(
+    types.SimpleNamespace(cfg={}), _usage26)
+ok("rodape segue limpo quando nao ha prova do servidor", "teto" not in _normal_txt)
+_cabivel_txt = _ChatCore26._ctx_footer_text(
+    types.SimpleNamespace(cfg={"server_context_tokens": 40000}),
+    {"pct": 3, "budget": 130000, "messages": 3})
+ok("sem 'teto' quando o orcamento ja cabe no que o servidor entrega",
+   "teto" not in _cabivel_txt)
+
+# Fechamento de turno estilo Hermes: nota visivel antes de fechar, resposta em
+# streaming, instrucao interna em portugues (modelo local nao desvia para ingles).
+class _CloseLLM26:
+    def __init__(self):
+        self.chamadas: list[tuple] = []
+
+    def chat(self, messages, tools=None):
+        self.chamadas.append(("chat", tools is not None))
+        return {"role": "assistant", "content": "fechamento sem streaming"}
+
+    def chat_stream(self, messages, tools=None, on_text=None, on_reasoning=None,
+                    should_stop=None):
+        self.chamadas.append(("stream", tools is not None))
+        if tools is not None:
+            return {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "c1", "type": "function",
+                 "function": {"name": "fantasma", "arguments": "{}"}}]}
+        return {"role": "assistant", "content": "fechamento streamed em portugues"}
+
+    def summarize(self, transcript):
+        return "resumo"
+
+
+_cfg_close = dict(core_cfg)
+_cfg_close.update({"max_tool_rounds": 2, "stream": True, "context_budget_chars": 150000})
+_llm_close = _CloseLLM26()
+_ag_close = _Agent26(_cfg_close, _llm_close, Gate(dict(_cfg_close), ask_d))
+_notas_close: list[str] = []
+_ag_close.on_note = _notas_close.append
+_ans_close = _ag_close.run_turn("probe")
+ok("limite de rodadas fecha o turno com nota visivel na tela",
+   any("Limite de ferramentas" in n for n in _notas_close))
+ok("fechamento usa streaming quando o servidor suporta (sem silencio morto)",
+   _ans_close == "fechamento streamed em portugues"
+   and _llm_close.chamadas[-1] == ("stream", False))
+ok("instrucao de fechamento em portugues",
+   any("Responda em portugues" in str(m.get("content", ""))
+       for m in _ag_close.messages if m.get("role") == "user"))
+_cfg_fail = dict(_cfg_close)
+_cfg_fail["max_tool_rounds"] = 8
+_llm_fail = _CloseLLM26()
+_ag_fail = _Agent26(_cfg_fail, _llm_fail, Gate(dict(_cfg_fail), ask_d))
+_notas_fail: list[str] = []
+_ag_fail.on_note = _notas_fail.append
+_ag_fail.run_turn("probe")
+ok("5 falhas em sequencia fecham o turno com aviso na tela",
+   any("falharam em sequencia" in n for n in _notas_fail))
+ok("teto de rodadas do config subiu para pesquisa/redacao longa",
+   DEFAULTS["max_tool_rounds"] == 20)
+
+# Cabecalho de resposta por chamada do modelo (a resposta final nao sai mais
+# colada no bloco de pensamento quando o turno teve varias rodadas de ferramenta).
+class _SinkCab26:
+    def __init__(self):
+        self.seps: list[str] = []
+
+    def ask_approval(self, *a, **k):
+        return "n"
+
+    def tool_event(self, *a, **k):
+        pass
+
+    def line(self, *a, **k):
+        pass
+
+    def sep(self, title=None, *a, **k):
+        self.seps.append(str(title))
+
+    def thinking(self, *a, **k):
+        pass
+
+    def answer(self, *a, **k):
+        pass
+
+
+_sink_cab26 = _SinkCab26()
+_core_cab26 = _ChatCore26(dict(core_cfg), _sink_cab26, llm=_CloseLLM26())
+ok("callback de novo bloco ligado no agente",
+   _core_cab26.agent.on_round_start is not None)
+_core_cab26.agent.on_round_start()
+_core_cab26._on_reasoning("pens A")
+_core_cab26._on_text("resp A")
+_core_cab26._on_reasoning("pens A2")
+_core_cab26._on_text("resp A2")
+ok("uma mesma chamada do modelo tem um unico bloco de resposta",
+   sum(1 for s in _sink_cab26.seps if s == "resposta") == 1)
+_core_cab26.agent.on_round_start()
+_core_cab26._on_reasoning("pens B")
+_core_cab26._on_text("resp B")
+ok("chamada nova do modelo ganha cabecalho 'resposta' de novo",
+   sum(1 for s in _sink_cab26.seps if s == "resposta") == 2)
+
+# assistente pergunta ao servidor quanto ele entrega e sugere o valor dele (com teto)
+_orig_probe26 = wiz_mod._probe_context_tokens
+wiz_mod._probe_context_tokens = lambda probe_cfg: 262144  # motor publicando 262144 tokens
+_ditos26: list[str] = []
+_perguntas26: list[str] = []
+
+
+def _ask_dinamico26(prompt, default="", secret=False):
+    _perguntas26.append(prompt)
+    if prompt.startswith("Manter"):
+        return "n"
+    if prompt.startswith("Opcao"):
+        return "3"  # local: base 127.0.0.1 passa no guarda de sondagem sem chave
+    if prompt.startswith("Testar"):
+        return "n"
+    return default
+
+
+try:
+    wiz_mod.run(ask=_ask_dinamico26, say=lambda *a: _ditos26.append(" ".join(str(x) for x in a)))
+finally:
+    wiz_mod._probe_context_tokens = _orig_probe26
+_salvo26 = json.loads((TMP / "config.json").read_text(encoding="utf-8"))
+ok("orcamento herdado do servidor sem pergunta de numero (com teto de leitura)",
+   _salvo26["context_budget_chars"] == 160000
+   and _salvo26.get("server_context_tokens") == 262144
+   and any("herdado do servidor" in d and "262144" in d for d in _ditos26)
+   and not any("Orcamento de contexto em caracteres" in p for p in _perguntas26))
+
+# /configurar dentro do chat: assistente roda na tela e a conexao nova vale na hora
+_orig_run26 = wiz_mod.run
+_pedidos26: list[bool] = []
+
+
+def _fake_setup26(ask=None, say=None, from_chat=False, **kw):
+    _pedidos26.append(ask is not None and say is not None and from_chat is True)
+    _cfg_novo26 = load_config()
+    _cfg_novo26["model"] = "modelo-novo"
+    _cfg_novo26["base_url"] = "http://novo/v1"
+    from bgh.config import save_config as _save26
+
+    _save26(_cfg_novo26)
+    return 0
+
+
+wiz_mod.run = _fake_setup26
+try:
+    _sink26 = RecSink()
+    _sink26.ask_line = lambda prompt, default="", secret=False: default
+    _core26 = ChatCore(dict(load_config()), _sink26,
+                       llm=FakeLLM([{"role": "assistant", "content": "ok"}]))
+    _core26.submit("/configurar")
+    ok("/configurar roda o assistente com perguntas da tela", _pedidos26 == [True])
+    ok("conexao nova entra no core, no agente e e anunciada na tela",
+       _core26.cfg["model"] == "modelo-novo" and _core26.agent.llm is _core26.llm
+       and any("Conexao agora: modelo-novo" in l for l in _sink26.lines))
+finally:
+    wiz_mod.run = _orig_run26
+
+ok("ajuda menciona /configurar e /doctor",
+   any("/configurar" in "".join(seg for seg, _ in row) for row in _help_lines())
+   and any("/doctor" in "".join(seg for seg, _ in row) for row in _help_lines()))
+ok("affiches conhecem a pergunta de texto livre (ask_line)",
+   hasattr(core_mod.ConsoleSink(), "ask_line") and hasattr(_TSink, "ask_line"))
+
+_st_hot26 = {"busy": False, "approval": None, "spin": 0, "stop_hits": 0,
+             "ctx": "contexto: 91% de 156000 chars (20 mensagens)", "ctx_pct": 91,
+             "busy_since": 0.0, "tool": None, "tool_since": 0.0}
+ok("barra de baixo fica na cor de alerta quando o contexto passa do ponto de compactacao",
+   _status_text25(_st_hot26)[0][0] == "class:footer.hot")
+ok("barra continua normal logo abaixo dos 85%",
+   _status_text25({**_st_hot26, "ctx_pct": 80})[0][0] == "class:footer")
+
+from bgh import config as _cfg_mod26
+from bgh.cli import doctor_report as _doctor_report26
+
+_orig_load26 = _cfg_mod26.load_config
+
+
+def _sem_conexao26():
+    raise _CE26("TEO ainda nao configurado (sondagem dos testes)")
+
+
+_cfg_mod26.load_config = _sem_conexao26
+try:
+    _linhas_doc26: list[str] = []
+    _doctor_report26(lambda t: _linhas_doc26.append(str(t)))
+finally:
+    _cfg_mod26.load_config = _orig_load26
+ok("/doctor mostra maquina, GPU e conexao na propria tela",
+   any("Diagnostico do TEO" in l for l in _linhas_doc26)
+   and any("Conexao com o modelo" in l for l in _linhas_doc26)
+   and any("sem conexao ainda" in l for l in _linhas_doc26))
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.2.6
+
+A configuracao agora se conserta dentro do proprio TEO, e o contexto pega o limite
+de quem entrega sem parar mais a tela.
+
+- `/configurar` entrou na tela: quem instalou, esqueceu a chave e ficou no `voce>`
+  pode consertar o provedor atual ou cadastrar um novo sem sair do TEO e sem
+  aprender comando fora (e o mesmo assistente do `bgh setup`, perguntando uma
+  linha de cada vez na tela fixa; os provedores antigos continuam salvos).
+  Mensagem que falha por conexao agora aponta `/configurar`, nao `bgh doctor`.
+- `/doctor` na tela tambem: maquina, GPU e conexao diagnostica sem fechar a conversa.
+- Limite de contexto vem do que o SERVIDOR entrega (igual ao Hermes), em tres
+  caminhos: o motor local publica (`props` com `n_ctx`), a API publica (lista de
+  modelos com `context_length`, estilo OpenRouter) e, quando nenhuma API publica
+  (DeepSeek, Anthropic...), o assistente consulta o catalog publico models.dev
+  (mesma fonte de metadados que o Hermes usa). Converte para caracteres com folga
+  de saida/ferramentas e define o orcamento sozinho - sem nunca perguntar numero
+  ao usuario leigo (ajuste fino depois com `/ctx`). Teto de leitura de 160000 chars
+  protege maquina simples (ler contexto grande custa tempo na GPU); `/ctx` passa
+  desse teto por escolha.
+- Preset DeepSeek atualizado: `deepseek-chat`/`deepseek-reasoner` foram aposentados
+  pelo provedor em 24/07/2026; o preset agora vem com `deepseek-v4-flash` (mesma
+  URL). Quem tinha o nome antigo no config deve rodar `/configurar` (ou editar o
+  config.json) para voltar a funcionar.
+- Teto de saida por resposta (`max_tokens`) subiu de 2048 para 8192: escrever
+  documento (write_file/make_document leva o texto inteiro na resposta da
+  ferramenta) parava em ~7 mil caracteres por rodada; agora comporta ~28 mil.
+  Configs antigos sem a chave herdam o valor novo sozinhos.
+- Rodape deixa explicito quando o numero exibido e teto do TEO, nao limite do
+  servidor: "contexto: 3% de 160000 chars | teto; o servidor entrega 1.048.576
+  tokens". O valor descoberto no setup fica salvo (`server_context_tokens`).
+- Fechamento de turno visivel e ao vivo (estilo Hermes): ao bater o limite de
+  rodadas de ferramenta ou 5 falhas em sequencia, agora aparece um aviso na tela
+  explicando o motivo, a resposta final chega em streaming (sem silencio morto
+  com contexto cheio) e a instrucao interna de fechamento passou a ser em
+  portugues — o modelo local parou de responder em ingles no fim do turno. Se o
+  servidor recusar o tamanho ate no fechamento, ele compacta e fecha mesmo assim.
+- Limite de rodadas de ferramenta por turno subiu de 12 para 20 (pesquisa e
+  redacao longa nao caem mais no fechamento no meio do trabalho; o anti-loop real
+  continua sendo chamada identica 3x / 5 falhas em sequencia). Regra nova no
+  system prompt: nunca encerrar turno prometendo acao futura ("depois eu faco").
+- Cabecalho "resposta" agora vale por chamada do modelo, nao por turno: em turnos
+  com varias rodadas de ferramenta a resposta final saia colada no bloco de
+  pensamento porque o cabecalho da primeira rodada ficava preso na tela.
+- Sugestao do servidor hospedado subiu de 45000 para 156000 chars (~45 mil tokens;
+  o motor la aceita 262144 tokens; leitura medida: 125 mil chars custam ~77 s).
+  Config novo comeca em 156000 (antes 60000). Modelo local continua em 60000.
+- Compactacao comecou ANTES do teto: dispara a 85% do orcamento e roda antes de
+  mandar o pedido (antes so depois da rodada de ferramentas, entao o proximo
+  pedido chegava ao servidor ja estourado -> tela parava). O aviso "contexto
+  enchendo" e a barra amarela sairao exatamente nesse mesmo ponto (antes o aviso
+  aparecia em 70% e a compactacao em outro lugar, o que parecia compactar cedo
+  demais). O ponto fica em `context_compress_pct` no config.json.
+- Servidor recusando o tamanho: o TEO compacta a conversa e tenta de novo sozinho;
+  se ainda nao couber, a mensagem de erro ja ensina `/ctx 60000`. Durante a
+  compactacao sai "Compactando a conversa em resumo..." na tela - espera longa nao
+  e mais lida como programa travado.
+- Barra de baixo fica na cor de alerta (amarelo) quando o contexto passa do ponto
+  de compactacao (85%), mesmo com o TEO parado.
+- Ferramenta cortada no comeco da cauda da compactacao (sem o `assistant` parceiro)
+  vai para o resumo: alguns servidores rejeitam a mensagem orfa.
+
 ## 0.2.5
 
 Silencio deixou de parecer trava, e "parar" passou a valer dentro das ferramentas.

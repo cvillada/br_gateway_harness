@@ -5,6 +5,7 @@ menu de licenca vivem aqui. A saida passa por um "sink", assim cada tela decide
 como mostrar (rich no modo classico; area de texto na tela fixa).
 """
 
+import getpass
 import os
 import re
 from pathlib import Path
@@ -13,8 +14,9 @@ from rich.console import Console
 
 from .agent import Agent, STOPPED_NOTE
 from .approvals import Gate
-from .config import SESSION_FILE, save_config
+from .config import SESSION_FILE, ConfigError, load_config, save_config
 from .llm import LLM, LLMError
+from .setup_wizard import CHARS_POR_TOKEN, FOLGA_LEITURA
 from .tools import files as files_mod
 
 LINE = "-" * 46  # separador visual (ASCII puro; nao depende de unicode no terminal)
@@ -67,6 +69,8 @@ HELP_SECTIONS = [
         ("/thinking <nivel>", "nivel: auto off minimum low medium high xhigh max ultra"),
         ("/ctx", "medidor do contexto atual"),
         ("/ctx <numero>", "define o limite de contexto e fica salvo (ex.: /ctx 65000)"),
+        ("/configurar", "conserta ou cria um provedor sem sair do TEO (o mesmo assistente do 'bgh setup')"),
+        ("/doctor", "diagnostico da conexao e da maquina, na propria tela"),
         ("/skills", "lista as skills conhecidas"),
         ("/sair", "encerra"),
     ]),
@@ -168,6 +172,16 @@ class ConsoleSink:
     def read_prompt(self) -> str:
         return self.console.input("\n[bold cyan]voce> [/bold cyan]")
 
+    def ask_line(self, prompt: str, default: str = "", secret: bool = False) -> str:
+        """Pergunta de texto livre (assistente do /configurar); Enter sozinho = padrao."""
+        fn = getpass.getpass if secret else input
+        label = f"{prompt}{f' [{default}]' if default else ''}: "
+        try:
+            raw = fn(label).strip()
+        except (EOFError, KeyboardInterrupt):
+            return default
+        return raw or default
+
     def ask_approval(self, label: str, detail: str, allow_always: bool) -> str:
         options, codes = build_approval_options(allow_always)
         self.console.print()
@@ -218,8 +232,19 @@ class ChatCore:
         # Avisos do cliente (espera longa, fallback sem streaming) viram linha na tela:
         # espera nunca pode ser lida como programa travado.
         self.llm.on_note = lambda texto: self.sink.line(texto, style="yellow")
+        # Avisos do agente (compactando, contexto estourou) seguem o mesmo canal.
+        self.agent.on_note = lambda texto: self.sink.line(texto, style="yellow")
+        # Cada chamada do modelo (rodada de ferramenta ou fechamento) comeca bloco
+        # novo: sem isso o cabecalho 'resposta' ficava preso da rodada anterior e a
+        # resposta final saia colada no bloco de pensamento.
+        self.agent.on_round_start = self._reset_stream_state
 
     # ----- streaming -> sink ---------------------------------------------------
+    def _reset_stream_state(self) -> None:
+        """Cabecalhos de pensamento/resposta valem por chamada do modelo, nao por turno."""
+        self._flush_pend()
+        self.st = {"thinking": False, "resposta": False}
+
     def _on_reasoning(self, chunk: str) -> None:
         if not self.st["thinking"]:
             self.sink.sep("pensamento do modelo (raciocinio; pode ignorar e ir direto para a resposta)")
@@ -248,14 +273,14 @@ class ChatCore:
     # ----- janela de contexto ---------------------------------------------------
     def print_ctx(self) -> None:
         usage = self.agent.ctx_usage()
-        txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars "
-               f"({usage['messages']} mensagens)")
+        limite_pct = self.agent._compress_pct()  # o aviso e a compactacao no mesmo ponto
+        txt = self._ctx_footer_text(usage)
         if hasattr(self.sink, "set_ctx"):
             # tela fixa: o medidor mora na ULTIMA linha da tela, nao no historico
-            self.sink.set_ctx(txt)
+            self.sink.set_ctx(txt, usage["pct"], limite_pct)
             if self.agent.last_compressed:
                 self.sink.line("Contexto compactado: as partes antigas viraram um resumo.", style="dim")
-            elif usage["pct"] >= 70:
+            elif usage["pct"] >= limite_pct:
                 self.sink.line("Contexto enchendo; sera compactado na proxima rodada pesada.", style="dim")
             return
         color = "green" if usage["pct"] < 50 else ("yellow" if usage["pct"] < 80 else "red")
@@ -263,8 +288,20 @@ class ChatCore:
         self.sink.line(txt, style=color)
         if self.agent.last_compressed:
             self.sink.line("Contexto compactado: as partes antigas viraram um resumo.", style="dim")
-        elif usage["pct"] >= 70:
+        elif usage["pct"] >= limite_pct:
             self.sink.line("Contexto enchendo; sera compactado na proxima rodada pesada.", style="dim")
+
+    def _ctx_footer_text(self, usage: dict) -> str:
+        """Texto do rodape; quando o provedor entrega mais que o orcamento, avisa
+        que o numero exibido e o teto de leitura do TEO, nao o limite do servidor."""
+        txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars "
+               f"({usage['messages']} mensagens)")
+        srv = self.cfg.get("server_context_tokens")
+        if isinstance(srv, (int, float)) and srv > 0:
+            entrega_chars = int(srv * CHARS_POR_TOKEN * FOLGA_LEITURA)
+            if entrega_chars > usage["budget"]:
+                txt += f" | teto; o servidor entrega {int(srv):,} tokens".replace(",", ".")
+        return txt
 
     def banner(self) -> None:
         self.sink.line("")
@@ -303,6 +340,39 @@ class ChatCore:
     def stop(self) -> None:
         """UI chama isto quando o usuario manda parar."""
         self.agent.stop_event.set()
+
+    def _run_setup_wizard(self) -> str:
+        """Assistente do 'bgh setup' rodando DENTRO da tela (/configurar).
+
+        Caso real: pessoa instalou, errou a chave e ficou no 'voce>' sem saber
+        como consertar. Aqui ela conserta sem sair do TEO; serve para o provedor
+        atual ou para cadastrar um novo (os antigos continuam salvos).
+        """
+        from .setup_wizard import run as run_setup
+
+        ask_fn = getattr(self.sink, "ask_line", None)
+        if ask_fn is None:
+            self.sink.line("Este modo nao consegue perguntar na tela; rode 'bgh setup' "
+                           "na janela de comando.", style="yellow")
+            return "continue"
+        run_setup(ask=ask_fn,
+                  say=lambda *a: self.sink.line(" ".join(str(x) for x in a)),
+                  from_chat=True)
+        try:
+            novo = load_config()
+        except ConfigError as exc:
+            self.sink.line(str(exc), style="red")
+            return "continue"
+        # Mesmo objeto de dict: agente, gate e tela passam a ver a conexao nova.
+        self.cfg.clear()
+        self.cfg.update(novo)
+        self.llm = LLM(self.cfg)
+        self.llm.on_note = lambda texto: self.sink.line(texto, style="yellow")
+        self.agent.llm = self.llm
+        self.sink.line(f"Conexao agora: {self.cfg['model']} @ {self.cfg['base_url']}. "
+                       "Ja vale na proxima mensagem.", style="cyan")
+        self._ask_thinking_level()
+        return "continue"
 
     # ----- turno -----------------------------------------------------------------
     def submit(self, text: str) -> str:
@@ -448,6 +518,12 @@ class ChatCore:
                         self.sink.line(f"Orcamento de contexto ajustado para {novo} caracteres "
                                        "(salvo). Vale ja na proxima resposta.", style="cyan")
                 self.print_ctx()
+            elif name in ("/configurar", "/configure", "/setup"):
+                return self._run_setup_wizard()
+            elif name == "/doctor":
+                from .cli import doctor_report
+
+                doctor_report(lambda texto: self.sink.line(str(texto)))
             else:
                 self.sink.line("Comando desconhecido. /ajuda mostra a lista.")
             return "continue"
@@ -466,7 +542,8 @@ class ChatCore:
             answer = STOPPED_NOTE
         except LLMError as exc:
             self.sink.line(str(exc), style="red")
-            self.sink.line("Dica: rode 'bgh doctor' para checar a conexao com o modelo.", style="yellow")
+            self.sink.line("Dica: digite /configurar aqui mesmo para conferir URL e chave "
+                           "(ou /doctor para o diagnostico completo).", style="yellow")
             return "continue"
 
         self._flush_pend()

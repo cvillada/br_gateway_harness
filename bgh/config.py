@@ -23,7 +23,9 @@ PRESETS = {
     "deepseek": {
         "label": "DeepSeek (API na nuvem, mais simples)",
         "base_url": "https://api.deepseek.com/v1",
-        "model": "deepseek-chat",
+        # Nomes antigos (deepseek-chat / deepseek-reasoner) foram aposentados pelo
+        # provedor em 24/07/2026; a base_url e a mesma, so o nome do modelo mudou.
+        "model": "deepseek-v4-flash",
         "needs_key": True,
     },
     "nubesbr": {
@@ -46,7 +48,11 @@ DEFAULTS = {
     "api_key": "",
     "model": "",
     "temperature": 0.3,
-    "max_tokens": 2048,
+    # Teto de saida por resposta do modelo (tool call de documento carrega o texto
+    # inteiro na resposta). 2048 limitava HTML grande a ~7 mil chars por rodada;
+    # 8192 comporta ~28 mil. DeepSeek V4 aceita ate 384 mil; motor local para no
+    # fim natural do texto, entao nao custa nada quando a resposta e curta.
+    "max_tokens": 8192,
     # Resposta em streaming (aparece digitada ao vivo); cai para modo normal se o servidor nao suportar.
     "stream": True,
     # thinking: auto | off | minimum | low | medium | high | xhigh | max | ultra
@@ -62,9 +68,21 @@ DEFAULTS = {
     "search_time_limit_s": 20,
     "search_max_files": 20000,
     # Orcamento de contexto em caracteres (~3.5 chars/token em pt+codigo).
-    # Para modelos de 27B ou maiores, mantenha >= 60000 (ctx do servidor >= 24k tokens).
-    "context_budget_chars": 60000,
-    "max_tool_rounds": 12,
+    # 156000 chars ~= 45 mil tokens: cabe com folga no servidor hospedado (motor
+    # la aceita 262144 tokens; leitura medida: 125 mil chars custam ~77 s).
+    # Modelo local (llama.cpp) paga contexto grande em VRAM: baixe com /ctx 60000
+    # se o servidor da propria maquina reclamar.
+    "context_budget_chars": 156000,
+    # Compactar comecando aqui (% do orcamento), ANTES de esbarrar no teto.
+    "context_compress_pct": 85,
+    # Teto da descoberta automatica: por mais que o servidor entregue (ex.: motor
+    # com 262144 tokens), o TEO limita o proprio uso para a leitura nao virar espera
+    # de minutos na maquina do usuario. Ajustavel; /ctx subiu alem daqui por escolha.
+    "context_auto_cap_chars": 160000,
+    # Rodadas de ferramenta por turno. 12 deixava pesquisa/redacao longa cair no
+    # fechamento no meio do trabalho; 20 comporta sessao pesada. O anti-loop real
+    # e outro (chamada identica 3x e 5 falhas em sequencia fecham antes disso).
+    "max_tool_rounds": 20,
     # Padroes aprovados com 'always' no prompt de comando perigoso
     # (texto exato ou glob estilo shell; igual ao command_allowlist do Hermes).
     "command_allowlist": [],

@@ -98,7 +98,8 @@ def approvals(args) -> int:
     return 0
 
 
-def doctor(_args) -> int:
+def doctor_report(say) -> None:
+    """Diagnostico impresso linha a linha por 'say' (console do cli ou tela fixa)."""
     def sh(cmd: str) -> str:
         try:
             p = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
@@ -107,31 +108,43 @@ def doctor(_args) -> int:
         except Exception as exc:  # noqa: BLE001
             return f"(falhou: {exc})"
 
-    console.print("[bold]Diagnostico do TEO[/bold]\n")
-    console.print("[bold cyan]Maquina[/bold cyan]")
-    console.print(sh("uname -sr && lscpu | grep -E 'Model name|^CPU\\(s\\)' | head -3"))
-    console.print(sh("free -h | head -2"))
-    console.print(sh("df -h ~ | tail -1"))
-    console.print("\n[bold cyan]GPU[/bold cyan]")
+    say("Diagnostico do TEO")
+    say("Maquina")
+    say(sh("uname -sr && lscpu | grep -E 'Model name|^CPU\\(s\\)' | head -3"))
+    say(sh("free -h | head -2"))
+    say(sh("df -h ~ | tail -1"))
+    say("")
+    say("GPU")
     if shutil.which("nvidia-smi"):
-        console.print(sh("nvidia-smi --query-gpu=name,memory.total,temperature.gpu --format=csv,noheader"))
+        say(sh("nvidia-smi --query-gpu=name,memory.total,temperature.gpu --format=csv,noheader"))
     else:
-        console.print("(nvidia-smi nao encontrado; pode ser AMD/intel ou placa sem driver)")
-    console.print("\n[bold cyan]Conexao com o modelo[/bold cyan]")
+        say("(nvidia-smi nao encontrado; pode ser AMD/intel ou placa sem driver)")
+    say("")
+    say("Conexao com o modelo")
     from .config import ConfigError, load_config
     from .llm import LLM, LLMError
 
     try:
         cfg = load_config()
     except ConfigError as exc:
-        console.print(f"[yellow]{exc}[/yellow]")
-        return 0
+        say(f"(sem conexao ainda: {exc})")
+        return
     try:
-        names = ", ".join(LLM(cfg).list_models()[:5]) or "(lista vazia)"
-        console.print(f"[green]OK[/green] - {cfg['base_url']} responde. Modelos: {names}")
+        llm = LLM(cfg)
+        names = ", ".join(llm.list_models()[:5]) or "(lista vazia)"
+        extra = ""
+        teto_tokens = llm.discover_context()
+        if teto_tokens:
+            extra = f" | contexto que o servidor entrega: {teto_tokens} tokens"
+        say(f"OK - {cfg['base_url']} responde. Modelos: {names}{extra}")
     except LLMError as exc:
-        console.print(f"[red]Falha[/red] - {exc}")
-        console.print("Confira: o servidor do modelo esta ligado? A URL e a chave estao certas? (bgh setup)")
+        say(f"Falha - {exc}")
+        say("Confira: o servidor do modelo esta ligado? A URL e a chave estao certas? "
+            "(/configurar no chat ou bgh setup na janela de comando)")
+
+
+def doctor(_args) -> int:
+    doctor_report(lambda texto: console.print(str(texto), markup=False))
     return 0
 
 

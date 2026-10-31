@@ -7,9 +7,11 @@ Extras:
   desliga o recurso sozinho e segue funcionando.
 """
 
+import re
 import time
 from typing import Callable
 
+import requests
 from openai import OpenAI
 
 from bgh.config import load_config
@@ -27,6 +29,56 @@ _BUDGET = {"minimum": 128, "low": 512, "medium": 2048, "high": 4096,
 
 class LLMError(Exception):
     """Erro de conexao/resposta do modelo, ja traduzido para mensagem legivel."""
+
+
+class ContextOverflowError(LLMError):
+    """O servidor recusou o pedido porque o contexto passou do limite dele.
+
+    Caso especial: o agente compacta a conversa e tenta de novo sozinho, em vez
+    de derrubar o turno (era assim que a tela 'parava' quando o contexto enchia).
+    """
+
+
+# Marcadores de erro de contexto dos servidores que falam OpenAI (llama.cpp,
+# DeepSeek, vLLM e afins). Comparados em minusculo contra o texto da excecao.
+CONTEXT_MARKERS = (
+    "context length", "context size", "n_ctx", "exceeds the available context",
+    "too many tokens", "maximum context", "prompt is too long", "context window",
+)
+
+# Catalog publico de modelos (mesma fonte de metadados que o Hermes usa quando o
+# servidor nao publica nada: DeepSeek, Anthropic, OpenAI e afins). Cacheado uma
+# vez por execucao para nao repetir a baixa.
+MODELS_DEV_URL = "https://models.dev/api.json"
+_models_dev_cache: dict | None = None
+
+
+def _models_dev_catalog() -> dict | None:
+    global _models_dev_cache
+    if _models_dev_cache is None:
+        try:
+            r = requests.get(MODELS_DEV_URL, timeout=15)
+            if r.status_code == 200:
+                data = r.json()
+                if isinstance(data, dict):
+                    _models_dev_cache = data
+        except Exception:  # noqa: BLE001 - sem catalogo, segue sem ele
+            pass
+    return _models_dev_cache
+
+
+def _provider_hint(base_url: str) -> str:
+    """api.deepseek.com -> 'deepseek'; openrouter.ai -> 'openrouter'; etc."""
+    import urllib.parse
+
+    host = urllib.parse.urlparse(str(base_url)).netloc.lower().split(":")[0]
+    for prefix in ("api.", "inference-api.", "www."):
+        if host.startswith(prefix):
+            host = host[len(prefix):]
+    for suffix in (".com", ".ai", ".io", ".dev", ".net", ".org"):
+        if host.endswith(suffix):
+            host = host[: -len(suffix)]
+    return host.split(".")[0]
 
 
 def _timeout_for(cfg: dict) -> float:
@@ -122,6 +174,12 @@ class LLM:
                         "Em servidor remoto isso costuma ser contexto grande demais: "
                         "baixe o orcamento de contexto ou ajuste request_timeout_s no config.json."
                     ) from exc
+                if any(marker in text for marker in CONTEXT_MARKERS):
+                    # Contexto estourou o teto do servidor: caso tratavel (o agente
+                    # compacta e tenta de novo), nao morte do turno.
+                    raise ContextOverflowError(
+                        "O contexto passou do limite que o servidor aceita."
+                    ) from exc
                 raise LLMError(f"Falha ao falar com o modelo ({type(exc).__name__}): {exc}") from exc
         raise LLMError("Falha ao falar com o modelo (fallback esgotado).")
 
@@ -172,6 +230,84 @@ class LLM:
         if not items:
             items = getattr(listing, "models", None) or []
         return [item.id for item in items]
+
+    def discover_context(self) -> int | None:
+        """Teto de TOKENS que o proprio servidor publica para o modelo dele.
+
+        Devolve None quando o servidor nao publica nada (portal que esconde isso).
+        Ordem tentada:
+        1) 'props' da raiz do servidor (llama.cpp / motor igual): n_ctx, total_tokens;
+        2) lista de modelos (/v1/models): campos tipo context_length (estilo
+           OpenRouter), preferindo o modelo em uso.
+        Nunca derruba a configuracao: pesquisa e, se nao acha, fica em silencio.
+        """
+        base = str(self.cfg.get("base_url", "")).rstrip("/")
+        if not base:
+            return None
+        headers = {}
+        key = self.cfg.get("api" + "_key")
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+        root = re.sub(r"/v\d+/?$", "", base) or base
+        try:
+            r = requests.get(root + "/props", headers=headers, timeout=12)
+            if r.status_code == 200:
+                data = r.json()
+                if isinstance(data, dict):
+                    for field in ("n_ctx", "total_tokens"):
+                        val = data.get(field)
+                        if isinstance(val, (int, float)) and val > 0:
+                            return int(val)
+        except Exception:  # noqa: BLE001 - sondagem nunca quebra o assistente
+            pass
+        alvo = str(self.cfg.get("model", ""))
+        melhor_outro = 0
+        try:
+            listing = self.client.models.list()
+            items = getattr(listing, "data", None) or getattr(listing, "models", None) or []
+            for item in items:
+                info: dict = {}
+                try:
+                    info = item.model_dump()
+                except Exception:  # noqa: BLE001 - itens de API variam muito
+                    info = dict(getattr(item, "__dict__", {}) or {})
+                if not isinstance(info, dict):
+                    continue
+                tokens = 0
+                for field in ("context_length", "max_context_length", "max_context", "n_ctx"):
+                    val = info.get(field)
+                    if isinstance(val, (int, float)) and val > 0:
+                        tokens = int(val)
+                        break
+                if tokens <= 0:
+                    continue
+                if str(getattr(item, "id", "")) == alvo:
+                    return tokens
+                melhor_outro = max(melhor_outro, tokens)
+            if melhor_outro:
+                return melhor_outro
+        except Exception:  # noqa: BLE001 - sem lista nao ha o que descobrir
+            pass
+        # 3) Catalogo models.dev (mesma fonte do Hermes): APIs fechadas como
+        # DeepSeek/Anthropic/OpenAI nao publicam contexto na API; o catalogo publica.
+        hint = _provider_hint(base)
+        catalog = _models_dev_catalog()
+        if hint and catalog:
+            models = (catalog.get(hint) or {}).get("models") or {}
+            if isinstance(models, dict) and models:
+                alvo_local = alvo.split("/")[-1].split(":")[0]
+                for cand in (alvo, alvo_local):
+                    info = models.get(cand)
+                    if isinstance(info, dict):
+                        lim: object = (info.get("limit") or {}).get("context")
+                        if isinstance(lim, (int, float)) and lim > 0:
+                            return int(lim)
+                for mid, info in models.items():  # variantes ':free', '/model' etc.
+                    if str(mid).split("/")[-1].split(":")[0] == alvo_local and isinstance(info, dict):
+                        lim = (info.get("limit") or {}).get("context")
+                        if isinstance(lim, (int, float)) and lim > 0:
+                            return int(lim)
+        return None
 
     def chat_stream(self, messages: list, tools: list | None = None,
                     on_text=None, on_reasoning=None, should_stop=None) -> dict:

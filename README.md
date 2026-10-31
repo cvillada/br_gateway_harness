@@ -165,8 +165,17 @@ so e enviada para a URL que o proprio usuario cadastrou.
 | outro    | qualquer endpoint OpenAI-compativel | (voce digita) |
 
 Preparado para modelos de 27B para cima: orcamento de contexto configuravel
-(`context_budget_chars`, padrao 60000), compressao automatica da conversa e
-dispatch tolerante a JSON malformado de modelo quantizado.
+(`context_budget_chars`, padrao 156000), compressao automatica da conversa e
+dispatch tolerante a JSON malformado de modelo quantizado. O assistente de setup
+herda o limite do servidor em tres caminhos: motor llama.cpp publica `n_ctx`
+(`props`), APIs estilo OpenRouter publicam `context_length`, e APIs que nada
+publicam (DeepSeek, Anthropic...) saem do catalog publico models.dev. O valor e
+definido sozinho - nao pergunta numero ao usuario; sem nenhuma fonte, vale o
+padrao do provedor. Quando o provedor entrega mais que o teto de leitura, o
+rodape avisa ("teto; o servidor entrega N tokens"). Saida por resposta ate 8192
+tokens (`max_tokens`), o suficiente para escrever um documento HTML de ~28 mil
+caracteres numa rodada; sessoes de redacao pesadas podem usar `/ctx 300000`.
+Ajuste fino: `/ctx` na tela.
 
 ## Conversando
 
@@ -206,14 +215,20 @@ Comandos:
 | `/provedor <nome ou numero>` | troca o provedor em uso na hora (fica salvo) |
 | `/thinking on\|off\|auto` | liga/desliga o pensamento enviado ao servidor |
 | `/ctx` | medidor do contexto atual |
+| `/ctx <numero>` | define o limite de contexto e salva (ex.: `/ctx 65000`) |
+| `/configurar` | conserta ou cadastra provedor sem sair do TEO (mesmo assistente do `bgh setup`) |
+| `/doctor` | diagnostico da conexao e da maquina na propria tela |
 | `/mem <texto>` | grava uma preferencia sua na memoria |
 | `/nov` `/skills` `/ajuda` `/sair` | conversa nova, skills, ajuda, sair |
 
 - Pensamento do modelo: se o servidor devolve `reasoning_content`/`reasoning`
   (llama.cpp com Qwen thinking, DeepSeek-R1 etc.), aparece como
   `pensamento> ...` antes da resposta.
-- Contexto: apos cada resposta sai `contexto: NN% de 60000 chars` (verde/amarelo/
-  vermelho); avisa quando esta enchendo e anuncia quando compacta em resumo.
+- Contexto: apos cada resposta sai `contexto: NN% de 156000 chars` (verde/amarelo/
+  vermelho); aos 85% a barra de baixo entra na cor de alerta e a proxima rodada
+  compacta sozinha em resumo (o TEO avisa na tela enquanto compacta). Se o servidor
+  recusar o tamanho, ele compacta e tenta de novo em vez de parar. O ponto de
+  compactacao e ajustavel: `context_compress_pct` no `~/.bgh/config.json`.
 
 ## Seguranca (modelo Hermes, menu simples para o usuario)
 

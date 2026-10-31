@@ -6,10 +6,11 @@ persistencia da conversa em ~/.bgh/session.json (retoma de onde parou).
 
 import json
 import threading
+from typing import Callable
 
 from .approvals import Gate
 from .config import SESSION_FILE
-from .llm import LLM, LLMError
+from .llm import ContextOverflowError, LLM, LLMError
 from .prompts import build_system_prompt
 from .tools import ToolBox
 from .tools.memory import load_lines
@@ -30,6 +31,10 @@ class Agent:
         self.last_streamed = False
         self.on_text_delta = None      # callback(pedaco_de_texto) para streaming na UI
         self.on_reasoning_delta = None # callback(pedaco_de_pensamento)
+        # Avisos do proprio agente (compactando, estouro de contexto) viram linha na tela.
+        self.on_note: Callable[[str], None] | None = None
+        # Cada chamada do modelo comeca um bloco novo na UI (reset de cabecalhos).
+        self.on_round_start: Callable[[], None] | None = None
         # Botao de parar: a UI seta este evento e o agente interrompe streaming,
         # ferramentas e rodadas na hora (igual ao CTRL+C do Hermes).
         self.stop_event = threading.Event()
@@ -94,16 +99,25 @@ class Agent:
                 self._save_session()
                 return STOPPED_NOTE
             use_stream = bool(self.cfg.get("stream", True)) and hasattr(self.llm, "chat_stream")
-            if use_stream:
-                msg = self.llm.chat_stream(
-                    self.messages,
-                    self.tools.specs,
-                    on_text=self.on_text_delta,
-                    on_reasoning=self.on_reasoning_delta,
-                    should_stop=self.stop_event.is_set,
-                )
-            else:
-                msg = self.llm.chat(self.messages, self.tools.specs)
+            if self._compress_if_needed():
+                self.last_compressed = True
+            try:
+                self._round_start()
+                msg = self._call_model(use_stream)
+            except ContextOverflowError as exc:
+                # O servidor recusou o tamanho: compactar e tentar na hora.
+                # Antes isso era onde a tela "parava" quando o contexto enchia.
+                self._note("O servidor recusou o tamanho do contexto; vou compactar a conversa e tentar de novo.")
+                self._force_compress()
+                self.last_compressed = True
+                try:
+                    self._round_start()
+                    msg = self._call_model(use_stream)
+                except ContextOverflowError:
+                    raise LLMError(
+                        str(exc) + " Mesmo depois de compactar, o pedido nao coube no servidor. "
+                        "Reduza o limite aqui na tela: /ctx 60000"
+                    ) from exc
             self.last_streamed = use_stream
             self.messages.append(msg)
             if msg.get("stopped"):
@@ -156,22 +170,43 @@ class Agent:
                 self._save_session()
                 return STOPPED_NOTE
             rounds += 1
-            if self._maybe_compress():
+            if self._compress_if_needed():
                 self.last_compressed = True
             if fail_streak >= 5:
+                self._note("5 ferramentas falharam em sequencia; vou fechar este turno com o que ja tenho.")
                 return self._close_window(
-                    "(5 ferramentas falharam em sequencia; pare de tentar variantes do mesmo "
-                    "caminho e responda ao usuario: o que foi tentado, o que travou e a saida)"
+                    "(5 ferramentas falharam em sequencia. Pare de tentar variantes do mesmo "
+                    "caminho e responda em portugues ao usuario: o que foi tentado, o que travou "
+                    "e o que ele pode fazer.)"
                 )
         # Estourou o limite de rodadas: fecha a janela pedindo resposta com o que tem.
+        self._note("Limite de ferramentas deste turno atingido; vou responder com o que ja coletei.")
         return self._close_window(
-            "(limite de ferramentas atingido neste turno; responda com o que ja foi coletado)"
+            "(limite de ferramentas deste turno atingido. Responda em portugues usando apenas "
+            "o que ja foi coletado; nao prometa acao futura, feche o assunto agora.)"
         )
 
     # ----- janela final -------------------------------------------------------
     def _close_window(self, note: str) -> str:
         self.messages.append({"role": "user", "content": note})
-        final = self.llm.chat(self.messages)
+        self._round_start()  # fechamento e bloco novo: cabecalho 'resposta' garantido
+        # Fechamento em streaming (estilo Hermes): o texto aparece ao vivo, sem
+        # silencio morto no ultimo modelo quando o contexto ja esta cheio.
+        use_stream = bool(self.cfg.get("stream", True)) and hasattr(self.llm, "chat_stream")
+        try:
+            if use_stream:
+                final = self.llm.chat_stream(
+                    self.messages, None,
+                    on_text=self.on_text_delta,
+                    on_reasoning=self.on_reasoning_delta,
+                    should_stop=self.stop_event.is_set,
+                )
+            else:
+                final = self.llm.chat(self.messages)
+        except ContextOverflowError:
+            # O fechamento tambem pode esbarrar no tamanho: compacta e fecha no modo normal.
+            self._force_compress()
+            final = self.llm.chat(self.messages)
         self.messages.append(final)
         self._save_session()
         return final.get("content", "")
@@ -192,21 +227,59 @@ class Agent:
     def ctx_usage(self) -> dict:
         """Medidor para a UI: quantos chars do orcamento ja foram usados."""
         chars = self._estimate_chars()
-        budget = int(self.cfg.get("context_budget_chars", 60000))
+        budget = int(self.cfg.get("context_budget_chars", 156000))
         pct = min(int(100 * chars / max(budget, 1)), 999)
         return {"chars": chars, "budget": budget, "pct": pct, "messages": len(self.messages)}
 
-    def _maybe_compress(self) -> bool:
-        budget = int(self.cfg.get("context_budget_chars", 60000))
-        if self._estimate_chars() <= budget:
-            return False
+    def _compress_pct(self) -> int:
+        """A partir de quanto do orcamento comeca a compactar (padrao 85%)."""
+        try:
+            pct = int(self.cfg.get("context_compress_pct", 85))
+        except (TypeError, ValueError):
+            pct = 85
+        return max(50, min(pct, 100))
+
+    def _note(self, text: str) -> None:
+        if self.on_note is not None:
+            try:
+                self.on_note(text)
+            except Exception:  # noqa: BLE001 - aviso nunca derruba o turno
+                pass
+
+    def _round_start(self) -> None:
+        if self.on_round_start is not None:
+            try:
+                self.on_round_start()
+            except Exception:  # noqa: BLE001 - reset de cabecalho nunca derruba o turno
+                pass
+
+    def _call_model(self, use_stream: bool) -> dict:
+        if use_stream:
+            return self.llm.chat_stream(
+                self.messages,
+                self.tools.specs,
+                on_text=self.on_text_delta,
+                on_reasoning=self.on_reasoning_delta,
+                should_stop=self.stop_event.is_set,
+            )
+        return self.llm.chat(self.messages, self.tools.specs)
+
+    def _compress_once(self) -> bool:
+        """Uma rodada de compactacao: o comeco da conversa vira um resumo."""
         keep_tail = 8
         if len(self.messages) <= keep_tail + 2:
             return False
         head, tail = self.messages[1:-keep_tail], self.messages[-keep_tail:]
+        # Ferramenta no comeco da cauda perde o par 'assistant' quando este e
+        # cortado; servidores rejeitam a mensagem orfa: ela vai para o resumo.
+        while tail and tail[0].get("role") == "tool":
+            head.append(tail.pop(0))
+        if not head:
+            return False
         transcript = "\n".join(
             f"{m.get('role')}: {str(m.get('content', ''))[:500]}" for m in head
         )
+        self._note("Compactando a conversa em resumo (o resumo custa uma espera extra)...")
         summary = self.llm.summarize(transcript)
         if not summary:
             # Sem resumo possivel, corta o meio (falha aberta mas visivel ao modelo).
@@ -216,3 +289,31 @@ class Agent:
         ] + tail
         self._save_session()
         return True
+
+    def _compress_if_needed(self) -> bool:
+        """Compacta ANTES de esbarrar no teto: comeca no % configurado (85%)."""
+        budget = int(self.cfg.get("context_budget_chars", 156000))
+        threshold = int(budget * self._compress_pct() / 100)
+        if self._estimate_chars() <= threshold:
+            return False
+        did = False
+        for _ in range(3):
+            if not self._compress_once():
+                break
+            did = True
+            if self._estimate_chars() <= threshold:
+                break
+        return did
+
+    def _force_compress(self) -> bool:
+        """Compactacao depois que o servidor ja recusou: baixa ate 70% do orcamento."""
+        budget = int(self.cfg.get("context_budget_chars", 156000))
+        target = int(budget * 0.70)
+        did = False
+        for _ in range(4):
+            if self._estimate_chars() <= target:
+                break
+            if not self._compress_once():
+                break
+            did = True
+        return did
