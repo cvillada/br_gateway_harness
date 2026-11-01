@@ -1523,7 +1523,7 @@ def _cfg_ctx28(**extra):
     return c28
 
 
-# Cenario do Nei: config guarda 1M de outro provedor; servidor atual entrega 262144.
+# Cenario relatado pelo dono do projeto: config guarda 1M de outro provedor; servidor atual entrega 262144.
 _cfg_sw28 = _cfg_ctx28(server_context_tokens=1048576,
                        server_context_key="https://api.deepseek.com/v1|deepseek-flash")
 _llm_sw28 = _CtxLLM28(262144)
