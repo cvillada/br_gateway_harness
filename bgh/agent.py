@@ -85,6 +85,7 @@ class Agent:
             }
         ]
         self.gate.session_rules.clear()
+        self.last_compressed = False   # aviso 'compactado' nao pode sobreviver ao zerar a conversa
         if SESSION_FILE.exists():
             SESSION_FILE.unlink()
 

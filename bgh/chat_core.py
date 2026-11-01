@@ -521,6 +521,7 @@ class ChatCore:
                 self.agent.new_session()
                 self.pending_attach = None
                 self.sink.line("Conversa zerada (memoria e skills preservadas).", style="dim")
+                self.print_ctx()   # rodape tem que mostrar a leitura nova na hora, nao a velha
             elif name == "/mem" and rest:
                 from .tools import memory
 

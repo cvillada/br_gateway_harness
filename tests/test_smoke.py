@@ -1478,6 +1478,22 @@ finally:
 ok("ajuda anuncia o /atualizar",
    any(c.startswith("/atualizar") for c in _cmds26))
 
+# /nov redesenha o medidor na hora: a barra nao pode continuar mostrando a leitura velha.
+_sink_nov27 = RecSink()
+_core_nov27 = ChatCore(dict(core_cfg), _sink_nov27, llm=_OkLLM26())
+_core_nov27.submit("falar um")
+_core_nov27.submit("falar dois")
+_core_nov27.agent.last_compressed = True   # simula compactacao que aconteceu na conversa antiga
+_core_nov27.submit("/nov")
+_idx_zer27 = max(i for i, l in enumerate(_sink_nov27.lines) if "zerada" in l)
+_depois27 = _sink_nov27.lines[_idx_zer27 + 1:]
+_ctx_apos27 = [l for l in _depois27 if l.startswith("contexto:")]
+ok("/nov redesenha o medidor logo apos zerar (rodape mostra a leitura nova)",
+   len(_ctx_apos27) >= 1 and "(1 mensagens)" in _ctx_apos27[-1])
+ok("/nov derruba o aviso 'Contexto compactado' herdado da conversa zerada",
+   _core_nov27.agent.last_compressed is False
+   and not any("compactado" in l for l in _depois27))
+
 _sink_err26 = RecSink()
 _core_err26 = ChatCore(dict(core_cfg), _sink_err26,
                        llm=_ListLLM26())

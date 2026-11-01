@@ -37,6 +37,10 @@ O TEO aprende a se atualizar sozinho e a falar mais claro com quem nao e tecnico
   desenvolvedor), `dev` (trabalho de codigo com backup e passos pequenos),
   `dev-web` (pagina/painel HTML comecando por arquivo unico, testado de verdade)
   e `tdd` (teste antes do codigo, ciclo vermelho-verde-refatorar).
+- Corrigido no mesmo dia: depois do `/nov` o medidor do rodape mostrava a leitura
+  velha (ex.: 40% com 20 mensagens) ate a proxima resposta. Agora o `/nov` redesenha
+  a barra na hora (1 mensagem, so o prompt do sistema) e derruba o aviso
+  'Contexto compactado' herdado da conversa zerada.
 
 ## 0.2.6
 
