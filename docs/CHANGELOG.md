@@ -41,6 +41,14 @@ O TEO aprende a se atualizar sozinho e a falar mais claro com quem nao e tecnico
   velha (ex.: 40% com 20 mensagens) ate a proxima resposta. Agora o `/nov` redesenha
   a barra na hora (1 mensagem, so o prompt do sistema) e derruba o aviso
   'Contexto compactado' herdado da conversa zerada.
+- A barra de contexto agora segue o servidor de verdade: troca de provedor ou de
+  modelo re-sonda o teto publicado e assume o valor dele; servidor que nao publica
+  nada retira o numero antigo (barra nunca mostra teto emprestado de outro
+  servidor). O teto gravado passa a carregar a procedencia (servidor+modelo); na
+  abertura, re-sonda so quando a procedencia nao bate. Servidor com teto menor
+  reduz o orcamento na hora, para comprimir antes de quebrar o turno.
+- README ganhou a sessao de apoio ao projeto antes da licenca: assinatura
+  ia.nubesbr.com mantem o servidor que faz o TEO pensar.
 
 ## 0.2.6
 

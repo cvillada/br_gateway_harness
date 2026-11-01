@@ -1494,6 +1494,84 @@ ok("/nov derruba o aviso 'Contexto compactado' herdado da conversa zerada",
    _core_nov27.agent.last_compressed is False
    and not any("compactado" in l for l in _depois27))
 
+# Barra de contexto segue o servidor (emenda da 0.2.7): troca de modelo/provedor
+# e reabertura nunca deixam numero de servidor anterior na tela.
+from bgh.setup_wizard import CHARS_POR_TOKEN as _CPT28, FOLGA_LEITURA as _FL28
+
+
+class _CtxLLM28(_ListLLM26):
+    """Servidor fake que publica (ou nao) seu teto de tokens; conta as sondas."""
+
+    def __init__(self, tokens_pub):
+        super().__init__()
+        self.tokens_pub = tokens_pub
+        self.probe_calls = 0
+
+    def discover_context(self):
+        self.probe_calls += 1
+        return self.tokens_pub
+
+
+def _cfg_ctx28(**extra):
+    c28 = dict(core_cfg)
+    c28["profiles"] = {
+        "servidor_a": {"base_url": "http://a/v1", "api_" + "key": "k", "model": "alpha-model"},
+        "servidor_b": {"base_url": "http://b/v1", "api_" + "key": "k", "model": "beta-model"},
+    }
+    c28["active_profile"] = "servidor_a"
+    c28.update(extra)
+    return c28
+
+
+# Cenario do Nei: config guarda 1M de outro provedor; servidor atual entrega 262144.
+_cfg_sw28 = _cfg_ctx28(server_context_tokens=1048576,
+                       server_context_key="https://api.deepseek.com/v1|deepseek-flash")
+_llm_sw28 = _CtxLLM28(262144)
+_sink_sw28 = RecSink()
+_core_sw28 = ChatCore(_cfg_sw28, _sink_sw28, llm=_llm_sw28)
+_core_sw28.submit("/modelo")   # popula a lista como o usuario faz antes de escolher numero
+_core_sw28.submit("/modelo 1")
+_ok_linhas28 = [l for l in _sink_sw28.lines if l.startswith("contexto:")]
+ok("troca de modelo re-sonda o servidor e a barra passa a mostrar o teto dele (262.144)",
+   _cfg_sw28["server_context_tokens"] == 262144
+   and _cfg_sw28.get("server_context_key") == "http://fake/v1|alpha-model"
+   and any("servidor entrega 262.144 tokens" in l for l in _ok_linhas28))
+ok("numero de servidor anterior nao sobrevive: a chave grava a procedencia",
+   "deepseek" not in str(_cfg_sw28.get("server_context_key")))
+
+# Troca para servidor que NAO publica nada: numero velho sai da barra (nao mente).
+_cfg_off28 = _cfg_ctx28(server_context_tokens=1048576,
+                        server_context_key="http://fake/v1|fake-model")  # pertence ao servidor em uso
+_llm_off28 = _CtxLLM28(None)
+_sink_off28 = RecSink()
+_core_off28 = ChatCore(_cfg_off28, _sink_off28, llm=_llm_off28)
+ok("reabertura com numero do proprio servidor/modelo nao paga rede de novo",
+   _llm_off28.probe_calls == 0 and _cfg_off28["server_context_tokens"] == 1048576)
+_core_off28.submit("/provedor 2")
+ok("provedor novo que nao publica teto: valor antigo desaparece da barra",
+   "server_context_tokens" not in _cfg_off28
+   and not any("servidor entrega" in l for l in _sink_off28.lines))
+
+# Servidor pequeno: orcamento se ajusta para baixo para comprimir antes de quebrar.
+_cfg_small28 = _cfg_ctx28(context_budget_chars=156000)
+_llm_small28 = _CtxLLM28(8192)
+_sink_small28 = RecSink()
+_core_small28 = ChatCore(_cfg_small28, _sink_small28, llm=_llm_small28)
+_core_small28.submit("/modelo")   # popula a lista antes de escolher o numero
+_core_small28.submit("/modelo 2")
+_esperado28 = max(8000, int(8192 * _CPT28 * _FL28))
+ok("servidor com teto menor reduz o orcamento na hora (compressao acontece antes do estouro)",
+   _cfg_small28["context_budget_chars"] == _esperado28
+   and _core_small28.agent.cfg.get("context_budget_chars") == _esperado28)
+
+# Reabertura com numero de OUTRO servidor e servidor mudo: barra nao mostra numero emprestado.
+_cfg_stale28 = _cfg_ctx28(server_context_tokens=1048576,
+                          server_context_key="http://outro/v1|modelo-antigo")
+_sink_stale28 = RecSink()
+_core_stale28 = ChatCore(_cfg_stale28, _sink_stale28, llm=_CtxLLM28(None))
+ok("procedencia batida + servidor sem publicacao: numero velho e retirado na abertura",
+   "server_context_tokens" not in _cfg_stale28)
+
 _sink_err26 = RecSink()
 _core_err26 = ChatCore(dict(core_cfg), _sink_err26,
                        llm=_ListLLM26())

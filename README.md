@@ -314,3 +314,34 @@ Gera em dist/:
 
 - Menu de permissoes tambem no modo nao-interativo (cron/-q) com `--yes`.
 - Empacotar para outras distribuicoes (o binario `motor` e gerado na maquina alvo).
+
+===============================================================================
+>>>>  LE ISTO ANTES DE FECHAR A PAGINA  <<<<
+===============================================================================
+
+O TEO nasceu das maos de um desenvolvedor brasileiro, feito do zero, e
+continua dele pra voce: o programa e aberto, o codigo e seu, para sempre.
+
+Mas existe um custo invisivel atras da tela: o cerebro que faz o TEO
+pensar quando o servidor local do usuario nao da conta. Se o TEO ja te
+ajudou a escrever um e-mail, arrumar uma pasta, tirar nota fiscal de
+uma foto ou resolver o que quer que seja na sua maquina, ha um jeito
+simples e direto de retribuir:
+
+              >>>>  ASSINE IA.NUBESBR.COM  <<<<
+
+              https://ia.nubesbr.com
+
+Sua assinatura paga o servidor que faz o TEO pensar e mantem este
+projeto vivo - sem propaganda, sem venda dos seus dados, sem pegadinha.
+Quem assina usa o modelo do servidor lado a lado com o TEO: e so
+cadastrar o provedor (o TEO pergunta a chave uma vez) e conversar.
+
+Cada assinatura financia a proxima versao. Obrigado por chegar ate o fim
+do README - quem le tudo merece saber quem mantem a luz acesa.
+
+===============================================================================
+
+## Licenca
+
+MIT (arquivo `LICENSE` na raiz): use, estude, modifique e distribua.

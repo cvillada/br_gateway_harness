@@ -147,6 +147,8 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
             cap = int(cfg.get("context_auto_cap_chars") or 160000)
             auto_limite = int(max(8000, min(tokens_servidor * CHARS_POR_TOKEN * FOLGA_LEITURA, cap)))
             cfg["server_context_tokens"] = int(tokens_servidor)  # o rodape pode avisar o teto
+            # O numero pertence a este servidor/modelo; troca re-sonda (chat_core).
+            cfg["server_context_key"] = f"{cfg.get('base_url', '')}|{cfg.get('model', '')}"
 
     if auto_limite:
         cfg["context_budget_chars"] = auto_limite
@@ -154,6 +156,7 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
                f"(ele entrega ate {tokens_servidor} tokens).")
     else:
         cfg.pop("server_context_tokens", None)  # sem prova nova, nao mostra valor velho
+        cfg.pop("server_context_key", None)
         preset_orcamento = int(BUDGET_SUGESTAO.get(choice, "60000"))
         cfg["context_budget_chars"] = preset_orcamento
         say_fn(f"Orcamento de contexto: {preset_orcamento} caracteres (padrao deste provedor; "

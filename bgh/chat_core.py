@@ -286,6 +286,9 @@ class ChatCore:
         # novo: sem isso o cabecalho 'resposta' ficava preso da rodada anterior e a
         # resposta final saia colada no bloco de pensamento.
         self.agent.on_round_start = self._reset_stream_state
+        # Abertura: se o teto gravado pertence a outro servidor/modelo, re-sonda
+        # antes de qualquer barra ser desenhada (barra nunca mostra numero emprestado).
+        self._refresh_server_context(troca=False, render=False)
 
     # ----- streaming -> sink ---------------------------------------------------
     def _reset_stream_state(self) -> None:
@@ -297,6 +300,46 @@ class ChatCore:
         """Mensagem digitada durante o processamento: vai ao modelo na proxima
         fronteira de rodada (estilo Hermes), sem derrubar o turno."""
         self.agent.steer(text)
+
+    def _refresh_server_context(self, *, troca: bool, render: bool) -> None:
+        """Assume o teto de contexto publicado pelo servidor do provedor/modelo atual.
+
+        Regra pedida pelo dono do projeto: a barra mostra o que o servidor entrega
+        AGORA, nunca o numero gravado por um servidor/modelo anterior. Troca de
+        provedor ou de modelo sempre re-sonda. Na abertura, re-sonda so quando o
+        numero gravado pertence a outro servidor/modelo (estado estavel nao paga
+        rede nem atrasa a tela).
+        """
+        chave_atual = f"{self.cfg.get('base_url', '')}|{self.cfg.get('model', '')}"
+        if not troca and self.cfg.get("server_context_key") == chave_atual:
+            return  # o numero gravado e exatamente o deste servidor com este modelo
+        probe = getattr(self.llm, "discover_context", None)
+        tokens = None
+        if probe is not None:
+            try:
+                tokens = probe()
+            except Exception:  # noqa: BLE001 - sondagem nunca derruba o comando
+                tokens = None
+        if isinstance(tokens, (int, float)) and tokens > 0:
+            self.cfg["server_context_tokens"] = int(tokens)
+            self.cfg["server_context_key"] = chave_atual
+            entrega = int(int(tokens) * CHARS_POR_TOKEN * FOLGA_LEITURA)
+            budget = int(self.cfg.get("context_budget_chars", 156000))
+            if entrega < budget:
+                # Teto real menor que o orcamento: comprimir mais cedo evita turno
+                # quebrando no meio por contexto (mesma conta do assistente de setup).
+                self.cfg["context_budget_chars"] = max(8000, entrega)
+                for dono in (self.agent, self.llm):
+                    dono_cfg = getattr(dono, "cfg", None)
+                    if dono_cfg is not None and dono_cfg is not self.cfg:
+                        dono_cfg["context_budget_chars"] = self.cfg["context_budget_chars"]
+            save_config(self.cfg)
+        elif self.cfg.pop("server_context_key", None) is not None or troca:
+            # Sem publicacao nova: numero de outro servidor/modelo nao pode mentir na barra.
+            self.cfg.pop("server_context_tokens", None)
+            save_config(self.cfg)
+        if render:
+            self.print_ctx()
 
     def _on_reasoning(self, chunk: str) -> None:
         if not self.cfg.get("show_thinking", True):
@@ -547,6 +590,7 @@ class ChatCore:
                     save_config(self.cfg)
                     self.sink.line(f"Modelo agora: {alvo2} (salvo no config)", style="cyan")
                     self._ask_thinking_level()
+                    self._refresh_server_context(troca=True, render=True)
             elif name in ("/provedores", "/provedor"):
                 if name == "/provedores" or not rest:
                     self._list_profiles()  # sozinho lista; alias antigo aceito
@@ -567,6 +611,7 @@ class ChatCore:
                             style="cyan",
                         )
                         self._ask_thinking_level()
+                        self._refresh_server_context(troca=True, render=True)
                     else:
                         self.sink.line("Provedor nao encontrado. Digite /provedor sozinho para ver a lista.")
             elif name in ("/pensamento", "/thinking"):
