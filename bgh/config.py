@@ -58,7 +58,8 @@ DEFAULTS = {
     # thinking: auto | off | minimum | low | medium | high | xhigh | max | ultra
     # (on continua aceito como antigo). Vira reasoning_effort e/ou
     # thinking_budget conforme o que o servidor aceitar (queda em escada).
-    "thinking": "auto",
+    "thinking": "auto",        # nivel enviado ao servidor
+    "show_thinking": True,     # mostrar ou nao o bloco cinza na tela (/pensamento liga|desliga)
     # Segundos de espera pelo modelo antes de desistir. 0 = automatico:
     # 120 para modelo na propria maquina, 300 para servidor remoto (contexto grande
     # pode levar mais de um minuto so para ser lido).

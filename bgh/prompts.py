@@ -70,6 +70,16 @@ def environment_block() -> str:
         f"Home: {os.path.expanduser('~')}",
         f"Diretorio atual: {os.getcwd()}",
     ]
+    if platform.system() == "Windows":
+        lines.append(
+            "ATENCAO WINDOWS: esta maquina usa Windows e o run_command roda no cmd.exe, NAO e bash. "
+            "Escreva os comandos no formato Windows desde a primeira tentativa: dir, where, type, "
+            "findstr, copy, del, mkdir; variaveis como %VAR%; caminhos com barra invertida. "
+            "NUNCA experimente sintaxe de bash (grep, sed, cat, head, awk, 2>/dev/null, $(), "
+            "backtick, export VAR=): ela falha no cmd.exe e cada falha desperdica uma rodada. "
+            "Precisando calcular, processar texto ou planilha, prefira run_python: funciona igual "
+            "em qualquer sistema."
+        )
     return "\n".join(lines)
 
 

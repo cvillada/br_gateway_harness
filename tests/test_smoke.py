@@ -595,6 +595,20 @@ class RecSink:
 
 from bgh.chat_core import ChatCore, build_approval_options, parse_approval_choice
 
+
+class _ListLLM26:
+    """LLM fake que publica lista de modelos (para os comandos unificados)."""
+
+    def __init__(self):
+        self.cfg = {}
+
+    def list_models(self):
+        return ["alpha-model", "beta-model"]
+
+    def chat(self, messages, tools=None):
+        return {"role": "assistant", "content": "n/a"}
+
+
 core_cfg = dict(cfg)
 core_cfg.update({"stream": False, "model": "fake-model", "base_url": "http://fake/v1"})
 sink_rec = RecSink()
@@ -824,7 +838,7 @@ ok("numero absurdo e recusado", _parse_budget("2000000") is None)
 
 _sink_ctx = RecSink()
 _core_ctx = ChatCore(dict(core_cfg), _sink_ctx,
-                     llm=FakeLLM([{"role": "assistant", "content": "ok"}]))
+                     llm=_ListLLM26())
 _orcamento_antes = _core_ctx.agent.ctx_usage()["budget"]
 _core_ctx.submit("/ctx 65000")
 ok("/ctx 65000 muda o limite que o medidor mostra",
@@ -835,7 +849,7 @@ ok("limite novo vai para o config.json (sobrevive ao reabrir o TEO)",
 
 _sink_reaberto = RecSink()
 _core_reaberto = ChatCore(dict(load_config()), _sink_reaberto,
-                          llm=FakeLLM([{"role": "assistant", "content": "ok"}]))
+                          llm=_ListLLM26())
 ok("reabrir o chat ja vem com o limite salvo",
    _core_reaberto.cfg["context_budget_chars"] == 65000)
 _linhas_antes = len(_sink_reaberto.lines)
@@ -1247,7 +1261,7 @@ try:
     _sink26 = RecSink()
     _sink26.ask_line = lambda prompt, default="", secret=False: default
     _core26 = ChatCore(dict(load_config()), _sink26,
-                       llm=FakeLLM([{"role": "assistant", "content": "ok"}]))
+                       llm=_ListLLM26())
     _core26.submit("/configurar")
     ok("/configurar roda o assistente com perguntas da tela", _pedidos26 == [True])
     ok("conexao nova entra no core, no agente e e anunciada na tela",
@@ -1290,5 +1304,249 @@ ok("/doctor mostra maquina, GPU e conexao na propria tela",
    any("Diagnostico do TEO" in l for l in _linhas_doc26)
    and any("Conexao com o modelo" in l for l in _linhas_doc26)
    and any("sem conexao ainda" in l for l in _linhas_doc26))
+
+# ---- emenda 3 da 0.2.6: erros amigaveis, comandos unificados, /pensamento, titulo da janela ----
+from bgh.chat_core import help_lines as _help_lines26
+from bgh.chat_core import set_window_title as _swt26
+from bgh import prompts as _prompts26
+
+_cmds26 = [seg[0][0].strip() for seg in _help_lines26() if seg and seg[0][0].strip().startswith("/")]
+ok("ajuda unificada: /modelo faz lista e escolha (sem /modelos na lista)",
+   any(c == "/modelo" for c in _cmds26) and not any(c.startswith("/modelos") for c in _cmds26))
+ok("ajuda unificada: /provedor faz lista e troca (sem /provedores na lista)",
+   any(c == "/provedor" for c in _cmds26) and not any(c.startswith("/provedores") for c in _cmds26))
+ok("ajuda traz /pensamento com liga/desliga no lugar de /thinking",
+   any(c.startswith("/pensamento") for c in _cmds26) and not any(c.startswith("/thinking") for c in _cmds26))
+ok("ajuda tem UMA linha so para /ctx (medidor e limite na mesma linha)",
+   sum(1 for c in _cmds26 if c == "/ctx" or c.startswith("/ctx ")) == 1)
+
+
+_sink_m26 = RecSink()
+_cfg_m26 = dict(core_cfg)
+_cfg_m26["model"] = "alpha-model"  # para a lista marcar o que esta em uso
+_core_m26 = ChatCore(_cfg_m26, _sink_m26, llm=_ListLLM26())
+_core_m26.submit("/modelo")
+ok("/modelo sozinho lista os modelos do servidor",
+   any("1. alpha-model" in l for l in _sink_m26.lines))
+ok("modelo em uso aparece marcado '(em uso)' na lista, igual ao provedor",
+   any("1. alpha-model (em uso)" in l for l in _sink_m26.lines)
+   and not any("(atual)" in l for l in _sink_m26.lines))
+_core_m26.submit("/modelo 2")
+ok("/modelo 2 escolhe da lista que acabou de ser mostrada",
+   _core_m26.cfg["model"] == "beta-model")
+_sink_alias26 = RecSink()
+_core_alias26 = ChatCore(dict(core_cfg), _sink_alias26, llm=_ListLLM26())
+_core_alias26.submit("/modelos")
+ok("apelido antigo /modelos continua aceito (so saiu da ajuda)",
+   any("1. alpha-model" in l for l in _sink_alias26.lines))
+ok("sem igual exato: lista mostra o modelo em uso em linha propria (ID renomeado pelo provedor)",
+   any("modelo em uso: fake-model" in l for l in _sink_alias26.lines))
+
+_cfg_p26 = dict(core_cfg)
+_cfg_p26["profiles"] = {
+    "um": {"provider": "local", "base_url": "http://a/v1", "api_key": "k1", "model": "m1"},
+    "dois": {"provider": "local", "base_url": "http://b/v1", "api_key": "k2", "model": "m2"},
+}
+_cfg_p26["active_profile"] = "um"
+_sink_p26 = RecSink()
+_core_p26 = ChatCore(_cfg_p26, _sink_p26, llm=_ListLLM26())
+_core_p26.submit("/provedor")
+ok("/provedor sozinho lista os provedores cadastrados",
+   any("1. um" in l and "m1" in l for l in _sink_p26.lines))
+_core_p26.submit("/provedor dois")
+ok("/provedor dois troca o provedor em uso",
+   _cfg_p26.get("active_profile") == "dois")
+
+_sink_pen26 = RecSink()
+_core_pen26 = ChatCore(dict(core_cfg), _sink_pen26,
+                       llm=_ListLLM26())
+_core_pen26.submit("/pensamento desliga")
+ok("/pensamento desliga so esconde a tela (show_thinking=False) e nao muda o envio ao servidor",
+   _core_pen26.cfg["show_thinking"] is False and load_config()["show_thinking"] is False
+   and _core_pen26.cfg.get("thinking") in (None, "auto"))
+_core_pen26.submit("/pensamento liga")
+ok("/pensamento liga volta a mostrar o bloco cinza", _core_pen26.cfg["show_thinking"] is True)
+_core_pen26.submit("/pensamento high")
+ok("nivel avancado continua sendo o nivel enviado ao servidor", _core_pen26.cfg["thinking"] == "high")
+_antes_bad26 = len(_sink_pen26.lines)
+_core_pen26.submit("/pensamento xyz")
+ok("nivel invalido ganha aviso claro apontando liga/desliga",
+   any("Use /pensamento liga" in l for l in _sink_pen26.lines[_antes_bad26:]))
+_core_pen26.submit("/thinking low")
+ok("apelido antigo /thinking continua aceito", _core_pen26.cfg["thinking"] == "low")
+
+# Renderizacao: com a tela desligada o bloco cinza nao aparece; com ela ligada, aparece.
+_cfg_cinza_off26 = dict(core_cfg)
+_cfg_cinza_off26["show_thinking"] = False
+_sink_cinza_off26 = RecSink()
+_core_cinza_off26 = ChatCore(_cfg_cinza_off26, _sink_cinza_off26, llm=_ListLLM26())
+_core_cinza_off26._on_reasoning("raciocinio que nao deve aparecer")
+ok("tela desligada: nenhum caractere do pensamento chega ao usuario",
+   not any("raciocinio que nao deve aparecer" in l for l in _sink_cinza_off26.lines)
+   and not any("pensamento do modelo" in l for l in _sink_cinza_off26.lines))
+_sink_cinza_on26 = RecSink()
+_core_cinza_on26 = ChatCore(dict(core_cfg), _sink_cinza_on26, llm=_ListLLM26())
+_core_cinza_on26._on_reasoning("raciocinio visivel")
+ok("tela ligada (padrao): cabecalho e texto do pensamento aparecem",
+   any("pensamento do modelo" in l for l in _sink_cinza_on26.lines)
+   and any("raciocinio visivel" in l for l in _sink_cinza_on26.lines))
+
+# /atualizar: comparacao de versao hermetica (GitHub e pip simulados).
+from bgh import updater as _upd26
+from bgh import __version__ as _ver_instalada26
+
+ok("comparacao de versao funciona por numeros",
+   _upd26.update_needed("0.2.6", "v0.2.7")
+   and not _upd26.update_needed("0.2.6", "v0.2.6")
+   and not _upd26.update_needed("0.2.6", "v0.2.5")
+   and _upd26.version_tuple("v0.10.2") > _upd26.version_tuple("v0.9.9"))
+
+
+class _RespFake26:
+    status_code = 200
+
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+def _payload_novo26(tag):
+    return {"tag_name": tag,
+            "assets": [{"name": f"bgh_motor-{tag.lstrip('v')}-py3-none-any.whl",
+                        "browser_download_url": "https://github.com/fake/x.whl"}]}
+
+
+_orig_get26 = _upd26.requests.get
+_orig_run26 = _upd26.subprocess.run
+_cmds_upd26: list[list] = []
+try:
+    # Cenario A: existe versao nova -> pede licenca (RecSink responde opcao 1) e roda o pip certo.
+    _upd26.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespFake26(_payload_novo26("v9.9.9")))
+    _upd26.subprocess.run = lambda cmd, **k: (
+        _cmds_upd26.append(cmd),
+        types.SimpleNamespace(returncode=0, stdout="", stderr=""))[1]
+    _sink_upd26 = RecSink()
+    _core_upd26 = ChatCore(dict(core_cfg), _sink_upd26, llm=_ListLLM26())
+    _core_upd26.submit("/atualizar")
+    ok("/atualizar encontra versao nova e pede licenca antes de instalar",
+       any("ATUALIZAR O TEO" in l for l in _sink_upd26.lines)
+       and any("Baixando e instalando a versao v9.9.9" in l for l in _sink_upd26.lines))
+    ok("instala com a receita oficial (pip --no-deps --force-reinstall no wheel da release)",
+       len(_cmds_upd26) == 1 and "--force-reinstall" in _cmds_upd26[0]
+       and "--no-deps" in _cmds_upd26[0] and _cmds_upd26[0][-1].endswith(".whl"))
+    ok("sucesso manda fechar e reabrir para o codigo novo valer",
+       any("Atualizado para v9.9.9" in l and "abra o TEO de novo" in l for l in _sink_upd26.lines))
+
+    # Cenario B: mesma versao -> avisa que esta atualizado e pronto, sem perguntar nada.
+    _upd26.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespFake26(_payload_novo26("v" + _ver_instalada26)))
+    _sink_upd_b26 = RecSink()
+    _core_upd_b26 = ChatCore(dict(core_cfg), _sink_upd_b26, llm=_ListLLM26())
+    _core_upd_b26.submit("/atualizar")
+    ok("mesma versao: avisa 'ja esta atualizado' e nao oferece instalacao",
+       any("ja esta atualizado" in l for l in _sink_upd_b26.lines)
+       and not any("ATUALIZAR O TEO" in l for l in _sink_upd_b26.lines)
+       and len(_cmds_upd26) == 1)  # nenhum pip novo foi rodado
+
+    # Cenario C: usuario recusa -> nada muda.
+    _upd26.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespFake26(_payload_novo26("v9.9.9")))
+    _sink_upd_c26 = RecSink()
+    _sink_upd_c26.ask_choice = lambda title, label, options: options[1]
+    _core_upd_c26 = ChatCore(dict(core_cfg), _sink_upd_c26, llm=_ListLLM26())
+    _core_upd_c26.submit("/atualizar")
+    ok("licenca negada: cancela sem tocar em nada",
+       any("cancelada" in l for l in _sink_upd_c26.lines) and len(_cmds_upd26) == 1)
+
+    # Cenario D: GitHub inacessivel -> frase amigavel, nunca traceback.
+    def _boom26(*a, **k):
+        raise ConnectionError("sem internet")
+
+    _upd26.requests = types.SimpleNamespace(get=_boom26)
+    _sink_upd_d26 = RecSink()
+    _core_upd_d26 = ChatCore(dict(core_cfg), _sink_upd_d26, llm=_ListLLM26())
+    _core_upd_d26.submit("/atualizar")
+    ok("sem conexao: aviso simples na tela, nada de pilha python",
+       any("Nao consegui verificar" in l for l in _sink_upd_d26.lines)
+       and not any("Traceback" in l for l in _sink_upd_d26.lines))
+finally:
+    _upd26.requests = _orig_get26
+    _upd26.subprocess.run = _orig_run26
+ok("ajuda anuncia o /atualizar",
+   any(c.startswith("/atualizar") for c in _cmds26))
+
+_sink_err26 = RecSink()
+_core_err26 = ChatCore(dict(core_cfg), _sink_err26,
+                       llm=_ListLLM26())
+
+
+def _explode26(texto):
+    raise ValueError("boom simulado dos testes")
+
+
+_core_err26.agent.run_turn = _explode26
+_ret_err26 = _core_err26.submit("oi")
+ok("falha tecnica inesperada nunca vira traceback na tela",
+   _ret_err26 == "continue"
+   and any("Algo deu errado no TEO" in l for l in _sink_err26.lines)
+   and not any("Traceback" in l or "ValueError" in l for l in _sink_err26.lines))
+_log_err26 = Path(os.environ["BGH_HOME"], "erro.log")
+ok("detalhe tecnico fica guardado no erro.log com a pilha completa",
+   _log_err26.is_file() and "boom simulado" in _log_err26.read_text(encoding="utf-8")
+   and "Traceback" in _log_err26.read_text(encoding="utf-8"))
+
+_orig_system26 = _prompts26.platform.system
+_prompts26.platform.system = lambda: "Windows"
+try:
+    _bloco_win26 = _prompts26.environment_block()
+finally:
+    _prompts26.platform.system = _orig_system26
+ok("no Windows o prompt exige cmd.exe desde a primeira tentativa e veta bash",
+   "cmd.exe" in _bloco_win26 and "findstr" in _bloco_win26 and "2>/dev/null" in _bloco_win26)
+ok("em Linux o prompt nao fala de cmd (so aparece na maquina certa)",
+   "cmd.exe" not in _prompts26.environment_block())
+
+import contextlib as _ctxlib26
+import io as _io26
+import shutil as _shutil26
+
+_st_extra26 = {**_st_hot26, "ctx": "contexto: 3% de 160000 chars (1 mensagens)",
+               "ctx_pct": 3, "ctx_extra": " | teto; o servidor entrega 1.048.576 tokens"}
+_orig_gts26 = _shutil26.get_terminal_size
+try:
+    _shutil26.get_terminal_size = lambda *a: os.terminal_size((80, 24))
+    _fr80_26 = _status_text25(dict(_st_extra26))[0][1]
+    _shutil26.get_terminal_size = lambda *a: os.terminal_size((140, 24))
+    _fr140_26 = _status_text25(dict(_st_extra26))[0][1]
+finally:
+    _shutil26.get_terminal_size = _orig_gts26
+ok("janela estreita: o 'teto' cai primeiro e o medidor nunca e cortado no meio",
+   len(_fr80_26) <= 78 and "contexto: 3%" in _fr80_26 and "1.048.576" not in _fr80_26
+   and "ENTER = falar" in _fr80_26)
+ok("janela larga: medidor + teto + explicacao cabem juntos numa linha",
+   "1.048.576 tokens" in _fr140_26 and "ENTER = falar" in _fr140_26
+   and "\n" not in _fr140_26)
+
+from bgh.tools.skills import BUNDLED_SKILLS_DIR as _BUNDLED26
+from bgh.tools.skills import discover as _discover26, index_lines as _index_lines26
+
+_nomes_fab26 = sorted(p.name for p in _BUNDLED26.iterdir() if (p / "SKILL.md").is_file())
+ok("fabrica do pacote traz as skills spec, dev, dev-web e tdd",
+   all(s in _nomes_fab26 for s in ("spec", "dev", "dev-web", "tdd")))
+_idx26 = "\n".join(_index_lines26(_discover26()))
+ok("indice do system prompt anuncia as skills novas ao modelo (descoberta direto no pacote)",
+   all(f"/{s}" in _idx26 or f"- {s}" in _idx26 or s in _idx26
+       for s in ("spec", "dev", "dev-web", "tdd")))
+
+_buf_tit26 = _io26.StringIO()
+with _ctxlib26.redirect_stdout(_buf_tit26):
+    _core_tit26 = ChatCore(dict(core_cfg), RecSink(),
+                           llm=_ListLLM26())
+    _core_tit26.banner()
+ok("abertura batiza a janela do terminal como 'TEO Agent' (no Windows e via API da janela)",
+   "\x1b]0;TEO Agent\x07" in _buf_tit26.getvalue())
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.2.7
+
+O TEO aprende a se atualizar sozinho e a falar mais claro com quem nao e tecnico.
+
+- `/atualizar` (apelido `/update`): confere a versao em uso com a release "latest"
+  do GitHub oficial do TEO. Mesma versao: avisa "ja esta atualizado" e segue.
+  Versao nova: pede sua licenca na tela e instala o `.whl` da propria release com
+  `pip install --no-deps --force-reinstall`. Quem abriu pelo icone (arquivo
+  executavel) e orientado a rodar o INSTALAR_TEO.bat de novo. Sem internet, aviso
+  simples - nunca pilha de erro na tela.
+- Erros tecnicos nunca mais aparecem crus: qualquer falha inesperada vira uma
+  frase humana na tela e a pilha completa e gravada em `~/.bgh/erro.log` (para
+  quem der suporte ler depois).
+- `/pensamento liga|desliga` (substitui `/thinking`, apelido antigo continua
+  valendo): liga/desliga controlam a TELA - o bloco cinza aparece ou nao, e o
+  trabalho do modelo nao muda. Niveis avancados (auto off minimum low medium high
+  xhigh max ultra) continuam sendo o nivel enviado ao servidor, com o aviso
+  honesto de que provedores hospedados podem ignorar o pedido. Nova chave
+  `show_thinking` no config.
+- Ajuda unificada, um comando por linha: `/modelo` lista e escolhe, `/provedor`
+  lista e troca, `/ctx` mede e define (apelidos antigos `/modelos` e
+  `/provedores` seguem funcionando para quem ja os usava).
+- Lista de modelos agora marca `(em uso)` igual a dos provedores; quando o
+  provedor renomeia o ID do modelo, uma linha discreta explica qual esta em uso
+  e que escolher um numero da lista alinha o nome.
+- Rodape do contexto em janela estreita: a explicacao curta entra primeiro, o
+  trecho "teto; o servidor entrega..." e descartado antes de qualquer corte, e o
+  medidor nunca e cortado no meio de um numero.
+- Janela do terminal ganha nome "TEO Agent" na abertura (no Windows pela API da
+  propria janela), facilitando achar o TEO entre outras janelas.
+- No Windows, o system prompt passa a exigir comandos no formato cmd.exe desde a
+  primeira tentativa (dir, findstr, type, %VAR%) e veta sintaxe de bash - menos
+  tentativa-e-erro visivel e tarefas mais rapidas na maquina do cliente.
+- Skills de fabrica novas: `spec` (transformar ideia em especificacao pronta para
+  desenvolvedor), `dev` (trabalho de codigo com backup e passos pequenos),
+  `dev-web` (pagina/painel HTML comecando por arquivo unico, testado de verdade)
+  e `tdd` (teste antes do codigo, ciclo vermelho-verde-refatorar).
+
 ## 0.2.6
 
 A configuracao agora se conserta dentro do proprio TEO, e o contexto pega o limite

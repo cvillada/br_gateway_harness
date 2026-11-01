@@ -38,7 +38,8 @@ from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Label
 
-from .chat_core import LINE, ChatCore, build_approval_options, help_lines, parse_approval_choice
+from .chat_core import (LINE, ChatCore, build_approval_options, help_lines, log_error,
+                        parse_approval_choice)
 from .config import INPUT_HISTORY_FILE
 
 FRAMES = "|/-\\"  # bonequinho de espera do "rodando..." na barra de baixo
@@ -196,9 +197,16 @@ class TuiSink:
     def status(self, text: str) -> None:
         pass  # a barra de baixo monta o status sozinha a partir do estado
 
-    def set_ctx(self, text: str, pct: int | None = None, hot_pct: int | None = None) -> None:
-        """Medidor de contexto vai na ULTIMA linha da tela, nao no historico."""
+    def set_ctx(self, text: str, pct: int | None = None, hot_pct: int | None = None,
+                extra: str = "") -> None:
+        """Medidor de contexto vai na ULTIMA linha da tela, nao no historico.
+
+        extra: trecho opcional ('| teto; o servidor entrega N tokens'); a barra
+        so mostra o extra quando cabe inteiro na janela - em janela estreita ele
+        e' descartado antes de cortar qualquer outra parte do medidor.
+        """
         self.state["ctx"] = text
+        self.state["ctx_extra"] = extra or ""
         self.state["ctx_pct"] = pct
         self.state["ctx_hot_pct"] = hot_pct
         self.emit("", newline=False)  # payload vazio so forca o repaint da barra
@@ -429,7 +437,10 @@ def run_tui(cfg: dict) -> int:
                 if action == "exit":
                     _schedule(app.exit)
             except Exception as exc:  # noqa: BLE001 - UI nunca cai junto com o turno
-                emit(f"(erro interno inesperado: {type(exc).__name__}: {exc})")
+                log_error(exc, "tela do TEO")   # traceback completo so no arquivo, nunca na tela
+                emit("Algo deu errado na tela do TEO; a conversa continua normalmente. "
+                     "O detalhe tecnico foi guardado no arquivo erro.log da pasta .bgh.",
+                     style="yellow")
             finally:
                 state["busy"] = False
                 state["stop_hits"] = 0
@@ -528,12 +539,18 @@ def _status_text(state: dict):
         return [("class:footer.hot", fit(" | ".join(pieces)))]
     base = ("ENTER = falar | CTRL+C com linha vazia = sair | /ajuda | "
             "reler: roda do mouse ou barra lateral do seu terminal")
+    extra = state.get("ctx_extra") or ""
+    ctx_full = ctx
     if ctx and len(ctx) + len(base) + 3 > width:
         # com o medidor de contexto na frente, encurta a explicacao para caber
         base = "ENTER = falar | CTRL+C vazio = sair | /ajuda"
+    # O extra ('teto; o servidor entrega...') e o primeiro a cair quando aperta:
+    # o medidor em si nunca deve ser cortado no meio de um numero.
+    if ctx and extra and len(ctx) + len(extra) + len(base) + 3 <= width:
+        ctx_full = ctx + extra
     # Contexto perto do limite: a barra fica na cor de alerta (amarelo) tambem
     # quando esta parada, no MESMO ponto em que a compactacao vai comecar.
     pct = state.get("ctx_pct") or 0
     hot = state.get("ctx_hot_pct") or 85
     estilo = "class:footer.hot" if pct >= hot else "class:footer"
-    return [(estilo, fit(f"{ctx} | {base}" if ctx else base))]
+    return [(estilo, fit(f"{ctx_full} | {base}" if ctx_full else base))]

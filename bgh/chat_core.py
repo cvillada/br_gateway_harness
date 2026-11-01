@@ -5,21 +5,68 @@ menu de licenca vivem aqui. A saida passa por um "sink", assim cada tela decide
 como mostrar (rich no modo classico; area de texto na tela fixa).
 """
 
+import datetime
 import getpass
 import os
 import re
+import traceback
 from pathlib import Path
 
 from rich.console import Console
 
 from .agent import Agent, STOPPED_NOTE
 from .approvals import Gate
-from .config import SESSION_FILE, ConfigError, load_config, save_config
+from .config import CONFIG_PATH, SESSION_FILE, ConfigError, load_config, save_config
 from .llm import LLM, LLMError
 from .setup_wizard import CHARS_POR_TOKEN, FOLGA_LEITURA
 from .tools import files as files_mod
 
 LINE = "-" * 46  # separador visual (ASCII puro; nao depende de unicode no terminal)
+
+
+def log_error(exc: BaseException, contexto: str) -> None:
+    """Guarda o detalhe tecnico no arquivo; a tela ve apenas frase humana.
+
+    Publico do TEO e leigo: traceback python na tela assusta e nao ajuda ninguem.
+    A pilha completa vai para ~/.bgh/erro.log, onde quem da suporte consegue ler.
+    """
+    try:
+        with open(CONFIG_PATH.parent / "erro.log", "a", encoding="utf-8") as fh:
+            fh.write("\n===== " + datetime.datetime.now().isoformat(timespec="seconds")
+                     + " | " + contexto + "\n")
+            fh.write(type(exc).__name__ + ": " + str(exc) + "\n")
+            fh.write(traceback.format_exc())
+    except OSError:
+        pass  # registrar nunca e emergencia; falhar aqui nao pode derrubar o chat
+
+
+def set_window_title(texto: str) -> None:
+    """Da nome a janela do terminal ('TEO Agent'); ajuda a achar no Windows."""
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            ctypes.windll.kernel32.SetConsoleTitleW(texto)
+        else:
+            print("\x1b]0;" + texto + "\x07", end="", flush=True)
+    except Exception:  # noqa: BLE001 - titulo e cortesia, nunca necessidade
+        pass
+
+
+def ctx_parts(cfg: dict, usage: dict) -> tuple[str, str]:
+    """(medidor, extra) separados: a tela decide se o extra cabe na janela.
+
+    Funcao pura (le so cfg/usage): testavel sem instanciar o ChatCore.
+    """
+    txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars "
+           f"({usage['messages']} mensagens)")
+    extra = ""
+    srv = cfg.get("server_context_tokens")
+    if isinstance(srv, (int, float)) and srv > 0:
+        entrega_chars = int(srv * CHARS_POR_TOKEN * FOLGA_LEITURA)
+        if entrega_chars > usage["budget"]:
+            extra = f" | teto; o servidor entrega {int(srv):,} tokens".replace(",", ".")
+    return txt, extra
 
 
 def md_clean(text: str) -> str:
@@ -63,15 +110,15 @@ HELP_SECTIONS = [
         ("/ajuda", "esta lista"),
         ("/nov", "conversa nova (limpa contexto; memoria e skills continuam)"),
         ("/mem <texto>", "grava uma preferencia sua na memoria permanente"),
-        ("/modelos", "lista os modelos disponiveis no servidor"),
-        ("/modelo <nome ou numero>", "troca o modelo usado (fica salvo)"),
-        ("/provedores", "lista os provedores cadastrados (deepseek, local...)"),
-        ("/provedor <nome ou numero>", "troca o provedor em uso na hora (fica salvo)"),
-        ("/thinking <nivel>", "nivel: auto off minimum low medium high xhigh max ultra"),
-        ("/ctx", "medidor do contexto atual"),
-        ("/ctx <numero>", "define o limite de contexto e fica salvo (ex.: /ctx 65000)"),
+        ("/modelo", "lista os modelos do servidor; /modelo <nome ou numero> troca (fica salvo)"),
+        ("/provedor", "lista os provedores; /provedor <nome ou numero> troca na hora (fica salvo)"),
+        ("/pensamento liga|desliga", "mostra ou esconde o pensamento na tela; avancado (nivel "
+                                     "enviado ao servidor): auto off minimum low medium high xhigh max ultra"),
+        ("/ctx", "medidor do contexto; /ctx <numero> define o limite e fica salvo "
+                 "(ex.: /ctx 65000; aceita 65k, 65.000, 65 mil)"),
         ("/configurar", "conserta ou cria um provedor sem sair do TEO (o mesmo assistente do 'bgh setup')"),
         ("/doctor", "diagnostico da conexao e da maquina, na propria tela"),
+        ("/atualizar", "confere se ha versao nova no GitHub; se houver, pede sua licenca e instala"),
         ("/skills", "lista as skills conhecidas"),
         ("/sair", "encerra"),
     ]),
@@ -252,6 +299,8 @@ class ChatCore:
         self.agent.steer(text)
 
     def _on_reasoning(self, chunk: str) -> None:
+        if not self.cfg.get("show_thinking", True):
+            return  # pensamento desligado na tela: o modelo pode reasoning, mas nao pintamos
         if not self.st["thinking"]:
             self.sink.sep("pensamento do modelo (raciocinio; pode ignorar e ir direto para a resposta)")
             self.st["thinking"] = True
@@ -280,10 +329,12 @@ class ChatCore:
     def print_ctx(self) -> None:
         usage = self.agent.ctx_usage()
         limite_pct = self.agent._compress_pct()  # o aviso e a compactacao no mesmo ponto
-        txt = self._ctx_footer_text(usage)
+        core, extra = self._ctx_parts(usage)
+        txt = core + extra
         if hasattr(self.sink, "set_ctx"):
-            # tela fixa: o medidor mora na ULTIMA linha da tela, nao no historico
-            self.sink.set_ctx(txt, usage["pct"], limite_pct)
+            # tela fixa: o medidor mora na ULTIMA linha da tela, nao no historico;
+            # o 'extra' so aparece quando cabe inteiro (a tela decide a ordem de corte)
+            self.sink.set_ctx(core, usage["pct"], limite_pct, extra=extra)
             if self.agent.last_compressed:
                 self.sink.line("Contexto compactado: as partes antigas viraram um resumo.", style="dim")
             elif usage["pct"] >= limite_pct:
@@ -297,19 +348,17 @@ class ChatCore:
         elif usage["pct"] >= limite_pct:
             self.sink.line("Contexto enchendo; sera compactado na proxima rodada pesada.", style="dim")
 
+    def _ctx_parts(self, usage: dict) -> tuple[str, str]:
+        return ctx_parts(self.cfg, usage)
+
     def _ctx_footer_text(self, usage: dict) -> str:
         """Texto do rodape; quando o provedor entrega mais que o orcamento, avisa
         que o numero exibido e o teto de leitura do TEO, nao o limite do servidor."""
-        txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars "
-               f"({usage['messages']} mensagens)")
-        srv = self.cfg.get("server_context_tokens")
-        if isinstance(srv, (int, float)) and srv > 0:
-            entrega_chars = int(srv * CHARS_POR_TOKEN * FOLGA_LEITURA)
-            if entrega_chars > usage["budget"]:
-                txt += f" | teto; o servidor entrega {int(srv):,} tokens".replace(",", ".")
-        return txt
+        core, extra = ctx_parts(self.cfg, usage)
+        return core + extra
 
     def banner(self) -> None:
+        set_window_title("TEO Agent")  # janela com nome: mais facil de achar (no Windows vale mais)
         self.sink.line("")
         for art_line in CAT_ART:          # o gatinho TEO abre a tela
             self.sink.line(art_line)
@@ -324,6 +373,45 @@ class ChatCore:
         for seg_line in help_lines():
             self.sink.parts(seg_line)
         self.sink.border()   # fecha o bloco de boas-vindas
+
+    def _list_models(self) -> None:
+        try:
+            self.model_list = self.llm.list_models()
+            if not self.model_list:
+                self.sink.line("O servidor nao publica lista de modelos.")
+            em_uso_marcado = False
+            for i, m in enumerate(self.model_list, start=1):
+                marca = " (em uso)" if m == self.cfg["model"] else ""
+                if marca:
+                    em_uso_marcado = True
+                self.sink.line(f"  {i}. {m}{marca}")
+            if self.model_list and not em_uso_marcado:
+                # Provedores as vezes renomeiam IDs: sem igual exato, a lista ficaria
+                # sem marca nenhuma e o usuario acharia que o medidor esta quebrado.
+                self.sink.line(f"  (modelo em uso: {self.cfg['model']}; nao apareceu na lista "
+                               "do servidor - escolher um numero acima alinhara o nome)",
+                               style="dim")
+        except LLMError as exc:
+            log_error(exc, "lista de modelos")
+            self.sink.line("O servidor nao respondeu a lista de modelos agora. Tente de novo "
+                           "em instantes (o detalhe tecnico foi guardado no erro.log).",
+                           style="yellow")
+        except Exception as exc:  # noqa: BLE001 - servidor estranho nunca derruba a tela
+            log_error(exc, "lista de modelos")
+            self.sink.line("O servidor mandou uma lista que o TEO nao conseguiu ler. "
+                           "Rode /doctor para ver a conexao (detalhe no erro.log).",
+                           style="yellow")
+
+    def _list_profiles(self) -> None:
+        from .config import list_profiles as lp
+
+        names = lp(self.cfg)
+        if not names:
+            self.sink.line("(nenhum provedor cadastrado ainda)")
+        for i, p in enumerate(names, start=1):
+            prof = self.cfg["profiles"][p]
+            marca = " (em uso)" if p == self.cfg.get("active_profile") else ""
+            self.sink.line(f"  {i}. {p}{marca} - {prof['model']} em {prof['base_url']}")
 
     THINKING_OPTIONS = ["manter atual", "off", "minimum", "low", "medium",
                         "high", "xhigh", "max", "ultra", "auto"]
@@ -400,7 +488,10 @@ class ChatCore:
                 try:
                     content = target.read_text(encoding="utf-8", errors="replace")[:8000]
                 except OSError as exc:
-                    self.sink.line(f"Nao consegui ler {target}: {exc}", style="red")
+                    log_error(exc, f"anexo de arquivo {target}")
+                    self.sink.line(f"Nao consegui ler {target} (o arquivo pode estar aberto em "
+                                   "outro programa ou protegido). O detalhe tecnico ficou no "
+                                   "erro.log.", style="yellow")
                     return "continue"
                 self.pending_attach = f"[arquivo anexado: {target}]\n{content}"
                 self.sink.line(f"Arquivo anexado: {target}. Agora faca sua pergunta sobre ele.", style="dim")
@@ -439,75 +530,77 @@ class ChatCore:
 
                 lines = index_lines(discover())
                 self.sink.line("\n".join(f"- {line}" for line in lines) or "(nenhuma skill ainda)")
-            elif name == "/modelos":
-                try:
-                    self.model_list = self.llm.list_models()
-                    if not self.model_list:
-                        self.sink.line("O servidor nao publica lista de modelos.")
-                    for i, m in enumerate(self.model_list, start=1):
-                        marca = " (atual)" if m == self.cfg["model"] else ""
-                        self.sink.line(f"  {i}. {m}{marca}")
-                except LLMError as exc:
-                    self.sink.line(str(exc), style="red")
-            elif name == "/modelo" and rest:
-                alvo2 = rest
-                if rest.isdigit() and self.model_list:
-                    idx = int(rest) - 1
-                    if 0 <= idx < len(self.model_list):
-                        alvo2 = self.model_list[idx]
-                    else:
-                        self.sink.line("Numero fora da lista. Use /modelos para ver.")
-                        return "continue"
-                self.cfg["model"] = alvo2
-                save_config(self.cfg)
-                self.sink.line(f"Modelo agora: {alvo2} (salvo no config)", style="cyan")
-                self._ask_thinking_level()
-            elif name == "/provedores":
-                from .config import list_profiles as lp
-
-                names = lp(self.cfg)
-                if not names:
-                    self.sink.line("(nenhum provedor cadastrado ainda)")
-                for i, p in enumerate(names, start=1):
-                    prof = self.cfg["profiles"][p]
-                    marca = " (em uso)" if p == self.cfg.get("active_profile") else ""
-                    self.sink.line(f"  {i}. {p}{marca} - {prof['model']} em {prof['base_url']}")
-            elif name == "/provedor" and rest:
-                from .config import list_profiles as lp, set_active_profile
-
-                names = lp(self.cfg)
-                alvo3 = rest
-                if rest.isdigit() and 1 <= int(rest) <= len(names):
-                    alvo3 = names[int(rest) - 1]
-                if set_active_profile(self.cfg, alvo3):
-                    self.llm = LLM(self.cfg)
-                    self.agent.llm = self.llm
-                    prof = self.cfg["profiles"][alvo3]
-                    self.sink.line(
-                        f"Provedor agora: {alvo3} - {prof['model']} em {prof['base_url']} "
-                        "(salvo; a conversa continua)",
-                        style="cyan",
-                    )
-                    self._ask_thinking_level()
+            elif name in ("/modelos", "/modelo"):
+                if name == "/modelos" or not rest:
+                    self._list_models()  # sozinho lista; '/modelos' continua aceito (alias oculto)
                 else:
-                    self.sink.line("Provedor nao encontrado. /provedores mostra a lista.")
-            elif name == "/thinking":
+                    alvo2 = rest
+                    if rest.isdigit() and self.model_list:
+                        idx = int(rest) - 1
+                        if 0 <= idx < len(self.model_list):
+                            alvo2 = self.model_list[idx]
+                        else:
+                            self.sink.line("Numero fora da lista. Digite /modelo para ver.")
+                            return "continue"
+                    self.cfg["model"] = alvo2
+                    save_config(self.cfg)
+                    self.sink.line(f"Modelo agora: {alvo2} (salvo no config)", style="cyan")
+                    self._ask_thinking_level()
+            elif name in ("/provedores", "/provedor"):
+                if name == "/provedores" or not rest:
+                    self._list_profiles()  # sozinho lista; alias antigo aceito
+                else:
+                    from .config import list_profiles as lp, set_active_profile
+
+                    names = lp(self.cfg)
+                    alvo3 = rest
+                    if rest.isdigit() and 1 <= int(rest) <= len(names):
+                        alvo3 = names[int(rest) - 1]
+                    if set_active_profile(self.cfg, alvo3):
+                        self.llm = LLM(self.cfg)
+                        self.agent.llm = self.llm
+                        prof = self.cfg["profiles"][alvo3]
+                        self.sink.line(
+                            f"Provedor agora: {alvo3} - {prof['model']} em {prof['base_url']} "
+                            "(salvo; a conversa continua)",
+                            style="cyan",
+                        )
+                        self._ask_thinking_level()
+                    else:
+                        self.sink.line("Provedor nao encontrado. Digite /provedor sozinho para ver a lista.")
+            elif name in ("/pensamento", "/thinking"):
                 levels = ("auto", "off", "minimum", "low", "medium", "high",
                           "xhigh", "max", "ultra")
                 alvo_t = rest.lower()
-                if alvo_t in levels + ("on",):
+                if alvo_t in ("liga", "ligar"):
+                    # Controla a TELA: mostra o bloco cinza. O que vai ao servidor nao muda.
+                    self.cfg["show_thinking"] = True
+                    save_config(self.cfg)
+                    self.sink.line("Pensamento na tela: LIGADO (salvo)", style="cyan")
+                elif alvo_t in ("desliga", "desligar", "parar"):
+                    # Controla a TELA: esconde o bloco cinza. O modelo segue pensando
+                    # (em provedores hospedados quem decide pensar e o provedor).
+                    self.cfg["show_thinking"] = False
+                    save_config(self.cfg)
+                    self.sink.line("Pensamento na tela: DESLIGADO (salvo); o modelo segue "
+                                   "trabalhando por dentro e a resposta chega igual", style="cyan")
+                elif alvo_t in levels:
                     self.cfg["thinking"] = alvo_t
                     save_config(self.cfg)
                     self.llm.cfg["thinking"] = alvo_t
-                    self.sink.line(f"Pensamento: {alvo_t} (salvo)", style="cyan")
+                    self.sink.line(f"Nivel de raciocinio enviado ao servidor: {alvo_t} (salvo). "
+                                   "Obs.: provedores hospedados podem ignorar o nivel pedido.",
+                                   style="cyan")
                 elif not rest:
+                    tela = "ligado" if self.cfg.get("show_thinking", True) else "desligado"
                     self.sink.line(
-                        f"Pensamento atual: {self.cfg.get('thinking', 'auto')}. Uso: "
-                        "/thinking auto|off|minimum|low|medium|high|xhigh|max|ultra")
+                        f"Pensamento na tela: {tela} | nivel enviado ao servidor: "
+                        f"{self.cfg.get('thinking', 'auto')}. Uso: /pensamento liga | "
+                        "desliga | auto | off | minimum | low | medium | high | xhigh | max | ultra")
                 else:
                     self.sink.line(
-                        "Nivel desconhecido. Use: "
-                        "/thinking auto|off|minimum|low|medium|high|xhigh|max|ultra")
+                        "Nao entendi. Use /pensamento liga ou /pensamento desliga (tela); "
+                        "avancado (servidor): auto off minimum low medium high xhigh max ultra")
             elif name == "/ctx":
                 if rest:
                     novo = parse_budget(rest)
@@ -530,6 +623,45 @@ class ChatCore:
                 from .cli import doctor_report
 
                 doctor_report(lambda texto: self.sink.line(str(texto)))
+            elif name in ("/atualizar", "/update"):
+                from . import __version__
+                from .updater import apply_update, fetch_latest, python_bin, update_needed
+
+                info, err_upd = fetch_latest()
+                if info is None or err_upd:
+                    self.sink.line(f"Nao consegui verificar a versao nova: {err_upd}", style="yellow")
+                    return "continue"
+                if not update_needed(__version__, info["version"]):
+                    # Mesma versao: avisa que esta atualizado e pronto, sem oferecer instalacao.
+                    self.sink.line(f"O TEO ja esta atualizado (versao {info['version']}). "
+                                   "Pode continuar usando.", style="cyan")
+                    return "continue"
+                if not python_bin():
+                    # Aberto pelo icone/arquivo executavel: nao ha pip por dentro para atualizar.
+                    self.sink.line(f"Existe versao nova ({info['version']}). Como o TEO foi aberto pelo "
+                                   "icone/arquivo executavel, baixe e rode o INSTALAR_TEO.bat outra vez "
+                                   "(dois cliques) - ele faz a atualizacao inteira.", style="yellow")
+                    return "continue"
+                escolha = None
+                if hasattr(self.sink, "ask_choice"):
+                    escolha = self.sink.ask_choice(
+                        "ATUALIZAR O TEO",
+                        f"Encontrei a versao {info['version']} (a sua e a {__version__}). "
+                        "Atualizar agora?",
+                        ["Sim, atualizar", "Nao, deixar como esta"],
+                    )
+                if escolha != "Sim, atualizar":
+                    self.sink.line("Atualizacao cancelada (nada mudou).", style="dim")
+                    return "continue"
+                self.sink.line(f"Baixando e instalando a versao {info['version']}...", style="cyan")
+                ok_upd, msg_upd = apply_update(info["wheel_url"])
+                if ok_upd:
+                    self.sink.line(f"Atualizado para {info['version']}. Feche (/sair) e abra o TEO de novo "
+                                   "para o codigo novo comecar a valer.", style="cyan")
+                else:
+                    self.sink.line(f"A atualizacao nao completou: {msg_upd}", style="red")
+                    self.sink.line("Alternativa que funciona em qualquer maquina: baixar e rodar o "
+                                   "INSTALAR_TEO.bat da pagina de downloads do TEO.", style="yellow")
             else:
                 self.sink.line("Comando desconhecido. /ajuda mostra a lista.")
             return "continue"
@@ -555,6 +687,12 @@ class ChatCore:
                 self.sink.line(str(exc), style="red")
                 self.sink.line("Dica: digite /configurar aqui mesmo para conferir URL e chave "
                                "(ou /doctor para o diagnostico completo).", style="yellow")
+                return "continue"
+            except Exception as exc:  # noqa: BLE001 - falha tecnica nunca vira traceback na tela
+                log_error(exc, "turno do modelo")
+                self.sink.line("Algo deu errado no TEO durante a resposta. A conversa continua; "
+                               "o detalhe tecnico foi guardado no arquivo erro.log da pasta .bgh.",
+                               style="yellow")
                 return "continue"
 
             self._flush_pend()

@@ -210,15 +210,15 @@ Comandos:
 
 | Comando | O que faz |
 |---------|-----------|
-| `/modelos` | lista os modelos publicados pelo servidor |
+| `/modelo` | lista os modelos publicados pelo servidor |
 | `/modelo <nome ou numero>` | troca o modelo (fica salvo no config) |
-| `/provedores` | lista os provedores cadastrados (ex.: 1 deepseek, 2 local) |
+| `/provedor` | lista os provedores cadastrados (ex.: 1 deepseek, 2 local) |
 | `/provedor <nome ou numero>` | troca o provedor em uso na hora (fica salvo) |
-| `/thinking on\|off\|auto` | liga/desliga o pensamento enviado ao servidor |
-| `/ctx` | medidor do contexto atual |
-| `/ctx <numero>` | define o limite de contexto e salva (ex.: `/ctx 65000`) |
+| `/pensamento liga\|desliga` | mostra ou esconde o bloco cinza na tela (o modelo segue pensando); avancado: nivel enviado ao servidor auto off minimum low medium high xhigh max ultra |
+| `/ctx` | medidor do contexto; `/ctx <numero>` define o limite e salva (ex.: `/ctx 65000`; aceita 65k, 65.000, 65 mil) |
 | `/configurar` | conserta ou cadastra provedor sem sair do TEO (mesmo assistente do `bgh setup`) |
 | `/doctor` | diagnostico da conexao e da maquina na propria tela |
+| `/atualizar` | confere se ha versao nova no GitHub; se houver, pede licenca e instala (mesma versao: avisa que esta tudo certo) |
 | `/mem <texto>` | grava uma preferencia sua na memoria |
 | `/nov` `/skills` `/ajuda` `/sair` | conversa nova, skills, ajuda, sair |
 
