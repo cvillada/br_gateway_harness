@@ -92,9 +92,15 @@ def ctx_parts(cfg: dict, usage: dict) -> tuple[str, str]:
     ninguem confundir estimativa com contagem do provedor.
     """
     tokens = usage.get("tokens")
+    teto = usage.get("tokens_teto")
     if tokens:
         marca = "" if usage.get("tokens_reais") else "~"
-        tok_txt = f" ({marca}{abrevia(tokens)} toks)"
+        if teto:
+            # "usado de teto": escrever o numero depois do teto em chars fazia
+            # parecer que o teto inteiro valia esses tokens (confusao real).
+            tok_txt = f" ({marca}{abrevia(tokens)} de {abrevia(teto)} toks)"
+        else:
+            tok_txt = f" ({marca}{abrevia(tokens)} toks)"
     else:
         tok_txt = ""
     txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars"

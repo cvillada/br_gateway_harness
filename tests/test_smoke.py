@@ -2075,27 +2075,30 @@ ok("o turno repassa a contagem de tokens para a tela",
 
 # ---------- emenda da 0.2.9: tokens no medidor de contexto (rodape) -----------
 from bgh.chat_core import ctx_parts as _ctx_parts26
-_uso_ctx29 = {"pct": 80, "budget": 160000, "messages": 102,
-              "tokens": 45714, "tokens_reais": True}
+_uso_ctx29 = {"pct": 27, "budget": 250000, "messages": 102,
+              "tokens": 19340, "tokens_reais": True, "tokens_teto": 71428}
 _medidor29, _ = _ctx_parts26({}, _uso_ctx29)
-ok("medidor do rodape mostra a equivalencia em tokens (numero do servidor)",
-   _medidor29 == "contexto: 80% de 160000 chars (45.71k toks) (102 mensagens)")
+ok("medidor do rodape mostra usado E teto em tokens (nao da para ler errado)",
+   _medidor29 == "contexto: 27% de 250000 chars (19.34k de 71.43k toks) (102 mensagens)")
 
-_uso_est29 = {"pct": 80, "budget": 160000, "messages": 102,
-              "tokens": 45714, "tokens_reais": False}
+_uso_est29 = {"pct": 27, "budget": 250000, "messages": 102,
+              "tokens": 19340, "tokens_reais": False, "tokens_teto": 71428}
 _medidor_est29, _ = _ctx_parts26({}, _uso_est29)
 ok("sem contagem do servidor, o rodape marca o '~' (estimativa, nao contagem)",
-   "(~45.71k toks)" in _medidor_est29)
+   "(~19.34k de 71.43k toks)" in _medidor_est29)
 
-_compacto29 = _compact28("contexto: 80% de 160000 chars (45.71k toks) (102 mensagens)", 60)
-ok("janela apertada: medidor compacto mantem os tokens e cabe",
-   _compacto29 == "ctx 80% de 160k (45.71k toks) (102 msg)" and len(_compacto29) <= 60)
+_compacto29 = _compact28(
+    "contexto: 27% de 250000 chars (19.34k de 71.43k toks) (102 mensagens)", 60)
+ok("janela apertada: medidor compacto mantem tokens e teto, e cabe",
+   _compacto29 == "ctx 27% de 250k (19.34k/71.43k toks) (102 msg)"
+   and len(_compacto29) <= 60)
 
 _ag_med29 = _Agent26(dict(core_cfg), _OkLLM26(), Gate(dict(core_cfg), ask_d))
 _uso_sem29 = _ag_med29.ctx_usage()
 ok("sem pedido ainda, o medidor usa a estimativa de 3,5 chars por token",
    _uso_sem29["tokens_reais"] is False
-   and _uso_sem29["tokens"] == int(_uso_sem29["chars"] / 3.5))
+   and _uso_sem29["tokens"] == int(_uso_sem29["chars"] / 3.5)
+   and _uso_sem29["tokens_teto"] == int(_uso_sem29["budget"] / 3.5))
 _ag_med29.last_usage = {"entrada": 1234, "saida": 10, "cache": 0}
 _uso_com29 = _ag_med29.ctx_usage()
 ok("depois de um pedido, o medidor passa a usar o numero real",

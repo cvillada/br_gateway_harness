@@ -599,13 +599,17 @@ def compact_ctx(ctx: str, espaco: int) -> str:
     """
     texto = str(ctx or "")
     m = re.match(r"contexto: (\d+)% de (\d+) chars"
-                 r"(?: \((~?[\d.]+[kM]?) toks\))? \((\d+) mensagens\)", texto)
+                 r"(?: \((~?[\d.]+[kM]?)(?: de ([\d.]+[kM]?))? toks\))?"
+                 r" \((\d+) mensagens\)", texto)
     if not m:
         return texto if len(texto) <= espaco else ""
-    pct, orcamento, toks, msgs = m.group(1), int(m.group(2)), m.group(3), m.group(4)
+    pct, orcamento, toks, teto, msgs = (m.group(1), int(m.group(2)), m.group(3),
+                                        m.group(4), m.group(5))
     base = (f"{orcamento // 1000}k" if orcamento >= 1000 and orcamento % 1000 == 0
             else str(orcamento))
     candidatos = []
+    if toks and teto:
+        candidatos.append(f"ctx {pct}% de {base} ({toks}/{teto} toks) ({msgs} msg)")
     if toks:
         candidatos.append(f"ctx {pct}% de {base} ({toks} toks) ({msgs} msg)")
     candidatos.append(f"ctx {pct}% de {base} ({msgs} msg)")

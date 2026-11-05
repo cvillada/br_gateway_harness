@@ -247,15 +247,16 @@ class Agent:
         pct = min(int(100 * chars / max(budget, 1)), 999)
         uso = self.last_usage or {}
         reais = uso.get("entrada") if isinstance(uso, dict) else None
+        from .setup_wizard import CHARS_POR_TOKEN
+
         if reais:
             tokens, tokens_reais = int(reais), True
         else:
-            from .setup_wizard import CHARS_POR_TOKEN
-
             tokens, tokens_reais = int(chars / CHARS_POR_TOKEN), False
         return {"chars": chars, "budget": budget, "pct": pct,
                 "messages": len(self.messages), "tokens": tokens,
-                "tokens_reais": tokens_reais}
+                "tokens_reais": tokens_reais,
+                "tokens_teto": int(budget / CHARS_POR_TOKEN)}
 
     def _compress_pct(self) -> int:
         """A partir de quanto do orcamento comeca a compactar (padrao 85%)."""
