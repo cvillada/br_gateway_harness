@@ -399,13 +399,9 @@ def run_tui(cfg: dict) -> int:
                                  int(state.get("palco_frame") or 0))
 
     def _palco_visivel_agora() -> bool:
-        """Ligado e com o turno em curso OU mostrando a entrega por 1,6s."""
-        if not palco_ligado:
-            return False
-        if state["busy"]:
-            return True
-        return (state.get("fase") is not None
-                and time.time() < float(state.get("palco_hold") or 0))
+        """Ligado e com pedido em curso OU mostrando a entrega por 1,6s."""
+        return palco.visivel(palco_ligado, state.get("fase"), bool(state["busy"]),
+                             float(state.get("palco_hold") or 0), time.time())
 
     def _palco_largo_visivel() -> bool:
         return bool(_palco_visivel_agora() and _largura() >= palco.MIN_WIDTH)
@@ -489,7 +485,10 @@ def run_tui(cfg: dict) -> int:
         state["stop_hits"] = 0
         state["busy_since"] = time.time()   # a barra de baixo conta os segundos da espera
         state["tool"] = None
-        state["fase"] = "pedido"            # palco: o pedido acabou de sair do chefe
+        # O palco e do PEDIDO ao agente/modelo. Comando de barra (/ajuda, /modelo),
+        # menu de arquivo e /doctor nao passam pelo modelo: nao desenham a trilha.
+        eh_pedido = not text.strip().startswith(("/", "@"))
+        state["fase"] = "pedido" if eh_pedido else None
         state["tokens"] = None              # contador do turno anterior nao serve
         state["palco_hold"] = 0             # recolhimento do palco: turno novo manda
         emit(f"voce> {text}", style="voce")  # eco na hora: a tela nunca fica muda
@@ -508,23 +507,31 @@ def run_tui(cfg: dict) -> int:
                 state["busy"] = False
                 state["stop_hits"] = 0
                 state["tool"] = None
-                # O palco fica 1,6s mostrando a entrega (e os tokens do ultimo
-                # pedido, que o servidor so informa no fim): sem esse respiro o
-                # numero chegaria junto com o recolhimento e nunca apareceria.
-                state["fase"] = "pronto"
-                alvo_recolha = time.time() + 1.6
-                state["palco_hold"] = alvo_recolha
-                _schedule(app.invalidate)
+                if not eh_pedido:
+                    # Comando/menu: nada de palco depois de terminar.
+                    state["fase"] = None
+                    state["palco_hold"] = 0
+                    if app is not None:
+                        _schedule(app.invalidate)
+                else:
+                    # O palco fica 1,6s mostrando a entrega (e os tokens do ultimo
+                    # pedido, que o servidor so informa no fim): sem esse respiro o
+                    # numero chegaria junto com o recolhimento e nunca apareceria.
+                    state["fase"] = "pronto"
+                    alvo_recolha = time.time() + 1.6
+                    state["palco_hold"] = alvo_recolha
+                    if app is not None:
+                        _schedule(app.invalidate)
 
-                def _recolhe(espera_ate=alvo_recolha) -> None:
-                    time.sleep(1.7)
-                    if state.get("palco_hold") == espera_ate and not state["busy"]:
-                        state["fase"] = None
-                        state["palco_hold"] = 0
-                        if app is not None:
-                            _schedule(app.invalidate)
+                    def _recolhe(espera_ate=alvo_recolha) -> None:
+                        time.sleep(1.7)
+                        if state.get("palco_hold") == espera_ate and not state["busy"]:
+                            state["fase"] = None
+                            state["palco_hold"] = 0
+                            if app is not None:
+                                _schedule(app.invalidate)
 
-                threading.Thread(target=_recolhe, daemon=True).start()
+                    threading.Thread(target=_recolhe, daemon=True).start()
 
         threading.Thread(target=_worker, daemon=True).start()
 

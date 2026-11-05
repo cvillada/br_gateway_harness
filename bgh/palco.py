@@ -95,6 +95,20 @@ def _segundos(desde, agora) -> int:
         return 0
 
 
+def visivel(ligado: bool, fase: str | None, busy: bool, hold: float, agora: float) -> bool:
+    """O palco so existe quando ha PEDIDO de verdade em curso (ou a entrega).
+
+    O 'busy' sozinho nao serve de criterio: comando de barra (/ajuda, /modelo),
+    menu de arquivo e /doctor tambem deixam busy=True, e o desenho ficava na tela
+    sem nenhum pedido indo para o agente - poluindo a leitura.
+    """
+    if not ligado or not fase:
+        return False
+    if busy:
+        return True
+    return agora < float(hold or 0)
+
+
 def abrevia(valor) -> str:
     """Numero de tokens curto e padronizado: 800, 2.00k, 1.20M."""
     try:

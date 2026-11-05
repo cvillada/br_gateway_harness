@@ -2175,4 +2175,15 @@ finally:
 ok("sem tela fixa, '/' continua so listando (script e pipe nao param em menu)",
    any("pasta:" in linha for linha in _sink_lista29.lines))
 
+# ---------- emenda 6 da 0.2.9: palco so quando ha pedido de verdade ----------
+ok("palco aparece durante um pedido ao agente",
+   _palco29.visivel(True, "pedido", True, 0.0, 100.0) is True)
+ok("palco NAO aparece em /ajuda, /modelo ou menu de arquivo (busy sem pedido)",
+   _palco29.visivel(True, None, True, 0.0, 100.0) is False)
+ok("palco mostra a entrega por 1,6s depois do turno e depois some",
+   _palco29.visivel(True, "pronto", False, 101.0, 100.0) is True
+   and _palco29.visivel(True, "pronto", False, 99.0, 100.0) is False)
+ok("palco desligado no /palco desliga nao aparece nem com pedido em curso",
+   _palco29.visivel(False, "pedido", True, 0.0, 100.0) is False)
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

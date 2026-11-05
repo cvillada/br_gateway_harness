@@ -23,6 +23,9 @@ os eventos reais, nunca um relogio.
   FERRAMENTA fica sem numero porque nao existe contagem propria de ferramenta.
   O palco ainda fica 1,6 segundo na tela depois da resposta para mostrar a
   entrega e os numeros finais (o servidor manda a contagem no fim do pedido).
+- Palco so aparece quando existe PEDIDO ao agente/modelo: `/ajuda`, `/modelo`,
+  `/doctor`, `/ctx` e o menu de arquivo nao desenham mais a trilha (antes ela
+  ficava na tela durante comandos, poluindo a leitura).
 - Rodape: o medidor de contexto mostra a equivalencia em tokens com usado E
   teto - "contexto: 27% de 250000 chars (19.34k de 71.43k toks) (102 mensagens)".
   O numero antes era ambiguo (parecia que o teto em chars valia os tokens).
