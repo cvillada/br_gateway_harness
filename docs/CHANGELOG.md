@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.9
+
+O TEO passa a mostrar, enquanto trabalha, o caminho do pedido - e o desenho segue
+os eventos reais, nunca um relogio.
+
+- Palco: durante o processamento aparece, acima da linha de digitar, a trilha
+  START -> AGENTE -> FERRAMENTA -> MODELO -> TELA. A etapa acesa (fundo ciano,
+  como item de menu selecionado) e a que esta com o pedido naquele momento, e o
+  marcador azul embaixo aponta o ponto exato. Quando a resposta chega, a trilha
+  recolhe e o historico continua onde estava (a rolagem do terminal nao muda).
+- O numero de segundos e o tempo real do turno e da ferramenta: se uma ferramenta
+  trava 30 segundos, a trilha fica parada nela em vez de fingir progresso.
+- Liga por padrao; `/palco desliga` (ou `"palco": false` no config.json) devolve a
+  tela exatamente como era antes.
+- Janela estreita (menos de 70 colunas): a trilha vira uma unica linha no rodape
+  do palco, para nao tomar 4 linhas da conversa.
+- ASCII puro: terminal de Windows com fonte raster desenha igual, sem emoji.
+
 ## 0.2.8
 
 O TEO avisa em palavra simples quando o provedor pede para esperar, e a entrega

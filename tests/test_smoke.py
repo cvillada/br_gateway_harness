@@ -1923,4 +1923,62 @@ ok("prompt diz onde ficam as coisas e proibe inventar registro do Windows",
    "ONDE FICAM AS COISAS" in _prompt28 and ".bgh/config.json" in _prompt28
    and "registro do Windows" in _prompt28 and "CONFIRA" in _prompt28)
 
+# ---------- dev: palco do pedido (trilha durante o processamento) -------------
+from bgh import palco as _palco29
+
+_st_palco29 = {"busy": True, "fase": "ferramenta", "tool": "run_python",
+               "tool_since": 1000.0, "busy_since": 990.0}
+_linhas29 = _palco29.stage_rows(_st_palco29, 100, 1004.0, 0)
+
+
+def _txt29(linha) -> str:
+    return linha[1] if isinstance(linha, tuple) else "".join(t for _s, t in linha)
+
+
+ok("palco largo: 4 linhas com a trilha completa (start ate tela)",
+   len(_linhas29) == 4 and "[START]" in _txt29(_linhas29[0])
+   and "[TELA]" in _txt29(_linhas29[0]))
+_coluna29 = _txt29(_linhas29[1]).find("^")
+ok("marcador fica exatamente sob a etapa em que o pedido esta",
+   _coluna29 > 0
+   and _txt29(_linhas29[0])[_coluna29:_coluna29 + len("[FERRAMENTA]")] == "[FERRAMENTA]")
+ok("palco mostra o tempo real da ferramenta e do turno",
+   "run_python 4s" in _txt29(_linhas29[2]) and "turno 14s" in _txt29(_linhas29[2]))
+
+_estreito29 = _palco29.stage_rows(_st_palco29, 60, 1004.0, 0)
+ok("janela estreita: palco vira UMA linha (nao rouba 4 linhas da conversa)",
+   len(_estreito29) == 1 and "run_python" in _txt29(_estreito29[0])
+   and "[START]" not in _txt29(_estreito29[0]) and len(_txt29(_estreito29[0])) <= 58)
+
+ok("etapa atual vai como item de menu selecionado; o resto da trilha normal",
+   any(e == "class:palco.sel" and x == "[FERRAMENTA]" for e, x in _linhas29[0])
+   and any(e == "class:palco" and x == "[START]" for e, x in _linhas29[0]))
+
+_frags29 = _palco29.stage_lines(_st_palco29, 100, 1004.0, 0)
+ok("palco entrega as 4 linhas separadas por quebra dentro do texto",
+   sum(x.count("\n") for _e, x in _frags29) == 3)
+
+ok("palco e ASCII puro (terminal de Windows e fonte raster)",
+   all(ord(c) < 128 for linha in _linhas29 for c in _txt29(linha)))
+
+# fase sem ferramenta (modelo escrevendo) nao inventa ferramenta
+_st_mod29 = {"busy": True, "fase": "modelo", "tool": None,
+             "busy_since": 1000.0, "tool_since": 0.0}
+_res29 = _txt29(_palco29.stage_rows(_st_mod29, 100, 1003.0, 0)[2])
+ok("palco na fase do modelo nao mostra ferramenta nenhuma",
+   "o modelo esta escrevendo" in _res29 and "None" not in _res29)
+
+# comando /palco
+_cfg_p29: dict = dict(core_cfg)
+_cfg_p29["palco"] = True
+_sink_p29 = RecSink()
+_core_p29 = ChatCore(_cfg_p29, _sink_p29, llm=_ListLLM26())
+_core_p29.submit("/palco desliga")
+ok("/palco desliga tira o palco e salva (tela como antes)",
+   _cfg_p29["palco"] is False and any("DESLIGADO" in l for l in _sink_p29.lines))
+_core_p29.submit("/palco liga")
+ok("/palco liga devolve o palco", _cfg_p29["palco"] is True)
+ok("ajuda anuncia o comando /palco",
+   any("/palco" in "".join(t for t, _s in seg) for seg in _help_lines26()))
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

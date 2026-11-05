@@ -33,12 +33,14 @@ from prompt_toolkit.application.run_in_terminal import run_in_terminal
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout.containers import HSplit, VSplit, Window
+from prompt_toolkit.layout.containers import ConditionalContainer, HSplit, VSplit, Window
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Label
 
+from . import palco
 from .chat_core import (LINE, ChatCore, build_approval_options, help_lines, log_error,
                         parse_approval_choice)
 from .config import INPUT_HISTORY_FILE
@@ -149,6 +151,10 @@ STYLE = Style.from_dict(
         "input": "bold",
         "footer": "bg:#333333 #ffffff",
         "footer.hot": "bg:#333333 #ffcc00 bold",
+        "palco": "#ffffff",                        # trilha: branca (destacada)
+        "palco.sel": "#000000 bg:#5fd7ff bold",    # etapa atual: como item de menu selecionado
+        "palco.on": "#5fd7ff bold",                # marcador embaixo da etapa: azul
+        "palco.dim": "#d7d7d7",                    # linha de detalhes (mais clara)
     }
 )
 
@@ -183,9 +189,11 @@ class TuiSink:
         self.emit("=" * width, style="class:rule")
 
     def thinking(self, text: str) -> None:
+        self.state["fase"] = "modelo"   # palco: o pedido chegou no modelo
         self.emit(text, newline=False, style="th")
 
     def answer(self, text: str) -> None:
+        self.state["fase"] = "resposta"  # palco: a resposta comecou a voltar
         self.emit(text, newline=False, style="an")
 
     def tool_event(self, name: str, preview: str) -> None:
@@ -193,6 +201,7 @@ class TuiSink:
         # quantos segundos ela esta em andamento (espera longa deixa de parecer trava)
         self.state["tool"] = name
         self.state["tool_since"] = time.time()
+        self.state["fase"] = "ferramenta"  # palco: o pedido esta na mesa de trabalho
         self.emit(f"> {name}: {preview}", style="tool")
 
     def status(self, text: str) -> None:
@@ -286,7 +295,7 @@ def run_tui(cfg: dict) -> int:
     # sobrevive ao fechar/abrir (arquivo em ~/.bgh/input_history.txt).
     in_buf = Buffer(multiline=False, history=FileHistory(str(INPUT_HISTORY_FILE)))
     state = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0, "ctx": None,
-             "ctx_pct": None,
+             "ctx_pct": None, "fase": None, "palco_frame": 0,
              "busy_since": 0.0, "tool": None, "tool_since": 0.0}
     printed = {"n": 0, "cols": 0}
     app: Application | None = None
@@ -360,18 +369,41 @@ def run_tui(cfg: dict) -> int:
     input_row = VSplit([Label(text="voce> ", dont_extend_width=True), input_win])
     rule_bottom = Window(height=1, char="-", style="class:rule")
 
-    def _footer_frags():
+    def _largura() -> int:
         # Largura da JANELA do app (a mesma que o resto da tela usa), nunca a do
         # buffer do console: no Windows as duas divergem e a barra quebrava.
         try:
-            cols = getattr(app, "output").get_size().columns
+            return int(getattr(app, "output").get_size().columns)
         except Exception:  # noqa: BLE001 - antes do primeiro paint nao ha output
-            cols = shutil.get_terminal_size().columns
-        return _status_text(state, cols)
+            return int(shutil.get_terminal_size().columns)
+
+    def _footer_frags():
+        return _status_text(state, _largura())
 
     footer_win = Window(FormattedTextControl(_footer_frags),
                         height=1, style="class:footer")
-    root = HSplit([rule_top, input_row, rule_bottom, footer_win])
+
+    # ----- palco: o caminho do pedido, so enquanto o TEO trabalha --------------
+    palco_ligado = bool(cfg.get("palco", True))
+
+    def _palco_frags():
+        return palco.stage_lines(state, _largura(), time.time(),
+                                 int(state.get("palco_frame") or 0))
+
+    def _palco_largo_visivel() -> bool:
+        return bool(palco_ligado and state["busy"] and _largura() >= palco.MIN_WIDTH)
+
+    def _palco_curto_visivel() -> bool:
+        return bool(palco_ligado and state["busy"] and _largura() < palco.MIN_WIDTH)
+
+    palco_largo = ConditionalContainer(
+        content=Window(FormattedTextControl(_palco_frags), height=4, style="class:palco"),
+        filter=Condition(_palco_largo_visivel))
+    palco_curto = ConditionalContainer(
+        content=Window(FormattedTextControl(_palco_frags), height=1, style="class:palco"),
+        filter=Condition(_palco_curto_visivel))
+
+    root = HSplit([rule_top, palco_largo, palco_curto, input_row, rule_bottom, footer_win])
     layout = Layout(root)
 
     kb = KeyBindings()
@@ -440,6 +472,7 @@ def run_tui(cfg: dict) -> int:
         state["stop_hits"] = 0
         state["busy_since"] = time.time()   # a barra de baixo conta os segundos da espera
         state["tool"] = None
+        state["fase"] = "pedido"            # palco: o pedido acabou de sair do chefe
         emit(f"voce> {text}", style="voce")  # eco na hora: a tela nunca fica muda
 
         def _worker():
@@ -456,6 +489,7 @@ def run_tui(cfg: dict) -> int:
                 state["busy"] = False
                 state["stop_hits"] = 0
                 state["tool"] = None
+                state["fase"] = None      # palco recolhe quando o turno termina
                 _schedule(app.invalidate)
 
         threading.Thread(target=_worker, daemon=True).start()

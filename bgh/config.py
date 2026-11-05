@@ -89,6 +89,10 @@ DEFAULTS = {
     "command_allowlist": [],
     # Tela fixa (entrada sempre embaixo, estilo Hermes). False volta ao modo classico.
     "tui": True,
+    # Palco: trilha do pedido (chefe -> agente -> ferramenta -> modelo -> tela)
+    # desenhada acima da linha de digitar, SO enquanto o TEO trabalha. False =
+    # tela exatamente como antes (o /palco liga|desliga no chat faz o mesmo).
+    "palco": True,
 }
 
 

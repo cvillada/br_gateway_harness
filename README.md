@@ -194,6 +194,11 @@ de baixo (medidor, teclas, aviso de "rodando") nao caberia inteira. No Windows a
 maximizacao e feita pela API do console; no Linux e no macOS o pedido e enviado ao
 terminal, e terminal que nao aceita simplesmente mantem o tamanho que estava.
 
+Ao mandar uma pergunta, aparece por alguns instantes a trilha do pedido acima da
+linha de digitar: START -> AGENTE -> FERRAMENTA -> MODELO -> TELA. A etapa acesa e a
+que esta com o pedido naquele momento, com o tempo real ao lado, e a trilha recolhe
+quando a resposta chega. Para desligar: `/palco desliga`.
+
 Parar e reler (pensado para idoso e crianca - um toque so):
 
 | Tecla | O que faz |
@@ -224,6 +229,7 @@ Comandos:
 | `/provedor` | lista os provedores cadastrados (ex.: 1 deepseek, 2 local) |
 | `/provedor <nome ou numero>` | troca o provedor em uso na hora (fica salvo) |
 | `/pensamento liga\|desliga` | mostra ou esconde o bloco cinza na tela (o modelo segue pensando); avancado: nivel enviado ao servidor auto off minimum low medium high xhigh max ultra |
+| `/palco liga\|desliga` | mostra ou esconde a trilha do pedido durante a resposta (so na tela fixa) |
 | `/ctx` | medidor do contexto; `/ctx <numero>` define o limite e salva (ex.: `/ctx 65000`; aceita 65k, 65.000, 65 mil) |
 | `/configurar` | conserta ou cadastra provedor sem sair do TEO (mesmo assistente do `bgh setup`) |
 | `/doctor` | diagnostico da conexao e da maquina na propria tela |

@@ -13,6 +13,9 @@ bgh/
                     licenca na tela
   chat_core.py      nucleo compartilhado pelas duas telas: comandos com barra,
                     atalhos @ e /, turnos do modelo, menu de licenca numerico
+  palco.py          trilha do pedido (START -> AGENTE -> FERRAMENTA -> MODELO ->
+                    TELA) desenhada acima da linha de digitar durante o turno;
+                    cada etapa e um evento real, nunca progresso de relogio
   agent.py          loop de tool-calling, anti-loop, compressao de contexto,
                     sessao persistida, stop_event (botao de parar)
   llm.py            cliente OpenAI-compativel: chat, chat_stream (com should_stop),

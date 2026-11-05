@@ -143,6 +143,7 @@ HELP_SECTIONS = [
         ("/provedor", "lista os provedores; /provedor <nome ou numero> troca na hora (fica salvo)"),
         ("/pensamento liga|desliga", "mostra ou esconde o pensamento na tela; avancado (nivel "
                                      "enviado ao servidor): auto off minimum low medium high xhigh max ultra"),
+        ("/palco liga|desliga", "mostra ou esconde a trilha do pedido durante a resposta (so na tela fixa)"),
         ("/ctx", "medidor do contexto; /ctx <numero> define o limite e fica salvo "
                  "(ex.: /ctx 65000; aceita 65k, 65.000, 65 mil)"),
         ("/configurar", "conserta ou cria um provedor sem sair do TEO (o mesmo assistente do 'bgh setup')"),
@@ -679,6 +680,22 @@ class ChatCore:
                     self.sink.line(
                         "Nao entendi. Use /pensamento liga ou /pensamento desliga (tela); "
                         "avancado (servidor): auto off minimum low medium high xhigh max ultra")
+            elif name == "/palco":
+                alvo_p = rest.lower()
+                if alvo_p in ("liga", "ligar"):
+                    self.cfg["palco"] = True
+                    save_config(self.cfg)
+                    self.sink.line("Palco: LIGADO (a trilha do pedido aparece durante a resposta).",
+                                   style="cyan")
+                elif alvo_p in ("desliga", "desligar", "parar"):
+                    self.cfg["palco"] = False
+                    save_config(self.cfg)
+                    self.sink.line("Palco: DESLIGADO (tela como antes; salvo)", style="cyan")
+                elif not rest:
+                    estado = "ligado" if self.cfg.get("palco", True) else "desligado"
+                    self.sink.line(f"Palco: {estado}. Uso: /palco liga | /palco desliga")
+                else:
+                    self.sink.line("Nao entendi. Use /palco liga ou /palco desliga", style="yellow")
             elif name == "/ctx":
                 if rest:
                     novo = parse_budget(rest)
