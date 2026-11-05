@@ -2127,7 +2127,7 @@ _base29 = Path(_tmp29.mkdtemp(prefix="menu29_"))
 (_base29 / "pasta_b").mkdir()
 (_base29 / "nota.txt").write_text("conteudo de teste", encoding="utf-8")
 
-_sink_m29 = _SinkMenu29(["nota.txt"])
+_sink_m29 = _SinkMenu29(["anexar: nota.txt"])
 _cfg_m29: dict = dict(core_cfg)
 _cfg_m29["stream"] = False
 _core_m29 = ChatCore(_cfg_m29, _sink_m29, llm=_ListLLM26())
@@ -2137,22 +2137,25 @@ try:
     _core_m29.submit("@")
 finally:
     os.chdir(_orig_cwd29)
-ok("'@' na tela fixa abre MENU de arquivos (em vez de so imprimir a lista)",
-   bool(_sink_m29.menus) and "nota.txt" in _sink_m29.menus[0]
-   and "[pasta_a]" not in _sink_m29.menus[0])
+ok("'@' abre menu com a ACAO escrita em cada linha ('anexar: arquivo')",
+   bool(_sink_m29.menus) and "anexar: nota.txt" in _sink_m29.menus[0])
+
+ok("menu tambem deixa ENTRAR em pasta no modo anexar (arquivo em subpasta)",
+   "entrar em: pasta_a" in _sink_m29.menus[0])
 ok("escolher o arquivo no menu ANEXA (o conteudo vai para a proxima pergunta)",
    _core_m29.pending_attach is not None and "conteudo de teste" in _core_m29.pending_attach)
 
-_sink_m29b = _SinkMenu29(["[pasta_a]", "sair da escolha"])
+_sink_m29b = _SinkMenu29(["entrar em: pasta_a", "cancelar (voltar para a conversa)"])
 _core_m29b = ChatCore(dict(_cfg_m29), _sink_m29b, llm=_ListLLM26())
 os.chdir(_base29)
 try:
     _core_m29b.submit("/")
 finally:
     os.chdir(_orig_cwd29)
-ok("'/' na tela fixa abre o menu da pasta com pastas E arquivos",
-   bool(_sink_m29b.menus) and "[pasta_a]" in _sink_m29b.menus[0]
-   and "[pasta_b]" in _sink_m29b.menus[0] and "nota.txt" in _sink_m29b.menus[0])
+ok("'/' abre menu com pastas ('entrar em') e arquivos ('ver')",
+   bool(_sink_m29b.menus) and "entrar em: pasta_a" in _sink_m29b.menus[0]
+   and "entrar em: pasta_b" in _sink_m29b.menus[0]
+   and "ver: nota.txt" in _sink_m29b.menus[0])
 ok("escolher uma pasta ENTRA nela (menu seguinte mostra o conteudo dela)",
    len(_sink_m29b.menus) > 1
    and ".. (voltar uma pasta)" in _sink_m29b.menus[1]

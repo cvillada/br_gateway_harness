@@ -564,12 +564,13 @@ class ChatCore:
     # ----- menu de arquivos (tela fixa) ----------------------------------------
     MENU_MAX = 18  # itens por menu: numero alto demais nao se acha na tela
 
-    def _escolher_caminho(self, inicio: str, somente_arquivos: bool = False) -> str | None:
+    def _escolher_caminho(self, inicio: str, para_anexar: bool = False) -> str | None:
         """Menu numerado de pastas/arquivos: navega e devolve o arquivo escolhido.
 
         Motivo (pedido do usuario): pessoa idosa ou crianca nao deve digitar
-        caminho. Escolher uma pasta entra nela e mostra o conteudo; escolher um
-        arquivo devolve o caminho; 'sair' (ou ESC) devolve None e nada muda.
+        caminho. Cada linha DIZ o que acontece se escolher ("entrar em: ...",
+        "anexar: ..."), o rotulo ensina a digitar o numero e a opcao 1 sempre
+        cancela (Enter/ESC nao escolhem nada por engano).
         """
         atual = os.path.abspath(os.path.expanduser(inicio) or os.getcwd())
         while True:
@@ -583,20 +584,19 @@ class ChatCore:
             if pai and pai != atual:
                 opcoes.append(".. (voltar uma pasta)")
                 alvos.append(pai)
-            if not somente_arquivos:
-                for nome in pastas[:self.MENU_MAX]:
-                    opcoes.append(f"[{nome}]")
-                    alvos.append(os.path.join(atual, nome))
-            for nome in arquivos[:self.MENU_MAX]:
-                opcoes.append(nome)
+            for nome in pastas[:self.MENU_MAX]:
+                opcoes.append(f"entrar em: {nome}")
                 alvos.append(os.path.join(atual, nome))
-            if (not somente_arquivos and len(pastas) > self.MENU_MAX) or (
-                    len(arquivos) > self.MENU_MAX):
+            for nome in arquivos[:self.MENU_MAX]:
+                opcoes.append(("anexar: " if para_anexar else "ver: ") + nome)
+                alvos.append(os.path.join(atual, nome))
+            if len(pastas) > self.MENU_MAX or len(arquivos) > self.MENU_MAX:
                 opcoes.append("... (tem mais; use /ls <pasta> para ver tudo)")
                 alvos.append(None)
             escolha = self.sink.ask_choice(
-                "ESCOLHER ARQUIVO" if somente_arquivos else "ABRIR PASTA OU ARQUIVO",
-                f"Pasta atual: {atual}",
+                "ESCOLHER ARQUIVO PARA ANEXAR" if para_anexar else "ABRIR PASTA OU ARQUIVO",
+                f"Pasta atual: {atual}\n"
+                "Digite o numero e ENTER. O numero 1 cancela.",
                 opcoes,
             )
             if escolha not in opcoes:
@@ -605,6 +605,7 @@ class ChatCore:
             if alvo is None:
                 return None
             if os.path.isdir(alvo):
+                self.sink.line(f"entrando em: {alvo}", style="dim")
                 atual = alvo
                 continue
             return alvo
@@ -622,8 +623,9 @@ class ChatCore:
             if not arg:
                 if getattr(self.sink, "menu_arquivos", False):
                     # Menu numerado: escolher o arquivo e anexar, sem digitar caminho.
-                    arg = self._escolher_caminho(os.getcwd(), somente_arquivos=True) or ""
+                    arg = self._escolher_caminho(os.getcwd(), para_anexar=True) or ""
                     if not arg:
+                        self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
                         return "continue"
                 else:
                     self.sink.line(files_mod.list_dir(os.getcwd(), files_only=True))
@@ -641,7 +643,13 @@ class ChatCore:
                                    "erro.log.", style="yellow")
                     return "continue"
                 self.pending_attach = f"[arquivo anexado: {target}]\n{content}"
-                self.sink.line(f"Arquivo anexado: {target}. Agora faca sua pergunta sobre ele.", style="dim")
+                try:
+                    tamanho = files_mod.human_size(os.path.getsize(target))
+                except OSError:
+                    tamanho = "?"
+                cortado = " (mostrando o comeco do arquivo)" if len(content) >= 8000 else ""
+                self.sink.line(f"Arquivo anexado: {target} ({tamanho}){cortado}. "
+                               "Agora digite sua pergunta sobre ele.", style="cyan")
             else:
                 self.sink.line(f"Nao encontrei esse arquivo: {target}")
             return "continue"
@@ -652,7 +660,9 @@ class ChatCore:
             if not alvo and getattr(self.sink, "menu_arquivos", False):
                 # Menu numerado: navegar por numero e escolher o arquivo.
                 escolhido = self._escolher_caminho(os.getcwd())
-                if escolhido and os.path.isfile(escolhido):
+                if not escolhido:
+                    self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
+                elif os.path.isfile(escolhido):
                     try:
                         tamanho = files_mod.human_size(os.path.getsize(escolhido))
                     except OSError:
