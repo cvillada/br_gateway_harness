@@ -923,7 +923,7 @@ _notas_calmo: list[str] = []
 _ag_calmo.on_note = _notas_calmo.append
 for _i26 in range(12):
     _ag_calmo.messages.append({"role": "user", "content": "z" * 1500})
-# orçamento = 125% do tamanho real medido -> medidor em 80%, um pouco antes dos 85%
+# orcamento = 125% do tamanho real medido -> medidor em 80%, um pouco antes dos 85%
 _est_calmo = _ag_calmo._estimate_chars()
 _cfg_calmo["context_budget_chars"] = int(_est_calmo * 1.25)
 _msgs_antes = len(_ag_calmo.messages)
@@ -1642,5 +1642,124 @@ with _ctxlib26.redirect_stdout(_buf_tit26):
     _core_tit26.banner()
 ok("abertura batiza a janela do terminal como 'TEO Agent' (no Windows e via API da janela)",
    "\x1b]0;TEO Agent\x07" in _buf_tit26.getvalue())
+
+# ---------- 0.2.8: limite de uso/cota do provedor (429) -----------------------
+from bgh.llm import LLM as _LLM27
+from bgh.llm import LLMError as _LLMErr27
+from bgh.llm import LLMRateLimitError as _RateErr27
+
+
+class _StatusErr27(Exception):
+    """Falha no formato dos SDKs: status HTTP e, as vezes, cabecalhos."""
+
+    def __init__(self, msg, status=429, headers=None):
+        super().__init__(msg)
+        self.status_code = status
+        if headers is not None:
+            self.response = types.SimpleNamespace(headers=headers)
+
+
+class _ClientErr27:
+    """Cliente que sempre falha (sem rede): anota cada pedido feito."""
+
+    class _Comp:
+        def __init__(self, exc, box):
+            self._exc = exc
+            self._box = box
+
+        def create(self, **kwargs):
+            self._box.append(bool(kwargs.get("stream")))
+            raise self._exc
+
+    class _Chat:
+        def __init__(self, comp):
+            self.completions = comp
+
+    def __init__(self, exc):
+        self.pedidos: list[bool] = []
+        self.chat = self._Chat(self._Comp(exc, self.pedidos))
+
+
+def _llm_falha27(exc):
+    llm = _LLM27({"base_url": "http://fake/v1", "model": "m", "max_retries": 0})
+    llm.client = _ClientErr27(exc)
+    return llm
+
+
+def _captura27(fn):
+    try:
+        fn()
+        return None
+    except Exception as exc:  # noqa: BLE001 - o proprio tipo do erro e a prova
+        return exc
+
+
+_llm_429 = _llm_falha27(_StatusErr27("Error code: 429 - rate limit reached"))
+_err_429 = _captura27(lambda: _llm_429.chat([{"role": "user", "content": "oi"}]))
+ok("limite de uso do provedor (429) vira aviso tratavel, nao 'falha ao falar com o modelo'",
+   isinstance(_err_429, _RateErr27) and isinstance(_err_429, _LLMErr27))
+ok("aviso do 429 diz em palavra simples o que fazer (esperar ou trocar de provedor)",
+   "pediu para esperar" in str(_err_429) and "Espere um pouco" in str(_err_429)
+   and "/provedor" in str(_err_429))
+ok("429 nao vira fila de pedidos: uma tentativa, nao tres",
+   len(_llm_429.client.pedidos) == 1)
+
+# Cota esgotada sem status HTTP: o texto do provedor basta para classificar.
+_llm_quota = _llm_falha27(Exception("You exceeded your current quota, please check your plan"))
+_err_quota = _captura27(lambda: _llm_quota.chat([{"role": "user", "content": "oi"}]))
+ok("cota esgotada tambem e reconhecida pelo texto do provedor",
+   isinstance(_err_quota, _RateErr27))
+
+# Retry-After: quando o servidor diz quanto esperar, a tela repete o numero.
+_llm_espera = _llm_falha27(_StatusErr27("429 too many requests", headers={"retry-after": "30"}))
+_err_espera = _captura27(lambda: _llm_espera.chat([{"role": "user", "content": "oi"}]))
+ok("quando o servidor diz quanto esperar, a mensagem mostra o numero",
+   "30 segundos" in str(_err_espera))
+
+# Falha comum de servidor continua sendo erro generico (sem confundir com limite).
+_llm_500 = _llm_falha27(_StatusErr27("Internal server error", status=500))
+_err_500 = _captura27(lambda: _llm_500.chat([{"role": "user", "content": "oi"}]))
+ok("erro comum de servidor (500) nao e confundido com limite de uso",
+   isinstance(_err_500, _LLMErr27) and not isinstance(_err_500, _RateErr27))
+
+# Em streaming, o 429 nao pode cair para 'responder de uma vez' (outro pedido).
+_llm_stream429 = _llm_falha27(_StatusErr27("429 rate limit reached"))
+_err_stream429 = _captura27(lambda: _llm_stream429.chat_stream([{"role": "user", "content": "oi"}]))
+ok("429 no streaming nao dispara um segundo pedido sem streaming",
+   isinstance(_err_stream429, _RateErr27) and len(_llm_stream429.client.pedidos) == 1)
+
+
+class _SinkStyle27(RecSink):
+    """Sink que guarda tambem a cor de cada linha (aviso x erro)."""
+
+    def __init__(self):
+        super().__init__()
+        self.pares: list[tuple[str, object]] = []
+
+    def line(self, text, style=None):
+        self.pares.append((str(text), style))
+        super().line(text, style)
+
+
+class _RateLLM27(_ListLLM26):
+    def __init__(self, exc):
+        self.exc = exc
+
+    def chat(self, messages, tools=None):
+        raise self.exc
+
+    def summarize(self, text):
+        return ""
+
+
+_sink_rate27 = _SinkStyle27()
+_core_rate27 = ChatCore(dict(core_cfg), _sink_rate27, llm=_RateLLM27(_err_429))
+_core_rate27.submit("oi")
+ok("na tela o limite de uso aparece como aviso amarelo, nao como erro vermelho",
+   any("pediu para esperar" in texto and style == "yellow"
+       for texto, style in _sink_rate27.pares))
+_texto_rate27 = " ".join(texto for texto, _style in _sink_rate27.pares)
+ok("dica do 429 manda ver /provedor em vez de reconferir URL e chave",
+   "/provedor" in _texto_rate27 and "/configurar" not in _texto_rate27)
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

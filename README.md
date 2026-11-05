@@ -53,16 +53,19 @@ recursos visuais.
 
 #### Windows (metodo manual, se preferir fazer passo a passo)
 
-1. Baixe `bgh_motor-0.2.3-py3-none-any.whl` na pagina Releases (vai para a pasta
-   Downloads do seu usuario).
-3. Abra o Prompt de Comando (cmd) e rode, linha por linha:
+1. Baixe na pagina Releases o arquivo `bgh_motor-...-py3-none-any.whl` (vai para a
+   pasta Downloads do seu usuario; o numero da versao aparece no meio do nome do
+   arquivo).
+2. Abra o Prompt de Comando (cmd) e rode, linha por linha. No comando do `pip`,
+   troque `numero-da-versao` pelo numero que aparece no nome do arquivo baixado
+   (ex.: 0.2.8):
 
 ```batch
 mkdir TEO
 cd TEO
 python -m venv .venv
 .venv\Scripts\activate
-pip install %USERPROFILE%\Downloads\bgh_motor-0.2.3-py3-none-any.whl
+pip install "%USERPROFILE%\Downloads\bgh_motor-numero-da-versao-py3-none-any.whl"
 bgh
 ```
 
@@ -72,11 +75,11 @@ Se o pip disser que o arquivo nao existe, descubra onde ele caiu:
 dir /s /b %USERPROFILE%\Downloads\bgh_motor*
 ```
 
-e use o caminho completo que aparecer (ou mova o .whl para a pasta TEO e faca
-`pip install bgh_motor-0.2.3-py3-none-any.whl`). No PowerShell, troque
-`%USERPROFILE%` por `$env:USERPROFILE`.
+e use o caminho completo que aparecer na linha do comando acima (ou mova o `.whl`
+para dentro da pasta TEO e instale pelo nome dele estando dentro dela).
+No PowerShell, troque `%USERPROFILE%` por `$env:USERPROFILE`.
 
-4. Para usar de novo em outra sessao: `cd TEO`, `.venv\Scripts\activate`, `bgh`.
+3. Para usar de novo em outra sessao: `cd TEO`, `.venv\Scripts\activate`, `bgh`.
 
 Configuracoes e historico ficam em `C:\Users\SEU_USUARIO\.bgh`. Use o Windows
 Terminal (ja vem no Windows 11); o Prompt de Comando antigo funciona, mas com menos
@@ -105,12 +108,13 @@ trabalho (no macOS, `TEO.command` no Finder; no Linux, lancador `TEO`) e abre o 
 mkdir TEO && cd TEO
 python3 -m venv .venv
 source .venv/bin/activate
-pip install /caminho/para/bgh_motor-0.2.5-py3-none-any.whl
+pip install ~/Downloads/bgh_motor-*.whl
 bgh
 ```
 
-Para usar de novo: `cd TEO`, `source .venv/bin/activate`, `bgh`. Configuracoes e
-historico ficam em `~/.bgh`.
+Se o pip reclamar que achou mais de um arquivo, apague os `.whl` velhos da pasta
+Downloads e rode o comando de novo. Para usar de novo: `cd TEO`,
+`source .venv/bin/activate`, `bgh`. Configuracoes e historico ficam em `~/.bgh`.
 
 ### Linux (instalacao pratica: 2 linhas)
 
@@ -198,7 +202,7 @@ Parar e reler (pensado para idoso e crianca - um toque so):
 Barra fixa embaixo sempre diz o que apertar; durante a resposta ela mostra
 "respondendo... PARA PARAR: CTRL+C ou ESC".
 
-Atalhos rapidos (nao perguntam licenca, s6 mostram):
+Atalhos rapidos (nao perguntam licenca, so mostram):
 
 | Atalho | O que faz |
 |--------|-----------|

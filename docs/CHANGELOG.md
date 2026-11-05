@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.8
+
+O TEO avisa em palavra simples quando o provedor pede para esperar, e a entrega
+ficou mais confiavel por dentro: todo push roda a suite antes de virar release.
+
+- Limite de uso ou cota esgotada no provedor (erro 429): a tela agora explica o
+  que aconteceu e o que fazer - "o provedor pediu para esperar: espere um pouco e
+  mande a pergunta de novo; se acontecer sempre, use /provedor". Antes esse caso
+  chegava como "Falha ao falar com o modelo" e parecia programa quebrado.
+- Quando o servidor informa quantos segundos esperar, a mensagem mostra o numero.
+  O aviso sai em amarelo (aviso), nao em vermelho (erro), e a dica aponta para
+  `/provedor` em vez de mandar reconferir URL e chave.
+- O TEO nao insiste sozinho depois desse aviso: um pedido, sem repetir na fila.
+  Cada repeticao gastaria mais cota e aumentaria a espera.
+- Erro comum de servidor (500, queda de rede) continua como antes: o limite de
+  uso nao e confundido com defeito.
+- Todo push no GitHub roda a suite offline em Linux, Windows e macOS (Python 3.11
+  e 3.12). Antes o unico CI era o empacotamento: o binario saia mesmo com teste
+  vermelho.
+- README: as instrucoes manuais de instalacao nao citam mais numero de versao
+  fixo (o texto mandava baixar um arquivo que ja nao existia na pagina de
+  Releases) e a numeracao dos passos do Windows foi corrigida.
+
 ## 0.2.7
 
 O TEO aprende a se atualizar sozinho e a falar mais claro com quem nao e tecnico.
@@ -85,7 +108,7 @@ de quem entrega sem parar mais a tela.
   rodadas de ferramenta ou 5 falhas em sequencia, agora aparece um aviso na tela
   explicando o motivo, a resposta final chega em streaming (sem silencio morto
   com contexto cheio) e a instrucao interna de fechamento passou a ser em
-  portugues — o modelo local parou de responder em ingles no fim do turno. Se o
+  portugues - o modelo local parou de responder em ingles no fim do turno. Se o
   servidor recusar o tamanho ate no fechamento, ele compacta e fecha mesmo assim.
 - Limite de rodadas de ferramenta por turno subiu de 12 para 20 (pesquisa e
   redacao longa nao caem mais no fechamento no meio do trabalho; o anti-loop real
@@ -138,7 +161,7 @@ Silencio deixou de parecer trava, e "parar" passou a valer dentro das ferramenta
 - Busca em arquivos ganhou teto (`search_time_limit_s` 20 s, `search_max_files`
   20000) e ignora pastas gigantes (AppData, Library, snap, venv, caches); ao bater
   o teto ela diz onde parou e pede uma pasta mais especifica.
-- Assistente de configuracao sugere orçamento de contexto por provedor (45000 para
+- Assistente de configuracao sugere orcamento de contexto por provedor (45000 para
   servidor remoto NubesBR) e sobe `max_tokens` para 3072 nesse perfil.
 - `/ctx 65000` agora define o limite de contexto na hora e salva no config.json
   (aceita 65k, 65.000 e 65 mil). Antes o numero era ignorado em silencio, o que na

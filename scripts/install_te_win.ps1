@@ -36,7 +36,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/$repo/main/requirement
 & "$dir\.venv\Scripts\pip.exe" install -r (Join-Path $dir "requirements.txt") | Out-Null
 # '--no-deps --force-reinstall' e obrigatorio: sem isso o pip ve a MESMA versao ja
 # instalada, diz 'requirement already satisfied' e deixa o codigo velho no lugar
-# (reinstalar nao atualizava; medido com o Nei). As dependencias vem do passo anterior.
+# (reinstalar nao atualizava). As dependencias vem do passo anterior.
 & "$dir\.venv\Scripts\pip.exe" install --no-deps --force-reinstall $wheel_local
 if ($LASTEXITCODE -ne 0) { throw "O pip install falhou." }
 $versao = (& "$dir\.venv\Scripts\pip.exe" show bgh-motor | Select-String "^Version:")

@@ -46,7 +46,7 @@ curl -L -o "$DIR/requirements.txt" \
 "$DIR/.venv/bin/pip" install -r "$DIR/requirements.txt" > /dev/null
 # '--no-deps --force-reinstall' e obrigatorio: sem isso o pip ve a MESMA versao ja
 # instalada, diz 'requirement already satisfied' e deixa o codigo velho no lugar
-# (reinstalar nao atualizava; medido com o Nei). As dependencias vem do pip anterior.
+# (reinstalar nao atualizava). As dependencias vem do pip anterior.
 "$DIR/.venv/bin/pip" install --no-deps --force-reinstall "$DIR/$NAME"
 VER=$("$DIR/.venv/bin/pip" show bgh-motor 2>/dev/null | sed -n 's/^Version: //p')
 echo "Versao instalada: ${VER:-desconhecida}"

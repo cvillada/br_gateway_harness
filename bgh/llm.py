@@ -39,12 +39,60 @@ class ContextOverflowError(LLMError):
     """
 
 
+class LLMRateLimitError(LLMError):
+    """O provedor pediu para esperar: limite de uso do momento ou cota esgotada.
+
+    Tratado como caso proprio porque a resposta certa NAO e tentar de novo na
+    mesma hora (cada tentativa gasta cota e a espera cresce): a tela avisa em
+    frase simples que e so esperar um pouco ou trocar de provedor.
+    """
+
+
 # Marcadores de erro de contexto dos servidores que falam OpenAI (llama.cpp,
 # DeepSeek, vLLM e afins). Comparados em minusculo contra o texto da excecao.
 CONTEXT_MARKERS = (
     "context length", "context size", "n_ctx", "exceeds the available context",
     "too many tokens", "maximum context", "prompt is too long", "context window",
 )
+
+# Marcadores de limite de uso/cota (429 e derivados dos provedores hospedados).
+RATE_LIMIT_MARKERS = (
+    "429", "rate limit", "rate_limit", "ratelimit", "too many requests",
+    "quota", "resource_exhausted", "overloaded", "requests per",
+)
+
+
+def _rate_limited(exc: BaseException) -> bool:
+    """True quando a falha e limite de uso/cota, nao defeito de codigo ou rede."""
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status is not None:
+        try:
+            if int(status) == 429:
+                return True
+        except (TypeError, ValueError):
+            pass
+    text = str(exc).lower()
+    return any(marker in text for marker in RATE_LIMIT_MARKERS)
+
+
+def _wait_hint(exc: BaseException) -> str:
+    """'O servidor pediu Ns' quando a resposta traz Retry-After; senao, vazio."""
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    busca = getattr(headers, "get", None)
+    if busca is None:
+        return ""
+    bruto = busca("retry-after") or busca("Retry-After")
+    if bruto is None:
+        return ""
+    try:
+        segundos = int(float(bruto))
+    except (TypeError, ValueError):
+        return ""
+    if 0 < segundos <= 600:
+        return f" O proprio servidor pediu {segundos} segundos de espera."
+    return ""
 
 # Catalog publico de modelos (mesma fonte de metadados que o Hermes usa quando o
 # servidor nao publica nada: DeepSeek, Anthropic, OpenAI e afins). Cacheado uma
@@ -128,6 +176,16 @@ class LLM:
             except Exception:  # noqa: BLE001 - aviso nunca derruba o turno
                 pass
 
+    def _rate_limit_error(self, exc: BaseException) -> LLMRateLimitError:
+        """Frase simples para leigo: o que aconteceu e o que fazer agora."""
+        return LLMRateLimitError(
+            "O provedor pediu para esperar: o limite de uso deste momento foi atingido "
+            "(ou a cota da conta acabou)."
+            + _wait_hint(exc)
+            + " Espere um pouco e mande a pergunta de novo. Se acontecer sempre, "
+            "troque de provedor digitando /provedor."
+        )
+
     def _apply_thinking(self, kwargs: dict) -> None:
         """Traduz o nivel de pensamento para os campos que os servidores entendem."""
         level = str(self.cfg.get("thinking") or "auto").lower()
@@ -159,6 +217,10 @@ class LLM:
             except Exception as exc:  # noqa: BLE001
                 eb = kwargs.get("extra_body") or {}
                 text = str(exc).lower()
+                if _rate_limited(exc):
+                    # Limite de uso/cota: tentar de novo na mesma hora so gasta cota
+                    # e a espera cresce - e isso que a pessoa precisa ouvir.
+                    raise self._rate_limit_error(exc) from exc
                 if eb and any(k in text for k in ("reasoning_effort", "thinking_budget",
                                                   "chat_template_kwargs")):
                     if "reasoning_effort" in eb:
@@ -332,6 +394,10 @@ class LLM:
         try:
             resp = self.client.chat.completions.create(**kwargs)
         except Exception as exc:  # noqa: BLE001
+            if _rate_limited(exc):
+                # Nao adianta cair para o modo sem streaming: o pedido seguinte
+                # bateria no mesmo limite e gastaria mais cota.
+                raise self._rate_limit_error(exc) from exc
             # Servidor sem streaming (ou sem o campo de nivel): segue pelo caminho normal,
             # mas avisando na tela - espera dupla nao pode ser lida como trava.
             self._note("O servidor nao aceitou a resposta em pedacos "
@@ -373,6 +439,10 @@ class LLM:
                         if tc.function.arguments:
                             slot["function"]["arguments"] += tc.function.arguments
         except Exception as exc:  # noqa: BLE001
+            if _rate_limited(exc) and not (content_parts or reasoning_parts):
+                # Nada chegou ainda e o servidor pediu espera: repetir sem streaming
+                # seria outro pedido na mesma janela de limite.
+                raise self._rate_limit_error(exc) from exc
             esperado = int(time.time() - t0)
             if content_parts or reasoning_parts:
                 raise LLMError(

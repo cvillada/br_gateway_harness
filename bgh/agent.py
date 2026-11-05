@@ -80,7 +80,7 @@ class Agent:
             {
                 "role": "system",
                 "content": build_system_prompt(
-                    load_lines("user"), load_lines("note"), index_lines(discover())
+                    load_lines("user"), load_lines("note"), index_lines(skills)
                 ),
             }
         ]

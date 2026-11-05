@@ -17,7 +17,7 @@ from rich.console import Console
 from .agent import Agent, STOPPED_NOTE
 from .approvals import Gate
 from .config import CONFIG_PATH, SESSION_FILE, ConfigError, load_config, save_config
-from .llm import LLM, LLMError
+from .llm import LLM, LLMError, LLMRateLimitError
 from .setup_wizard import CHARS_POR_TOKEN, FOLGA_LEITURA
 from .tools import files as files_mod
 
@@ -729,6 +729,13 @@ class ChatCore:
                 # CTRL+C no modo classico tambem para o turno.
                 self.agent.stop_event.set()
                 answer = STOPPED_NOTE
+            except LLMRateLimitError as exc:
+                # Limite de uso/cota nao e defeito: amarelo (aviso) e dica certa,
+                # sem mandar a pessoa reconferir URL e chave.
+                self.sink.line(str(exc), style="yellow")
+                self.sink.line("Dica: /provedor mostra os outros provedores cadastrados.",
+                               style="dim")
+                return "continue"
             except LLMError as exc:
                 self.sink.line(str(exc), style="red")
                 self.sink.line("Dica: digite /configurar aqui mesmo para conferir URL e chave "

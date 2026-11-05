@@ -71,6 +71,8 @@ Camadas do gate (`approvals.py`):
 
 - Suite offline: `.venv/bin/python tests/test_smoke.py` (FakeLLM, BGH_HOME temporario;
   nao precisa de modelo nem internet).
+- Todo push em `main` roda essa suite no GitHub Actions em Linux, Windows e macOS
+  (Python 3.11 e 3.12): o `.whl` nao sai com teste vermelho.
 - Comportamento interativo so e provado em pseudo-terminal de verdade (pty real):
   tela fixa, parada no meio de comando longo, licenca respondida por numero, `/sair`.
 
