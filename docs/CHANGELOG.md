@@ -22,6 +22,22 @@ ficou mais confiavel por dentro: todo push roda a suite antes de virar release.
 - README: as instrucoes manuais de instalacao nao citam mais numero de versao
   fixo (o texto mandava baixar um arquivo que ja nao existia na pagina de
   Releases) e a numeracao dos passos do Windows foi corrigida.
+- Chave de provedor corrigida no assistente agora fica TAMBEM no perfil salvo:
+  antes so o topo do config recebia a chave nova e o `/provedor` restaurava a
+  antiga, devolvendo 401 no mesmo provedor que tinha acabado de ser testado com
+  sucesso (visto em maquina Windows com OpenRouter).
+- `/modelo` tambem atualiza o perfil salvo: trocar de provedor nao desfaz mais a
+  troca de modelo sem avisar.
+- Barra de baixo: o aviso (rodando/parar, licenca pendente, teclas) nunca cai. O
+  medidor de contexto e o primeiro a encolher ("ctx 29% de 500k (88 msg)") e sai
+  da barra se ainda nao couber; a largura passa a vir da JANELA do app, nao do
+  buffer do console (no Windows as duas medidas divergem e a linha quebrava).
+- A janela abre maximizada e com o nome TEO Agent (no Windows pela API do
+  console; Linux e macOS recebem a sequencia do xterm, que terminal sem suporte
+  simplesmente ignora).
+- O prompt do modelo ganhou a secao "onde ficam as coisas" (config.json com a
+  chave, session.json, memory.db, skills, erro.log) e a proibicao de inventar
+  lugar: perguntado onde a chave mora, o modelo respondia "registro do Windows".
 
 ## 0.2.7
 

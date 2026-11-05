@@ -16,7 +16,7 @@ from rich.console import Console
 
 from .agent import Agent, STOPPED_NOTE
 from .approvals import Gate
-from .config import CONFIG_PATH, SESSION_FILE, ConfigError, load_config, save_config
+from .config import CONFIG_PATH, SESSION_FILE, ConfigError, load_config, save_config, sync_profile
 from .llm import LLM, LLMError, LLMRateLimitError
 from .setup_wizard import CHARS_POR_TOKEN, FOLGA_LEITURA
 from .tools import files as files_mod
@@ -51,6 +51,35 @@ def set_window_title(texto: str) -> None:
             print("\x1b]0;" + texto + "\x07", end="", flush=True)
     except Exception:  # noqa: BLE001 - titulo e cortesia, nunca necessidade
         pass
+
+
+def maximize_window() -> None:
+    """Deixa a janela do TEO maximizada desde a abertura.
+
+    Motivo: em janela estreita o rodape perde pedacos (o medidor de contexto e as
+    teclas brigam pelo mesmo espaco) e o publico do TEO nao vai ficar arrastando
+    borda de janela. Windows tem API propria (funciona de verdade); Linux/macOS
+    recebem a sequencia padrao do xterm e o terminal que nao conhece simplesmente
+    ignora. Sempre antes de a tela desenhar: redimensionar com a tela viva
+    bagunca o layout.
+    """
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+        else:
+            print("\x1b[9;0t", end="", flush=True)  # xterm: maximizar janela
+    except Exception:  # noqa: BLE001 - cortesia, nunca necessidade
+        pass
+
+
+def prepare_console() -> None:
+    """Nome na janela + tela maximizada: chamado ANTES da primeira tela."""
+    set_window_title("TEO Agent")
+    maximize_window()
 
 
 def ctx_parts(cfg: dict, usage: dict) -> tuple[str, str]:
@@ -588,6 +617,9 @@ class ChatCore:
                             return "continue"
                     self.cfg["model"] = alvo2
                     save_config(self.cfg)
+                    # Perfil salvo anda junto: sem isso, trocar de provedor depois
+                    # devolvia o modelo antigo sem avisar.
+                    sync_profile(self.cfg)
                     self.sink.line(f"Modelo agora: {alvo2} (salvo no config)", style="cyan")
                     self._ask_thinking_level()
                     self._refresh_server_context(troca=True, render=True)

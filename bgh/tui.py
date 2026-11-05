@@ -22,6 +22,7 @@ classico de rolagem automaticamente.
 """
 
 import asyncio
+import re
 import shutil
 import textwrap
 import threading
@@ -358,7 +359,17 @@ def run_tui(cfg: dict) -> int:
     input_win = Window(BufferControl(in_buf), height=1, style="class:input")
     input_row = VSplit([Label(text="voce> ", dont_extend_width=True), input_win])
     rule_bottom = Window(height=1, char="-", style="class:rule")
-    footer_win = Window(FormattedTextControl(lambda: _status_text(state)),
+
+    def _footer_frags():
+        # Largura da JANELA do app (a mesma que o resto da tela usa), nunca a do
+        # buffer do console: no Windows as duas divergem e a barra quebrava.
+        try:
+            cols = getattr(app, "output").get_size().columns
+        except Exception:  # noqa: BLE001 - antes do primeiro paint nao ha output
+            cols = shutil.get_terminal_size().columns
+        return _status_text(state, cols)
+
+    footer_win = Window(FormattedTextControl(_footer_frags),
                         height=1, style="class:footer")
     root = HSplit([rule_top, input_row, rule_bottom, footer_win])
     layout = Layout(root)
@@ -514,16 +525,54 @@ def run_tui(cfg: dict) -> int:
     return 0
 
 
-def _status_text(state: dict):
+def compact_ctx(ctx: str, espaco: int) -> str:
+    """Versao curta do medidor de contexto que ainda caiba em 'espaco' colunas.
+
+    'contexto: 29% de 500000 chars (88 mensagens)' -> 'ctx 29% de 500k (88 msg)'.
+    Devolve '' quando nem o mais curto cabe: ai a barra mostra so o aviso, que e
+    o que a pessoa precisa ler naquele momento.
+    """
+    texto = str(ctx or "")
+    m = re.match(r"contexto: (\d+)% de (\d+) chars \((\d+) mensagens\)", texto)
+    if not m:
+        return texto if len(texto) <= espaco else ""
+    pct, orcamento, msgs = m.group(1), int(m.group(2)), m.group(3)
+    if orcamento >= 1000 and orcamento % 1000 == 0:
+        candidatos = [f"ctx {pct}% de {orcamento // 1000}k ({msgs} msg)",
+                      f"ctx {pct}% de {orcamento // 1000}k",
+                      f"ctx {pct}%"]
+    else:
+        candidatos = [f"ctx {pct}% de {orcamento} ({msgs} msg)", f"ctx {pct}%"]
+    for candidato in candidatos:
+        if len(candidato) <= max(0, espaco):
+            return candidato
+    return ""
+
+
+def _status_text(state: dict, columns: int | None = None):
+    """Barra de baixo: o aviso manda, o medidor cede espaco.
+
+    Regra (pedido do usuario, medida no cliente): o aviso - rodando/parar,
+    licenca pendente, teclas - NUNCA pode cair. O medidor de contexto e o
+    primeiro a encolher (versao compacta) e, se ainda nao couber, sai da barra.
+    A largura vem da JANELA do app: shutil.get_terminal_size pode devolver a
+    largura do BUFFER do console no Windows, e cortar pela medida errada faz a
+    linha quebrar em duas e a segunda metade desaparecer da tela.
+    """
     holder = state.get("approval")
-    width = max(40, shutil.get_terminal_size().columns)
+    if columns is None:
+        columns = shutil.get_terminal_size().columns
+    width = max(40, int(columns))
+
     def fit(txt: str) -> str:
         # a barra de baixo NUNCA pode embrulhar: cortamos com folga de 2 colunas
         return txt if len(txt) <= width - 2 else txt[:width - 3]
+
     if holder is not None:
         hot = holder.get("hot", "LICENCA PENDENTE: digite o numero e ENTER (ESC = nao)")
         return [("class:footer.hot", fit(hot))]
-    ctx = state.get("ctx")
+
+    ctx = state.get("ctx") or ""
     if state["busy"]:
         # Espera vira numero visivel: 'rodando... 47s' + a ferramenta em andamento.
         # Sem isso, silencio na tela e lido como programa travado (reclamacao real).
@@ -534,23 +583,37 @@ def _status_text(state: dict):
             tool_s = int(time.time() - float(state.get("tool_since") or time.time()))
             pieces.append(f"{tool} {tool_s}s")
         pieces.append("PARA PARAR: CTRL+C ou ESC")
+        linha = " | ".join(pieces)
         if ctx:
-            pieces.append(ctx)
-        return [("class:footer.hot", fit(" | ".join(pieces)))]
-    base = ("ENTER = falar | CTRL+C com linha vazia = sair | /ajuda | "
-            "reler: roda do mouse ou barra lateral do seu terminal")
+            # Medidor so entra se caber inteiro: o aviso de parar e mais importante.
+            medidor = compact_ctx(ctx, width - 3 - len(linha) - 3)
+            if medidor:
+                linha = f"{linha} | {medidor}"
+        return [("class:footer.hot", fit(linha))]
+
+    base_longa = ("ENTER = falar | CTRL+C com linha vazia = sair | /ajuda | "
+                  "reler: roda do mouse ou barra lateral do seu terminal")
+    base_curta = "ENTER = falar | CTRL+C vazio = sair | /ajuda"
     extra = state.get("ctx_extra") or ""
-    ctx_full = ctx
-    if ctx and len(ctx) + len(base) + 3 > width:
-        # com o medidor de contexto na frente, encurta a explicacao para caber
-        base = "ENTER = falar | CTRL+C vazio = sair | /ajuda"
-    # O extra ('teto; o servidor entrega...') e o primeiro a cair quando aperta:
-    # o medidor em si nunca deve ser cortado no meio de um numero.
-    if ctx and extra and len(ctx) + len(extra) + len(base) + 3 <= width:
-        ctx_full = ctx + extra
+    medidor_longo = ctx
+    if ctx and extra and len(ctx) + len(extra) + len(base_curta) + 3 <= width:
+        medidor_longo = ctx + extra
+    candidatos: list[str] = []
+    if medidor_longo:
+        candidatos.append(f"{medidor_longo} | {base_longa}")
+        candidatos.append(f"{medidor_longo} | {base_curta}")
+        curto = compact_ctx(ctx, width - 3 - len(base_curta) - 3)
+        if curto:
+            candidatos.append(f"{curto} | {base_curta}")
+    candidatos.append(base_longa)
+    candidatos.append(base_curta)
+    # Primeira combinacao que cabe INTEIRA: nada de corte no meio de palavra nem
+    # numero de contexto picado no fim da linha.
+    escolhida = next((c for c in candidatos if len(c) <= width - 2), base_curta)
+
     # Contexto perto do limite: a barra fica na cor de alerta (amarelo) tambem
     # quando esta parada, no MESMO ponto em que a compactacao vai comecar.
     pct = state.get("ctx_pct") or 0
     hot = state.get("ctx_hot_pct") or 85
     estilo = "class:footer.hot" if pct >= hot else "class:footer"
-    return [(estilo, fit(f"{ctx_full} | {base}" if ctx_full else base))]
+    return [(estilo, fit(escolhida))]

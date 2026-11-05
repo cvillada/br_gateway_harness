@@ -22,6 +22,7 @@ from bgh.config import (
     load_config,
     save_config,
     save_profile,
+    sync_profile,
 )
 from bgh.tools.skills import BUNDLED_SKILLS_DIR
 
@@ -214,6 +215,11 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
                             status = "OK"
                 if status != "OK":
                     say_fn("Confira URL e chave (digite /configurar de novo ou rode 'bgh doctor' fora do TEO).")
+
+    # O que foi testado tem que ser o mesmo que fica no perfil salvo: a chave
+    # corrigida na auto-correcao ficava so no topo do config e o /provedor
+    # restaurava a chave velha (401 medido em maquina de cliente, Windows).
+    sync_profile(cfg, name)
 
     say_fn("")
     if not from_chat:

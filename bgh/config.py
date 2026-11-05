@@ -145,6 +145,26 @@ def set_active_profile(cfg: dict, name: str) -> bool:
     return True
 
 
+def sync_profile(cfg: dict, name: str | None = None) -> bool:
+    """Copia a conexao EM USO (topo do config) para o perfil salvo.
+
+    Motivo medido (cliente em Windows, v0.2.8): a chave corrigida na auto-correcao
+    do assistente era gravada so no topo do config; o perfil guardava a chave da
+    primeira tentativa (vazia) e o /provedor a restaurava - o resultado era 401 de
+    novo logo depois de a mesma chave ter sido testada com sucesso. O mesmo vale
+    para o modelo trocado com /modelo: sem sincronizar, voltar para o provedor
+    desfazia a troca em silencio.
+    """
+    alvo = name or cfg.get("active_profile") or ""
+    prof = (cfg.get("profiles") or {}).get(alvo)
+    if not isinstance(prof, dict):
+        return False
+    for k in PROFILE_KEYS:
+        prof[k] = cfg.get(k, "")
+    save_config(cfg)
+    return True
+
+
 def ensure_dirs() -> None:
     for d in (BGH_HOME, SKILLS_DIR, SCRATCH_DIR):
         d.mkdir(parents=True, exist_ok=True)

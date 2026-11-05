@@ -189,6 +189,11 @@ terminal rolam a conversa, e ao sair o texto continua visivel para reler. Sem
 terminal interativo (pipe/script), cai no modo classico sozinho. Para desligar a
 tela interativa: `"tui": false` no `~/.bgh/config.json`.
 
+A janela ja abre maximizada e com o nome **TEO Agent**: em janela pequena a barra
+de baixo (medidor, teclas, aviso de "rodando") nao caberia inteira. No Windows a
+maximizacao e feita pela API do console; no Linux e no macOS o pedido e enviado ao
+terminal, e terminal que nao aceita simplesmente mantem o tamanho que estava.
+
 Parar e reler (pensado para idoso e crianca - um toque so):
 
 | Tecla | O que faz |

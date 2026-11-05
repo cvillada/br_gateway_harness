@@ -42,6 +42,11 @@ def chat(_args) -> int:
 
     # Tela fixa quando faz sentido; senao, rolagem classica (que continua funcionando).
     use_tui = bool(cfg.get("tui", True)) and sys.stdin.isatty() and sys.stdout.isatty()
+    if sys.stdout.isatty():
+        # Janela ja com nome e maximizada ANTES de a tela desenhar (rodape inteiro).
+        from .chat_core import prepare_console
+
+        prepare_console()
     if use_tui:
         try:
             from .tui import run_tui

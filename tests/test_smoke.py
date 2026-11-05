@@ -1626,9 +1626,9 @@ try:
     _fr140_26 = _status_text25(dict(_st_extra26))[0][1]
 finally:
     _shutil26.get_terminal_size = _orig_gts26
-ok("janela estreita: o 'teto' cai primeiro e o medidor nunca e cortado no meio",
-   len(_fr80_26) <= 78 and "contexto: 3%" in _fr80_26 and "1.048.576" not in _fr80_26
-   and "ENTER = falar" in _fr80_26)
+ok("janela estreita: o medidor encolhe, as teclas ficam inteiras e nada e cortado no meio",
+   len(_fr80_26) <= 78 and _fr80_26.endswith("/ajuda") and "ENTER = falar" in _fr80_26
+   and "ctx 3%" in _fr80_26 and "1.048.576" not in _fr80_26)
 ok("janela larga: medidor + teto + explicacao cabem juntos numa linha",
    "1.048.576 tokens" in _fr140_26 and "ENTER = falar" in _fr140_26
    and "\n" not in _fr140_26)
@@ -1777,5 +1777,150 @@ ok("na tela o limite de uso aparece como aviso amarelo, nao como erro vermelho",
 _texto_rate27 = " ".join(texto for texto, _style in _sink_rate27.pares)
 ok("dica do 429 manda ver /provedor em vez de reconferir URL e chave",
    "/provedor" in _texto_rate27 and "/configurar" not in _texto_rate27)
+
+# ---------- 0.2.8 (emenda): chave no perfil, rodape, janela, onde ficam as coisas
+import io as _io28
+import time as _time28
+
+from bgh.chat_core import maximize_window as _max28
+from bgh.config import set_active_profile as _ativa28
+from bgh.config import sync_profile as _sync28
+from bgh.tui import compact_ctx as _compact28
+from bgh import setup_wizard as _wiz28
+
+_cfg_perfil28 = {
+    "provider": "custom", "base_url": "https://openrouter.ai/api/v1",
+    "model": "openai/gpt-4o-mini", "api" + "_key": "chave-certa",
+    "active_profile": "outro",
+    "profiles": {"outro": {"provider": "custom",
+                           "base_url": "https://openrouter.ai/api/v1",
+                           "model": "openai/gpt-4o-mini", "api" + "_key": ""}},
+}
+ok("sync_profile leva a chave EM USO para o perfil salvo",
+   _sync28(_cfg_perfil28)
+   and _cfg_perfil28["profiles"]["outro"]["api" + "_key"] == "chave-certa")
+_ativa28(_cfg_perfil28, "outro")
+ok("depois disso, trocar de provedor NAO devolve a chave velha (401 medido no cliente)",
+   _cfg_perfil28["api" + "_key"] == "chave-certa")
+
+# O mesmo cenario, agora pelo assistente inteiro: chave vazia -> 401 -> chave certa.
+_orig_llm28 = _llmmod26.LLM
+
+
+class _LLMAuth28:
+    def __init__(self, cfg=None):
+        self.cfg = cfg or {}
+
+    def chat(self, messages, tools=None):
+        if str(self.cfg.get("api" + "_key") or "") == "chave-certa":
+            return {"role": "assistant", "content": "pronto"}
+        raise _LLMErr27("Falha ao falar com o modelo (AuthenticationError): Error code: 401")
+
+    def discover_context(self):
+        return None
+
+
+def _ask28(prompt, default="", secret=False):
+    texto = prompt.lower()
+    if "manter o provedor" in texto:
+        return "n"                      # segue para o cadastro
+    if "opcao" in texto:
+        return "4"                      # Outro (OpenRouter)
+    if "url do servidor" in texto:
+        return "https://openrouter.ai/api/v1"
+    if "nome do modelo" in texto:
+        return "openai/gpt-4o-mini"
+    if "cole a chave" in texto:
+        return "chave-certa"            # auto-correcao depois do 401
+    if "chave de acesso" in texto:
+        return ""                       # primeira tentativa: chave vazia
+    if "testar a conexao" in texto:
+        return "s"
+    if "ja esta cadastrado" in texto or "atualizar os dados" in texto:
+        return "s"
+    return default
+
+
+try:
+    _llmmod26.LLM = _LLMAuth28
+    _wiz28.run(ask=_ask28, say=lambda *a: None)
+finally:
+    _llmmod26.LLM = _orig_llm28
+_cfg_disco28 = json.loads(Path(os.environ["BGH_HOME"], "config.json").read_text(encoding="utf-8"))
+ok("assistente: a chave testada com sucesso fica TAMBEM no perfil salvo",
+   _cfg_disco28.get("api" + "_key") == "chave-certa"
+   and _cfg_disco28["profiles"]["outro"].get("api" + "_key") == "chave-certa")
+
+# /modelo tambem tem que atualizar o perfil, senao trocar de provedor desfaz a troca.
+_cfg_mod28 = {
+    "provider": "p1", "base_url": "http://fake/v1", "model": "alpha-model",
+    "api" + "_key": "k", "active_profile": "p1",
+    "profiles": {"p1": {"provider": "p1", "base_url": "http://fake/v1",
+                        "model": "alpha-model", "api" + "_key": "k"}},
+    "context_budget_chars": 60000, "stream": False,
+}
+_sink_mod28 = RecSink()
+_core_mod28 = ChatCore(_cfg_mod28, _sink_mod28, llm=_ListLLM26())
+_core_mod28.submit("/modelo")       # popula a lista (o numero so resolve depois dela)
+_core_mod28.submit("/modelo 2")
+ok("/modelo troca o modelo E o perfil salvo (trocar de provedor nao desfaz mais)",
+   _cfg_mod28["model"] == "beta-model"
+   and _cfg_mod28["profiles"]["p1"]["model"] == "beta-model")
+
+# --- barra de baixo: aviso manda, medidor cede espaco -------------------------
+ok("medidor compacto: 500000 vira 500k e 'mensagens' vira 'msg'",
+   _compact28("contexto: 29% de 500000 chars (88 mensagens)", 40)
+   == "ctx 29% de 500k (88 msg)")
+ok("sem espaco, o medidor sai da barra (o aviso vale mais)",
+   _compact28("contexto: 29% de 500000 chars (88 mensagens)", 5) == "")
+
+_st_grande28 = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0,
+                "ctx": "contexto: 29% de 500000 chars (88 mensagens)", "ctx_pct": 29,
+                "ctx_extra": "", "busy_since": 0.0, "tool": None, "tool_since": 0.0}
+_fr_idle28 = _status_text25(dict(_st_grande28), 100)[0][1]
+ok("parado, janela de 100: medidor + teclas cabem INTEIROS (nada cortado no meio)",
+   len(_fr_idle28) <= 98 and _fr_idle28.endswith("/ajuda")
+   and "ENTER = falar" in _fr_idle28 and "29%" in _fr_idle28)
+
+_st_busy28 = {**_st_grande28, "busy": True, "busy_since": _time28.time() - 12,
+              "tool": "run_python", "tool_since": _time28.time() - 3}
+_estilo_busy28, _fr_busy28 = _status_text25(dict(_st_busy28), 100)[0]
+ok("rodando: 'PARA PARAR' e a ferramenta SEMPRE na barra, medidor so se couber",
+   _estilo_busy28 == "class:footer.hot" and "rodando" in _fr_busy28
+   and "run_python" in _fr_busy28 and "PARA PARAR" in _fr_busy28
+   and len(_fr_busy28) <= 98)
+
+_fr_estreito28 = _status_text25(dict(_st_busy28), 54)[0][1]
+ok("janela muito estreita: o aviso de parar continua inteiro (o medidor sai)",
+   "PARA PARAR" in _fr_estreito28 and len(_fr_estreito28) <= 52)
+
+# --- janela maximizada na abertura -------------------------------------------
+_buf_max28 = _io28.StringIO()
+_orig_osname28 = os.name
+try:
+    os.name = "posix"
+    with _ctxlib26.redirect_stdout(_buf_max28):
+        _max28()
+finally:
+    os.name = _orig_osname28
+ok("abertura pede janela maximizada (sequencia do xterm no Linux/macOS)",
+   _buf_max28.getvalue() == "\x1b[9;0t")
+
+_orig_osname28b = os.name
+os.name = "nt"
+try:
+    _max28()            # sem ctypes.windll aqui: falha silenciosa, nunca derruba
+    _nt_ok28 = True
+except Exception:       # noqa: BLE001
+    _nt_ok28 = False
+finally:
+    os.name = _orig_osname28b
+ok("no Windows a maximizacao usa a API do console e nunca derruba a abertura", _nt_ok28)
+
+# --- onde ficam as coisas (o modelo inventou 'registro do Windows') ----------
+_prompt28 = _prompts26.build_system_prompt([], [], [])
+ok("prompt diz onde ficam as coisas e proibe inventar registro do Windows",
+   "ONDE FICAM AS COISAS" in _prompt28 and ".bgh/config.json" in _prompt28
+   and "registro do Windows" in _prompt28 and "CONFIRA" in _prompt28)
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")
