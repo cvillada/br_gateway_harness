@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.11
+
+O streaming voltou ao normal em provedores cujo gateway recusa campos extras.
+
+- Causa: para contar tokens o TEO passou a enviar `stream_options` (0.2.9). O gateway
+  do nubesbr recusa qualquer campo fora da lista dele com 400 generico, sem citar o
+  nome do campo - e o fallback so removia o campo quando a mensagem citava
+  "stream_options". Resultado: cada rodada anunciava "o servidor nao aceitou a
+  resposta em pedacos" e caia para responder de uma vez, perdendo o streaming.
+- Correcao: se o pedido de streaming falhar, o TEO repete na hora SEM o campo (sem
+  perder o streaming) e memoriza a recusa - nas proximas rodadas o campo nem e
+  enviado. Em provedor que aceita, a contagem de tokens continua funcionando.
+- Limite de uso (429) continua sem retentativa, para nao gastar cota repetindo.
+
 ## 0.2.10
 
 O limite de ferramentas deixou de ser uma parede: se o trabalho esta rendendo, o

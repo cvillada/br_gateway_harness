@@ -174,6 +174,7 @@ class LLM:
         # vao para False quando o servidor rejeita cada recurso (queda em escada)
         self._template_ok = True   # chat_template_kwargs (thinking / thinking_budget)
         self._effort_ok = True     # reasoning_effort
+        self._stream_usage_ok = True  # stream_options (contagem de tokens no stream)
 
     def _record_usage(self, usage) -> None:
         """Guarda a contagem de tokens do pedido (o servidor manda no fim)."""
@@ -200,13 +201,20 @@ class LLM:
     def _create_stream(self, kwargs: dict):
         """Cria o stream pedindo tambem a contagem de tokens.
 
-        Servidor que recusa o campo 'stream_options' perde SO o contador: o
-        pedido segue sem ele (nunca derruba a resposta por causa disso).
+        Servidor (ou gateway, como o do nubesbr) que recusa o campo
+        'stream_options' perde SO o contador - e NUNCA o streaming, porque a
+        pessoa precisa ver o texto chegando. A decisao fica memorizada: depois da
+        primeira recusa o campo nao e mais enviado nesta sessao.
         """
+        if not self._stream_usage_ok:
+            kwargs.pop("stream_options", None)
+            return self.client.chat.completions.create(**kwargs)
         try:
             return self.client.chat.completions.create(**kwargs)
         except Exception as exc:  # noqa: BLE001
-            if "stream_options" in kwargs and "stream_options" in str(exc).lower():
+            # Nao repete em caso de limite de uso/cota (cada tentativa gasta cota).
+            if "stream_options" in kwargs and not _rate_limited(exc):
+                self._stream_usage_ok = False
                 kwargs.pop("stream_options", None)
                 return self.client.chat.completions.create(**kwargs)
             raise

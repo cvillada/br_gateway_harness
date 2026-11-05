@@ -2306,4 +2306,58 @@ _core_n210.submit("oi")
 ok("resposta normal nao ganha aviso nenhum (nada de alarme falso)",
    not any("limite de saida" in l for l in _sink_n210.lines))
 
+# --- gateway que recusa campo extra (nubesbr) nao pode derrubar o STREAMING ----
+_delta_g210 = types.SimpleNamespace(content="oi", reasoning_content=None, tool_calls=None)
+_chunks_g210 = [types.SimpleNamespace(
+    choices=[types.SimpleNamespace(delta=_delta_g210, finish_reason="stop")], usage=None)]
+
+
+class _GatewayChato210:
+    """Recusa campo extra com mensagem generica (nao cita o nome do campo)."""
+
+    def __init__(self):
+        self.chamadas: list[dict] = []
+
+    def create(self, **kwargs):
+        self.chamadas.append(dict(kwargs))
+        if "stream_options" in kwargs:
+            raise Exception("Error code: 400 - parametros nao suportados por este node")
+        return iter(_chunks_g210)
+
+
+_cli_g210 = _GatewayChato210()
+_llm_g210 = _LLM29({"base_url": "https://ia.nubesbr.com/v1/", "model": "m", "max_retries": 0})
+_llm_g210.client = types.SimpleNamespace(chat=types.SimpleNamespace(
+    completions=types.SimpleNamespace(create=_cli_g210.create)))
+_msg_g210 = _llm_g210.chat_stream([{"role": "user", "content": "oi"}])
+ok("gateway que recusa campo extra perde so o CONTADOR (streaming continua)",
+   _msg_g210["content"] == "oi" and len(_cli_g210.chamadas) == 2
+   and "stream_options" in _cli_g210.chamadas[0]
+   and "stream_options" not in _cli_g210.chamadas[1])
+_llm_g210.chat_stream([{"role": "user", "content": "de novo"}])
+ok("depois da recusa, o campo nao e mais enviado (nao paga pedido extra por turno)",
+   len(_cli_g210.chamadas) == 3 and "stream_options" not in _cli_g210.chamadas[2])
+
+# Limite de uso NAO tenta de novo (cada tentativa gasta cota).
+class _CliCota210:
+    def __init__(self):
+        self.chamadas = 0
+
+    def create(self, **kwargs):
+        self.chamadas += 1
+        raise Exception("Error code: 429 - rate limit reached")
+
+
+_cli_c210 = _CliCota210()
+_llm_c210 = _LLM29({"base_url": "https://api.deepseek.com/v1", "model": "m", "max_retries": 0})
+_llm_c210.client = types.SimpleNamespace(chat=types.SimpleNamespace(
+    completions=types.SimpleNamespace(create=_cli_c210.create)))
+try:
+    _llm_c210.chat_stream([{"role": "user", "content": "oi"}])
+    _tipo_c210 = None
+except Exception as exc:  # noqa: BLE001
+    _tipo_c210 = exc
+ok("429 nao ganha retentativa extra por causa do campo de contagem",
+   isinstance(_tipo_c210, _RateErr27) and _cli_c210.chamadas == 1)
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")
