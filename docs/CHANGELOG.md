@@ -18,6 +18,12 @@ TEO continua sozinho ate um teto seguro.
   qualquer rodada.
 - Ajustavel no config.json: `max_tool_rounds` (tamanho da etapa, padrao 20) e
   `max_tool_rounds_teto` (padrao 40).
+- Resposta vazia ou cortada nao fica mais em silencio: quando o modelo gasta o
+  limite de saida pensando (`finish_reason` = length) e volta sem texto, a tela
+  avisa e ensina o caminho (/pensamento low ou max_tokens maior). O aviso antigo
+  so valia para o modo SEM streaming - por isso, com streaming, a tela ficava
+  muda depois da pergunta (visto em maquina Windows com o nubesbr). Resposta
+  cortada no meio agora avisa e sugere "continue".
 
 ## 0.2.9
 

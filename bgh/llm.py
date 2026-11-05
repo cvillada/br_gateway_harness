@@ -168,6 +168,9 @@ class LLM:
         # Tokens que o servidor informou no ULTIMO pedido (entrada/saida/cache).
         # None enquanto nenhum pedido voltou com contagem.
         self.last_usage: dict | None = None
+        # Por que o pedido terminou ("stop", "length" quando o pensamento comeu o
+        # max_tokens, "tool_calls"...). A tela usa isso para avisar em vez de silencio.
+        self.last_finish: str | None = None
         # vao para False quando o servidor rejeita cada recurso (queda em escada)
         self._template_ok = True   # chat_template_kwargs (thinking / thinking_budget)
         self._effort_ok = True     # reasoning_effort
@@ -303,6 +306,7 @@ class LLM:
         if not resp.choices:
             raise LLMError("O modelo respondeu vazio (sem choices).")
         self._record_usage(getattr(resp, "usage", None))
+        self.last_finish = getattr(resp.choices[0], "finish_reason", None)
         msg = resp.choices[0].message
         out = {"role": "assistant", "content": msg.content or ""}
         reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
@@ -457,6 +461,9 @@ class LLM:
                 if should_stop is not None and should_stop():
                     stopped = True  # usuario apertou o botao de parar
                     break
+                if chunk.choices:
+                    self.last_finish = (getattr(chunk.choices[0], "finish_reason", None)
+                                        or self.last_finish)
                 uso = getattr(chunk, "usage", None)
                 if uso is not None:
                     # O stream manda a contagem no ultimo pedaco (choices vazio).

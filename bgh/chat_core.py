@@ -911,13 +911,24 @@ class ChatCore:
                 elif not self.st["resposta"]:
                     self.sink.sep("resposta")
                 self.sink.line(md_clean(answer))
-            if (not answer and answer != STOPPED_NOTE and not self.agent.last_streamed
-                    and not self.st["resposta"]):
-                # Caso medido no servidor: o pensamento comeu todo o max_tokens e o pedido
-                # voltou sem texto. Sem esta linha a pessoa acha que o programa travou.
-                self.sink.line("O modelo terminou sem texto de resposta (apenas pensou). Pergunte "
-                               "de novo ou aumente o limite de saida (max_tokens no config.json).",
-                               style="yellow")
+            if (not answer.strip() and answer != STOPPED_NOTE and not self.st["resposta"]):
+                # Caso medido em maquina de cliente (Windows, streaming ligado): o
+                # modelo gastou todo o max_tokens pensando e voltou sem texto. O aviso
+                # antigo so valia para o modo SEM streaming, entao a tela ficava muda e
+                # a pessoa achava que o TEO tinha travado no meio.
+                if str(getattr(self.llm, "last_finish", "") or "") == "length":
+                    self.sink.line("O modelo gastou o limite de saida pensando e nao sobrou "
+                                   "texto para a resposta. Mande a pergunta de novo, use "
+                                   "/pensamento low ou aumente max_tokens no config.json.",
+                                   style="yellow")
+                else:
+                    self.sink.line("O modelo terminou sem texto de resposta. Mande a pergunta "
+                                   "de novo; se repetir, use /pensamento low.", style="yellow")
+            elif (answer.strip() and answer != STOPPED_NOTE
+                  and str(getattr(self.llm, "last_finish", "") or "") == "length"):
+                # Resposta cortada no meio pelo teto de saida: avisa e ensina a seguir.
+                self.sink.line("(a resposta foi cortada pelo limite de saida; diga "
+                               "'continue' que eu sigo de onde parei)", style="yellow")
             if answer == STOPPED_NOTE:
                 # Turno parado nao emenda as mensagens guardadas: quem mandou parar
                 # decide se quer continuar. Elas sao devolvidas como aviso.

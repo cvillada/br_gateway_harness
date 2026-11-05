@@ -2261,4 +2261,49 @@ _ag_t210.run_turn("tres passos")
 ok("teto de 3 com etapa de 2: prorroga so 1 rodada ('mais 1')",
    any("mais 1" in n for n in _notas_t210) and _llm_t210.com_ferramenta == 3)
 
+# ---------- v0.2.10 (emenda): resposta vazia/cortada nao pode ficar muda ------
+class _FimLLM210:
+    """Modelo fake que termina com o finish_reason pedido (length = max_tokens)."""
+
+    def __init__(self, conteudo="", finish="length"):
+        self.conteudo = conteudo
+        self.finish = finish
+        self.last_finish = finish
+        self.last_usage = None
+
+    def chat_stream(self, messages, tools=None, on_text=None, on_reasoning=None,
+                    should_stop=None):
+        if self.conteudo and on_text:
+            on_text(self.conteudo)
+        self.last_finish = self.finish
+        return {"role": "assistant", "content": self.conteudo}
+
+    def chat(self, messages, tools=None):
+        self.last_finish = self.finish
+        return {"role": "assistant", "content": self.conteudo}
+
+    def summarize(self, text):
+        return ""
+
+
+_cfg_f210: dict = dict(core_cfg)
+_cfg_f210["stream"] = True
+_sink_f210 = RecSink()
+_core_f210 = ChatCore(_cfg_f210, _sink_f210, llm=_FimLLM210("", "length"))
+_core_f210.submit("meca a velocidade")
+ok("resposta vazia COM streaming agora avisa na tela (era o caso do Windows)",
+   any("gastou o limite de saida pensando" in l for l in _sink_f210.lines))
+
+_sink_c210 = RecSink()
+_core_c210 = ChatCore(dict(_cfg_f210), _sink_c210, llm=_FimLLM210("texto cortado", "length"))
+_core_c210.submit("fale bastante")
+ok("resposta cortada pelo limite de saida avisa e ensina o 'continue'",
+   any("cortada pelo limite de saida" in l for l in _sink_c210.lines))
+
+_sink_n210 = RecSink()
+_core_n210 = ChatCore(dict(_cfg_f210), _sink_n210, llm=_FimLLM210("resposta normal", "stop"))
+_core_n210.submit("oi")
+ok("resposta normal nao ganha aviso nenhum (nada de alarme falso)",
+   not any("limite de saida" in l for l in _sink_n210.lines))
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")
