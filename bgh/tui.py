@@ -593,21 +593,25 @@ def run_tui(cfg: dict) -> int:
 def compact_ctx(ctx: str, espaco: int) -> str:
     """Versao curta do medidor de contexto que ainda caiba em 'espaco' colunas.
 
-    'contexto: 29% de 500000 chars (88 mensagens)' -> 'ctx 29% de 500k (88 msg)'.
-    Devolve '' quando nem o mais curto cabe: ai a barra mostra so o aviso, que e
-    o que a pessoa precisa ler naquele momento.
+    'contexto: 80% de 160000 chars (45.71k toks) (102 mensagens)' vira
+    'ctx 80% de 160k (45.71k toks) (102 msg)'. Devolve '' quando nem o mais curto
+    cabe: ai a barra mostra so o aviso, que e o que a pessoa precisa ler.
     """
     texto = str(ctx or "")
-    m = re.match(r"contexto: (\d+)% de (\d+) chars \((\d+) mensagens\)", texto)
+    m = re.match(r"contexto: (\d+)% de (\d+) chars"
+                 r"(?: \((~?[\d.]+[kM]?) toks\))? \((\d+) mensagens\)", texto)
     if not m:
         return texto if len(texto) <= espaco else ""
-    pct, orcamento, msgs = m.group(1), int(m.group(2)), m.group(3)
-    if orcamento >= 1000 and orcamento % 1000 == 0:
-        candidatos = [f"ctx {pct}% de {orcamento // 1000}k ({msgs} msg)",
-                      f"ctx {pct}% de {orcamento // 1000}k",
-                      f"ctx {pct}%"]
-    else:
-        candidatos = [f"ctx {pct}% de {orcamento} ({msgs} msg)", f"ctx {pct}%"]
+    pct, orcamento, toks, msgs = m.group(1), int(m.group(2)), m.group(3), m.group(4)
+    base = (f"{orcamento // 1000}k" if orcamento >= 1000 and orcamento % 1000 == 0
+            else str(orcamento))
+    candidatos = []
+    if toks:
+        candidatos.append(f"ctx {pct}% de {base} ({toks} toks) ({msgs} msg)")
+    candidatos.append(f"ctx {pct}% de {base} ({msgs} msg)")
+    if toks:
+        candidatos.append(f"ctx {pct}% de {base} ({toks} toks)")
+    candidatos.extend([f"ctx {pct}% de {base}", f"ctx {pct}%"])
     for candidato in candidatos:
         if len(candidato) <= max(0, espaco):
             return candidato

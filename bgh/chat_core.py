@@ -18,6 +18,7 @@ from .agent import Agent, STOPPED_NOTE
 from .approvals import Gate
 from .config import CONFIG_PATH, SESSION_FILE, ConfigError, load_config, save_config, sync_profile
 from .llm import LLM, LLMError, LLMRateLimitError
+from .palco import abrevia
 from .setup_wizard import CHARS_POR_TOKEN, FOLGA_LEITURA
 from .tools import files as files_mod
 
@@ -85,10 +86,19 @@ def prepare_console() -> None:
 def ctx_parts(cfg: dict, usage: dict) -> tuple[str, str]:
     """(medidor, extra) separados: a tela decide se o extra cabe na janela.
 
-    Funcao pura (le so cfg/usage): testavel sem instanciar o ChatCore.
+    Funcao pura (le so cfg/usage): testavel sem instanciar o ChatCore. Quando o
+    servidor ja informou os tokens do ultimo pedido, o numero mostrado e o REAL;
+    antes disso e a estimativa de 3,5 caracteres por token, marcada com '~' para
+    ninguem confundir estimativa com contagem do provedor.
     """
-    txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars "
-           f"({usage['messages']} mensagens)")
+    tokens = usage.get("tokens")
+    if tokens:
+        marca = "" if usage.get("tokens_reais") else "~"
+        tok_txt = f" ({marca}{abrevia(tokens)} toks)"
+    else:
+        tok_txt = ""
+    txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars"
+           f"{tok_txt} ({usage['messages']} mensagens)")
     extra = ""
     srv = cfg.get("server_context_tokens")
     if isinstance(srv, (int, float)) and srv > 0:

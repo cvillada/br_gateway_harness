@@ -23,6 +23,10 @@ os eventos reais, nunca um relogio.
   FERRAMENTA fica sem numero porque nao existe contagem propria de ferramenta.
   O palco ainda fica 1,6 segundo na tela depois da resposta para mostrar a
   entrega e os numeros finais (o servidor manda a contagem no fim do pedido).
+- Rodape: o medidor de contexto ganhou a equivalencia em tokens, abreviada -
+  "contexto: 80% de 160000 chars (45.71k toks) (102 mensagens)". Depois do
+  primeiro pedido o numero e o que o servidor contou; antes disso e a estimativa
+  de 3,5 caracteres por token, marcada com "~" para nao confundir as duas.
 
 ## 0.2.8
 
