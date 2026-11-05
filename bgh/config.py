@@ -80,10 +80,12 @@ DEFAULTS = {
     # com 262144 tokens), o TEO limita o proprio uso para a leitura nao virar espera
     # de minutos na maquina do usuario. Ajustavel; /ctx subiu alem daqui por escolha.
     "context_auto_cap_chars": 160000,
-    # Rodadas de ferramenta por turno. 12 deixava pesquisa/redacao longa cair no
-    # fechamento no meio do trabalho; 20 comporta sessao pesada. O anti-loop real
-    # e outro (chamada identica 3x e 5 falhas em sequencia fecham antes disso).
+    # Rodadas de ferramenta por ETAPA do turno. 12 deixava pesquisa/redacao longa
+    # cair no fechamento no meio do trabalho; 20 comporta sessao pesada. Ao chegar
+    # na etapa, se o turno esta progredindo o TEO prorroga sozinho ate o teto
+    # (max_tool_rounds_teto) - nao e parede, mas tambem nao vira loop sem fim.
     "max_tool_rounds": 20,
+    "max_tool_rounds_teto": 40,
     # Padroes aprovados com 'always' no prompt de comando perigoso
     # (texto exato ou glob estilo shell; igual ao command_allowlist do Hermes).
     "command_allowlist": [],

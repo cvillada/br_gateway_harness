@@ -2186,4 +2186,79 @@ ok("palco mostra a entrega por 1,6s depois do turno e depois some",
 ok("palco desligado no /palco desliga nao aparece nem com pedido em curso",
    _palco29.visivel(False, "pedido", True, 0.0, 100.0) is False)
 
+# ---------- v0.2.10: limite de ferramentas prorroga sozinho ate o teto ----------
+class _SempreFerramenta210:
+    """Modelo que sempre pede uma ferramenta DIFERENTE (nunca repete chamada)."""
+
+    def __init__(self):
+        self.n = 0
+        self.com_ferramenta = 0
+
+    def chat(self, messages, tools=None):
+        if tools is None:
+            return {"role": "assistant", "content": "resposta final"}
+        self.n += 1
+        self.com_ferramenta += 1
+        return {"role": "assistant", "content": "", "tool_calls": [{
+            "id": f"c{self.n}", "type": "function",
+            "function": {"name": "run_command",
+                         "arguments": json.dumps({"command": f"echo passo {self.n}"})}}]}
+
+    def summarize(self, text):
+        return ""
+
+
+class _FerramentaQuebrada210(_SempreFerramenta210):
+    """Sempre pede uma ferramenta que NAO existe: todo resultado vira ERRO."""
+
+    def chat(self, messages, tools=None):
+        if tools is None:
+            return {"role": "assistant", "content": "resposta final"}
+        self.n += 1
+        self.com_ferramenta += 1
+        return {"role": "assistant", "content": "", "tool_calls": [{
+            "id": f"c{self.n}", "type": "function",
+            "function": {"name": "ferramenta_que_nao_existe",
+                         "arguments": json.dumps({"tentativa": self.n})}}]}
+
+
+_cfg_l210: dict = dict(core_cfg)
+_cfg_l210.update({"max_tool_rounds": 2, "max_tool_rounds_teto": 4, "stream": False})
+_llm_l210 = _SempreFerramenta210()
+_ag_l210 = _Agent26(_cfg_l210, _llm_l210, Gate(dict(_cfg_l210), ask_d))
+_notas_l210: list[str] = []
+_ag_l210.on_note = _notas_l210.append
+_resp_l210 = _ag_l210.run_turn("faca varias coisas")
+ok("limite de 2 ferramentas RENOVA sozinho quando o turno esta progredindo",
+   any("vou continuar por mais 2" in n for n in _notas_l210))
+ok("prorrogacao para no teto (2 -> 4) e nao vira loop infinito",
+   _llm_l210.com_ferramenta == 4 and _resp_l210 == "resposta final")
+ok("ao bater o teto a tela avisa e a instrucao ensina a continuar",
+   any("Parei em 4 ferramentas" in n for n in _notas_l210)
+   and any("continue" in str(m.get("content", "")) for m in _ag_l210.messages))
+
+# Sem progresso (tudo falhando) NAO prorroga: fecha na primeira etapa.
+_cfg_r210: dict = dict(core_cfg)
+_cfg_r210.update({"max_tool_rounds": 2, "max_tool_rounds_teto": 10, "stream": False})
+_llm_r210 = _FerramentaQuebrada210()
+_ag_r210 = _Agent26(_cfg_r210, _llm_r210, Gate(dict(_cfg_r210), ask_d))
+_notas_r210: list[str] = []
+_ag_r210.on_note = _notas_r210.append
+_resp_r210 = _ag_r210.run_turn("quebre tudo")
+ok("turno que so falha NAO prorroga (fecha na etapa, sem gastar mais)",
+   _llm_r210.com_ferramenta == 2
+   and not any("vou continuar" in n for n in _notas_r210)
+   and _resp_r210 == "resposta final")
+
+# Teto menor que o dobro: a prorrogacao respeita o numero exato do config.
+_cfg_t210: dict = dict(core_cfg)
+_cfg_t210.update({"max_tool_rounds": 2, "max_tool_rounds_teto": 3, "stream": False})
+_llm_t210 = _SempreFerramenta210()
+_ag_t210 = _Agent26(_cfg_t210, _llm_t210, Gate(dict(_cfg_t210), ask_d))
+_notas_t210: list[str] = []
+_ag_t210.on_note = _notas_t210.append
+_ag_t210.run_turn("tres passos")
+ok("teto de 3 com etapa de 2: prorroga so 1 rodada ('mais 1')",
+   any("mais 1" in n for n in _notas_t210) and _llm_t210.com_ferramenta == 3)
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

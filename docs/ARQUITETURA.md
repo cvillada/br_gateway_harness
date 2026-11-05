@@ -34,7 +34,8 @@ bgh/
 
 1. UI (tui ou classico) entrega a linha digitada ao `ChatCore.submit`.
 2. Comandos com barra/atalhos sao resolvidos localmente; senao, `Agent.run_turn`.
-3. `run_turn` roda ate `max_tool_rounds`: modelo -> tool_calls -> `ToolBox.dispatch`
+3. `run_turn` roda em etapas de `max_tool_rounds` (prorrogando ate
+   `max_tool_rounds_teto` enquanto o turno progride): modelo -> tool_calls -> `ToolBox.dispatch`
    (cada ferramenta passa pelo `Gate`) -> resultados -> modelo ate a resposta final.
 4. Streaming: `llm.chat_stream` empurra pedacos de texto/pensamento para a UI ao vivo.
 5. Contexto acima do orcamento: `Agent._maybe_compress` resume a parte antiga.

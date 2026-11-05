@@ -98,11 +98,14 @@ class Agent:
         self.last_compressed = False
         self.stop_event.clear()
         self.messages.append({"role": "user", "content": user_text})
-        max_rounds = int(self.cfg.get("max_tool_rounds", 12))
+        max_rounds = max(1, int(self.cfg.get("max_tool_rounds", 20)))   # tamanho da etapa
+        teto = max(max_rounds,
+                   int(self.cfg.get("max_tool_rounds_teto", max_rounds * 2)))
+        limite = max_rounds
         rounds = 0
         sig_count: dict[str, int] = {}   # anti-loop: chamadas identicas sao contadas
         fail_streak = 0                  # anti-loop: erros em sequencia fecham a janela
-        while rounds < max_rounds:
+        while rounds < limite:
             if self.stop_event.is_set():
                 self._save_session()
                 return STOPPED_NOTE
@@ -189,6 +192,28 @@ class Agent:
                     "caminho e responda em portugues ao usuario: o que foi tentado, o que travou "
                     "e o que ele pode fazer.)"
                 )
+            if rounds >= limite:
+                # Limite da etapa: se o turno esta PROGREDINDO, prorroga sozinho ate o
+                # teto (nao e parede, mas tambem nao vira loop infinito). Sem progresso
+                # (falha/loop na ultima rodada), fecha como antes.
+                if fail_streak == 0 and limite < teto:
+                    novo = min(limite + max_rounds, teto)
+                    self._note(
+                        f"Ja usei {limite} ferramentas neste pedido; vou continuar por "
+                        f"mais {novo - limite} (CTRL+C ou ESC para parar)."
+                    )
+                    limite = novo
+                else:
+                    break
+        if limite >= teto:
+            self._note(f"Parei em {limite} ferramentas para nao gastar demais; "
+                       "vou responder com o que ja coletei.")
+            return self._close_window(
+                f"(voce chegou ao teto de {limite} ferramentas deste turno. Responda em "
+                "portugues com o que ja coletou, sem prometer acao futura, e termine a "
+                "resposta dizendo ao usuario que ele pode escrever 'continue' para voce "
+                "seguir de onde parou.)"
+            )
         # Estourou o limite de rodadas: fecha a janela pedindo resposta com o que tem.
         self._note("Limite de ferramentas deste turno atingido; vou responder com o que ja coletei.")
         return self._close_window(

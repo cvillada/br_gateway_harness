@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.10
+
+O limite de ferramentas deixou de ser uma parede: se o trabalho esta rendendo, o
+TEO continua sozinho ate um teto seguro.
+
+- Ao chegar em 20 ferramentas num mesmo pedido, se o turno esta progredindo
+  (nenhuma falha em sequencia), o TEO avisa na tela - "ja usei 20 ferramentas
+  neste pedido; vou continuar por mais 20 (CTRL+C ou ESC para parar)" - e segue
+  trabalhando sozinho.
+- Teto de 40 por pedido. Ao chegar nele, responde com o que ja tem e avisa que a
+  pessoa pode escrever "continue" para seguir de onde parou.
+- Se o turno estiver falhando, NAO prorroga: fecha na etapa, como antes. As duas
+  travas antigas continuam valendo (chamada identica 3 vezes e 5 falhas seguidas)
+  e sao elas que impedem loop de verdade.
+- Nada de loop infinito: o teto e sempre respeitado e CTRL+C/ESC interrompe em
+  qualquer rodada.
+- Ajustavel no config.json: `max_tool_rounds` (tamanho da etapa, padrao 20) e
+  `max_tool_rounds_teto` (padrao 40).
+
 ## 0.2.9
 
 O TEO passa a mostrar, enquanto trabalha, o caminho do pedido - e o desenho segue
