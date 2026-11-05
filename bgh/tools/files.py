@@ -80,6 +80,33 @@ def human_size(n: int) -> str:
     return f"{n} B"
 
 
+def entries(path: str) -> tuple[list[str], list[str], str | None]:
+    """(pastas, arquivos, erro) da pasta - dados para MENU, sem formatacao.
+
+    Usado pelo menu numerado de escolha de pasta/arquivo (tela fixa): o publico do
+    TEO nao deve digitar caminho. Ordem alfabetica, ocultos de fora, teto de 200.
+    """
+    root = _expand(path)
+    if not root.is_dir():
+        return [], [], f"Nao encontrei a pasta: {root}"
+    pastas: list[str] = []
+    arquivos: list[str] = []
+    try:
+        for e in os.scandir(root):
+            if e.name.startswith("."):
+                continue
+            try:
+                if e.is_dir():
+                    pastas.append(e.name)
+                else:
+                    arquivos.append(e.name)
+            except OSError:
+                continue
+    except OSError as exc:
+        return [], [], f"ERRO ao ler a pasta {root}: {exc}"
+    return sorted(pastas)[:200], sorted(arquivos)[:200], None
+
+
 def list_dir(path: str, files_only: bool = False) -> str:
     """Listagem amigavel para os atalhos '/' e '@' do chat (pastas primeiro, ocultos de fora)."""
     root = _expand(path)

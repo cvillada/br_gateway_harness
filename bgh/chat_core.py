@@ -139,9 +139,9 @@ CAT_ART = (
 
 HELP_SECTIONS = [
     ("Atalhos rapidos (nao precisam de permissao):", [
-        ("/", "lista a pasta atual (pastas e arquivos)"),
+        ("/", "tela fixa: menu da pasta atual (escolhe por numero); modo simples: lista"),
         ("/ <pasta> ou /ls <pasta>", "lista uma pasta especifica"),
-        ("@", "lista so os arquivos da pasta atual"),
+        ("@", "tela fixa: menu de arquivos para anexar; modo simples: lista os arquivos"),
         ("@<arquivo>", "anexa um arquivo; depois faca sua pergunta sobre ele"),
     ]),
     ("Parar e reler:", [
@@ -561,6 +561,54 @@ class ChatCore:
         self._ask_thinking_level()
         return "continue"
 
+    # ----- menu de arquivos (tela fixa) ----------------------------------------
+    MENU_MAX = 18  # itens por menu: numero alto demais nao se acha na tela
+
+    def _escolher_caminho(self, inicio: str, somente_arquivos: bool = False) -> str | None:
+        """Menu numerado de pastas/arquivos: navega e devolve o arquivo escolhido.
+
+        Motivo (pedido do usuario): pessoa idosa ou crianca nao deve digitar
+        caminho. Escolher uma pasta entra nela e mostra o conteudo; escolher um
+        arquivo devolve o caminho; 'sair' (ou ESC) devolve None e nada muda.
+        """
+        atual = os.path.abspath(os.path.expanduser(inicio) or os.getcwd())
+        while True:
+            pastas, arquivos, erro = files_mod.entries(atual)
+            if erro:
+                self.sink.line(erro, style="yellow")
+                return None
+            opcoes: list[str] = ["cancelar (voltar para a conversa)"]
+            alvos: list[str | None] = [None]
+            pai = os.path.dirname(atual.rstrip(os.sep))
+            if pai and pai != atual:
+                opcoes.append(".. (voltar uma pasta)")
+                alvos.append(pai)
+            if not somente_arquivos:
+                for nome in pastas[:self.MENU_MAX]:
+                    opcoes.append(f"[{nome}]")
+                    alvos.append(os.path.join(atual, nome))
+            for nome in arquivos[:self.MENU_MAX]:
+                opcoes.append(nome)
+                alvos.append(os.path.join(atual, nome))
+            if (not somente_arquivos and len(pastas) > self.MENU_MAX) or (
+                    len(arquivos) > self.MENU_MAX):
+                opcoes.append("... (tem mais; use /ls <pasta> para ver tudo)")
+                alvos.append(None)
+            escolha = self.sink.ask_choice(
+                "ESCOLHER ARQUIVO" if somente_arquivos else "ABRIR PASTA OU ARQUIVO",
+                f"Pasta atual: {atual}",
+                opcoes,
+            )
+            if escolha not in opcoes:
+                return None
+            alvo = alvos[opcoes.index(escolha)]
+            if alvo is None:
+                return None
+            if os.path.isdir(alvo):
+                atual = alvo
+                continue
+            return alvo
+
     # ----- turno -----------------------------------------------------------------
     def submit(self, text: str) -> str:
         """Processa uma linha digitada. Devolve 'continue' ou 'exit'."""
@@ -568,12 +616,18 @@ class ChatCore:
         if not text:
             return "continue"
 
-        # Atalho @ : listar arquivos ou anexar arquivo.
+        # Atalho @ : menu de arquivos (tela fixa) ou lista de arquivos.
         if text.startswith("@"):
             arg = text[1:].strip()
             if not arg:
-                self.sink.line(files_mod.list_dir(os.getcwd(), files_only=True))
-                return "continue"
+                if getattr(self.sink, "menu_arquivos", False):
+                    # Menu numerado: escolher o arquivo e anexar, sem digitar caminho.
+                    arg = self._escolher_caminho(os.getcwd(), somente_arquivos=True) or ""
+                    if not arg:
+                        return "continue"
+                else:
+                    self.sink.line(files_mod.list_dir(os.getcwd(), files_only=True))
+                    return "continue"
             target = Path(os.path.expanduser(arg))
             if target.is_dir():
                 self.sink.line(files_mod.list_dir(str(target), files_only=True))
@@ -592,9 +646,21 @@ class ChatCore:
                 self.sink.line(f"Nao encontrei esse arquivo: {target}")
             return "continue"
 
-        # Atalho / e /ls : listar pastas.
+        # Atalho / e /ls : menu da pasta (tela fixa) ou listagem.
         if text in ("/", "/ls") or text.startswith("/ls ") or text.startswith("/ "):
             alvo = (text[3:] if text.startswith("/ls") else text[1:]).strip()
+            if not alvo and getattr(self.sink, "menu_arquivos", False):
+                # Menu numerado: navegar por numero e escolher o arquivo.
+                escolhido = self._escolher_caminho(os.getcwd())
+                if escolhido and os.path.isfile(escolhido):
+                    try:
+                        tamanho = files_mod.human_size(os.path.getsize(escolhido))
+                    except OSError:
+                        tamanho = "?"
+                    self.sink.line(f"arquivo: {escolhido} ({tamanho})")
+                    self.sink.line("(para mandar o conteudo ao TEO, digite @ e escolha "
+                                   "o arquivo no menu)", style="dim")
+                return "continue"
             alvo = os.path.expanduser(alvo) if alvo else os.getcwd()
             self.sink.line(files_mod.list_dir(alvo))
             return "continue"

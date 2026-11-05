@@ -2104,4 +2104,72 @@ _uso_com29 = _ag_med29.ctx_usage()
 ok("depois de um pedido, o medidor passa a usar o numero real",
    _uso_com29["tokens_reais"] is True and _uso_com29["tokens"] == 1234)
 
+# ---------- emenda 3 da 0.2.9: menu numerado de pasta/arquivo ---------------
+import tempfile as _tmp29
+
+class _SinkMenu29(RecSink):
+    """Sink de tela fixa: sabe abrir menu e devolve as escolhas do roteiro."""
+
+    menu_arquivos = True
+
+    def __init__(self, escolhas):
+        super().__init__()
+        self.escolhas = list(escolhas)
+        self.menus: list[list[str]] = []
+
+    def ask_choice(self, title, label, options):
+        self.menus.append([str(o) for o in options])
+        return self.escolhas.pop(0) if self.escolhas else options[-1]
+
+
+_base29 = Path(_tmp29.mkdtemp(prefix="menu29_"))
+(_base29 / "pasta_a").mkdir()
+(_base29 / "pasta_b").mkdir()
+(_base29 / "nota.txt").write_text("conteudo de teste", encoding="utf-8")
+
+_sink_m29 = _SinkMenu29(["nota.txt"])
+_cfg_m29: dict = dict(core_cfg)
+_cfg_m29["stream"] = False
+_core_m29 = ChatCore(_cfg_m29, _sink_m29, llm=_ListLLM26())
+_orig_cwd29 = os.getcwd()
+os.chdir(_base29)
+try:
+    _core_m29.submit("@")
+finally:
+    os.chdir(_orig_cwd29)
+ok("'@' na tela fixa abre MENU de arquivos (em vez de so imprimir a lista)",
+   bool(_sink_m29.menus) and "nota.txt" in _sink_m29.menus[0]
+   and "[pasta_a]" not in _sink_m29.menus[0])
+ok("escolher o arquivo no menu ANEXA (o conteudo vai para a proxima pergunta)",
+   _core_m29.pending_attach is not None and "conteudo de teste" in _core_m29.pending_attach)
+
+_sink_m29b = _SinkMenu29(["[pasta_a]", "sair da escolha"])
+_core_m29b = ChatCore(dict(_cfg_m29), _sink_m29b, llm=_ListLLM26())
+os.chdir(_base29)
+try:
+    _core_m29b.submit("/")
+finally:
+    os.chdir(_orig_cwd29)
+ok("'/' na tela fixa abre o menu da pasta com pastas E arquivos",
+   bool(_sink_m29b.menus) and "[pasta_a]" in _sink_m29b.menus[0]
+   and "[pasta_b]" in _sink_m29b.menus[0] and "nota.txt" in _sink_m29b.menus[0])
+ok("escolher uma pasta ENTRA nela (menu seguinte mostra o conteudo dela)",
+   len(_sink_m29b.menus) > 1
+   and ".. (voltar uma pasta)" in _sink_m29b.menus[1]
+   and "cancelar (voltar para a conversa)" in _sink_m29b.menus[1])
+ok("menu de arquivos: opcao 1 e CANCELAR (Enter/ESC nunca escolhem por engano)",
+   _sink_m29.menus[0][0] == "cancelar (voltar para a conversa)"
+   and _sink_m29b.menus[0][0] == "cancelar (voltar para a conversa)")
+
+# Modo simples (sem menu) continua listando: nada de menu em script/pipe.
+_sink_lista29 = RecSink()
+_core_lista29 = ChatCore(dict(_cfg_m29), _sink_lista29, llm=_ListLLM26())
+os.chdir(_base29)
+try:
+    _core_lista29.submit("/")
+finally:
+    os.chdir(_orig_cwd29)
+ok("sem tela fixa, '/' continua so listando (script e pipe nao param em menu)",
+   any("pasta:" in linha for linha in _sink_lista29.lines))
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

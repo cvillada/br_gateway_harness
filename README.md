@@ -218,9 +218,10 @@ Atalhos rapidos (nao perguntam licenca, so mostram):
 
 | Atalho | O que faz |
 |--------|-----------|
-| `/` ou `/ls <pasta>` | lista pastas e arquivos |
-| `@` | lista so os arquivos da pasta atual |
+| `/` | na tela fixa abre o menu da pasta atual (escolhe por numero); no modo simples, lista |
+| `@` | na tela fixa abre o menu de arquivos para anexar; no modo simples, lista os arquivos |
 | `@<arquivo>` | anexa o arquivo; depois e so perguntar sobre ele |
+| `/ls <pasta>` | lista uma pasta especifica (sem menu) |
 
 Comandos:
 

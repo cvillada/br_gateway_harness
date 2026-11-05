@@ -30,6 +30,13 @@ os eventos reais, nunca um relogio.
   e a estimativa de 3,5 caracteres por token, marcada com "~". Em janela estreita
   vira "ctx 27% de 250k (19.34k/71.43k toks) (102 msg)".
 
+- Menu numerado de pasta e arquivo: na tela fixa, `/` abre o menu da pasta atual
+  (escolher uma pasta entra nela; escolher um arquivo mostra nome e tamanho) e
+  `@` abre o menu de arquivos para anexar. Nada de digitar caminho - a pessoa
+  escolhe pelo numero, como no menu de licenca. A opcao 1 e sempre "cancelar",
+  entao Enter ou ESC nunca escolhem nada por engano. Em script/pipe continua
+  listando como antes (menu so onde ha tela).
+
 ## 0.2.8
 
 O TEO avisa em palavra simples quando o provedor pede para esperar, e a entrega

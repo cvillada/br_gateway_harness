@@ -163,6 +163,9 @@ STYLE = Style.from_dict(
 class TuiSink:
     """Affiche do Motor: tudo vira texto colorido no historico do terminal."""
 
+    # A tela fixa sabe abrir menu numerado de pastas/arquivos (o nucleo pergunta).
+    menu_arquivos = True
+
     def __init__(self, emit, close_line, state, width_fn=None):
         self.emit = emit
         self.close_line = close_line
@@ -282,11 +285,11 @@ class TuiSink:
         self.line(label)
         for i, opt in enumerate(options, start=1):
             self.line(f"  [{i}] {opt}")
-        self.line("(Enter sozinho = [1] manter; ESC tambem mantem)")
+        self.line("(Enter sozinho = [1]; ESC tambem escolhe [1])")
         ev = threading.Event()
         holder = {"codes": options, "choice": options[0], "ev": ev,
                   "deny_code": options[0],
-                  "hot": "OPCAO PENDENTE: digite o numero e ENTER (ESC = manter)"}
+                  "hot": "OPCAO PENDENTE: digite o numero e ENTER (ESC = [1])"}
         self.state["approval"] = holder
         self.emit("", newline=False)  # forca o repaint da barra
         ev.wait()
