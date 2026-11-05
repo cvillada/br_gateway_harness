@@ -197,7 +197,9 @@ terminal, e terminal que nao aceita simplesmente mantem o tamanho que estava.
 Ao mandar uma pergunta, aparece por alguns instantes a trilha do pedido acima da
 linha de digitar: START -> AGENTE -> FERRAMENTA -> MODELO -> TELA. A etapa acesa e a
 que esta com o pedido naquele momento, com o tempo real ao lado, e a trilha recolhe
-quando a resposta chega. Para desligar: `/palco desliga`.
+quando a resposta chega. Abaixo das etapas ficam os tokens de cada pedaco
+(entrada sob AGENTE, saida sob MODELO, total sob TELA), abreviados: 800, 2.00k,
+1.20M. Para desligar: `/palco desliga`.
 
 Parar e reler (pensado para idoso e crianca - um toque so):
 

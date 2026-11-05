@@ -165,9 +165,48 @@ class LLM:
         )
         # Aviso para a tela (ex.: "o servidor demorou; tentei sem streaming").
         self.on_note: Callable[[str], None] | None = None
+        # Tokens que o servidor informou no ULTIMO pedido (entrada/saida/cache).
+        # None enquanto nenhum pedido voltou com contagem.
+        self.last_usage: dict | None = None
         # vao para False quando o servidor rejeita cada recurso (queda em escada)
         self._template_ok = True   # chat_template_kwargs (thinking / thinking_budget)
         self._effort_ok = True     # reasoning_effort
+
+    def _record_usage(self, usage) -> None:
+        """Guarda a contagem de tokens do pedido (o servidor manda no fim)."""
+        if usage is None:
+            return
+        entrada = getattr(usage, "prompt_tokens", None)
+        saida = getattr(usage, "completion_tokens", None)
+        if entrada is None and saida is None:
+            return
+        cache = 0
+        detalhes = getattr(usage, "prompt_tokens_details", None)
+        if detalhes is not None:
+            try:
+                cache = int(getattr(detalhes, "cached_tokens", 0) or 0)
+            except (TypeError, ValueError):
+                cache = 0
+        try:
+            self.last_usage = {"entrada": int(entrada or 0), "saida": int(saida or 0),
+                               "cache": cache}
+        except (TypeError, ValueError):
+            pass
+
+
+    def _create_stream(self, kwargs: dict):
+        """Cria o stream pedindo tambem a contagem de tokens.
+
+        Servidor que recusa o campo 'stream_options' perde SO o contador: o
+        pedido segue sem ele (nunca derruba a resposta por causa disso).
+        """
+        try:
+            return self.client.chat.completions.create(**kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if "stream_options" in kwargs and "stream_options" in str(exc).lower():
+                kwargs.pop("stream_options", None)
+                return self.client.chat.completions.create(**kwargs)
+            raise
 
     def _note(self, text: str) -> None:
         if self.on_note is not None:
@@ -263,6 +302,7 @@ class LLM:
         resp = self._create(kwargs)
         if not resp.choices:
             raise LLMError("O modelo respondeu vazio (sem choices).")
+        self._record_usage(getattr(resp, "usage", None))
         msg = resp.choices[0].message
         out = {"role": "assistant", "content": msg.content or ""}
         reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
@@ -385,6 +425,8 @@ class LLM:
             "temperature": float(self.cfg.get("temperature", 0.3)),
             "max_tokens": int(self.cfg.get("max_tokens", 2048)),
             "stream": True,
+            # Contador de tokens no fim do stream (o palco mostra por etapa).
+            "stream_options": {"include_usage": True},
         }
         if tools:
             kwargs["tools"] = tools
@@ -392,7 +434,7 @@ class LLM:
         self._apply_thinking(kwargs)
         t0 = time.time()
         try:
-            resp = self.client.chat.completions.create(**kwargs)
+            resp = self._create_stream(kwargs)
         except Exception as exc:  # noqa: BLE001
             if _rate_limited(exc):
                 # Nao adianta cair para o modo sem streaming: o pedido seguinte
@@ -415,6 +457,10 @@ class LLM:
                 if should_stop is not None and should_stop():
                     stopped = True  # usuario apertou o botao de parar
                     break
+                uso = getattr(chunk, "usage", None)
+                if uso is not None:
+                    # O stream manda a contagem no ultimo pedaco (choices vazio).
+                    self._record_usage(uso)
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta

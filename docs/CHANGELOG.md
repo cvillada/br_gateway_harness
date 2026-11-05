@@ -17,6 +17,12 @@ os eventos reais, nunca um relogio.
 - Janela estreita (menos de 70 colunas): a trilha vira uma unica linha no rodape
   do palco, para nao tomar 4 linhas da conversa.
 - ASCII puro: terminal de Windows com fonte raster desenha igual, sem emoji.
+- Tokens por etapa: embaixo de AGENTE aparece o que o modelo leu (entrada),
+  embaixo de MODELO o que ele escreveu (saida) e embaixo de TELA o total, sempre
+  abreviado (800, 2.00k, 1.20M). Sao os numeros que o proprio servidor informa;
+  FERRAMENTA fica sem numero porque nao existe contagem propria de ferramenta.
+  O palco ainda fica 1,6 segundo na tela depois da resposta para mostrar a
+  entrega e os numeros finais (o servidor manda a contagem no fim do pedido).
 
 ## 0.2.8
 

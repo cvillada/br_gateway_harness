@@ -95,6 +95,50 @@ def _segundos(desde, agora) -> int:
         return 0
 
 
+def abrevia(valor) -> str:
+    """Numero de tokens curto e padronizado: 800, 2.00k, 1.20M."""
+    try:
+        n = max(0, int(valor or 0))
+    except (TypeError, ValueError):
+        return "0"
+    if n < 1000:
+        return str(n)
+    if n < 1_000_000:
+        return f"{n / 1000:.2f}k"
+    return f"{n / 1_000_000:.2f}M"
+
+
+def linha_tokens(state: dict, limite: int) -> str:
+    """Numeros de token centrados embaixo das etapas (o que o servidor informou).
+
+    Entrada fica sob AGENTE, saida sob MODELO e o total sob TELA. A FERRAMENTA
+    nao recebe numero: nao existe contagem propria de ferramenta - o resultado
+    dela entra na proxima entrada. Melhor vazio do que um numero inventado.
+    """
+    uso = state.get("tokens") or {}
+    entrada = int(uso.get("entrada") or 0)
+    saida = int(uso.get("saida") or 0)
+    if not entrada and not saida:
+        return ""
+    valores: list[tuple[str, str]] = []
+    if entrada:
+        valores.append(("agente", abrevia(entrada)))
+    if saida:
+        valores.append(("modelo", abrevia(saida)))
+    if entrada and saida:
+        valores.append(("tela", abrevia(entrada + saida)))
+    grade = [" "] * max(int(limite), 1)
+    for chave, texto in valores:
+        coluna, largura = POSICOES.get(chave, (0, len(texto)))
+        inicio = coluna + max(0, (largura - len(texto)) // 2)
+        if inicio + len(texto) > len(grade):
+            inicio = max(0, len(grade) - len(texto))
+        for i, caractere in enumerate(texto):
+            if inicio + i < len(grade):
+                grade[inicio + i] = caractere
+    return "".join(grade).rstrip()
+
+
 def resumo(state: dict, agora: float) -> str:
     """Uma linha com o estado real: fase, ferramenta (com tempo) e turno."""
     fase = state.get("fase") or "pedido"
@@ -109,14 +153,23 @@ def resumo(state: dict, agora: float) -> str:
 def stage_rows(state: dict, width: int, agora: float, frame: int = 0) -> list:
     """Uma lista de fragmentos por LINHA do palco (formato facil de testar).
 
-    Devolve 4 linhas em janela larga e 1 linha em janela estreita. Sempre cabe na
-    largura pedida: linha que embrulha vira lixo visual.
+    Devolve 5 linhas em janela larga (trilha, marcador, tokens, detalhes, folga) e
+    1 linha em janela estreita. Sempre cabe na largura pedida: linha que embrulha
+    vira lixo visual.
     """
     fase = state.get("fase") or "pedido"
     limite = max(10, int(width) - 2)
 
     if int(width) < MIN_WIDTH:
-        return [[("class:palco.dim", _corta("  > " + resumo(state, agora), limite))]]
+        fase_txt = FASE_TEXTO.get(fase, fase)
+        partes_n: list[str] = [fase_txt]
+        uso = state.get("tokens") or {}
+        if uso:
+            partes_n.append(f"{abrevia(uso.get('entrada'))}/{abrevia(uso.get('saida'))} tk")
+        ferramenta_n = state.get("tool")
+        if ferramenta_n:
+            partes_n.append(f"{ferramenta_n} {_segundos(state.get('tool_since'), agora)}s")
+        return [[("class:palco.dim", _corta("  > " + " | ".join(partes_n), limite))]]
 
     etapa = FASE_ETAPA.get(fase, "agente")
     coluna, largura_rotulo = POSICOES.get(etapa, (2, 6))
@@ -129,6 +182,7 @@ def stage_rows(state: dict, width: int, agora: float, frame: int = 0) -> list:
     return [
         _corta_frags(trilha, limite),
         [("class:palco.on", _corta(" " * coluna + marca, limite))],
+        [("class:palco.tk", linha_tokens(state, limite))],
         [("class:palco.dim", _corta("  " + resumo(state, agora), limite))],
         [("class:palco.dim", "")],
     ]

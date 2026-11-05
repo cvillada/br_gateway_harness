@@ -29,6 +29,9 @@ class Agent:
         self.last_reasoning: list[str] = []
         self.last_compressed = False
         self.last_streamed = False
+        # Tokens que o servidor informou no ultimo pedido (o palco mostra por etapa).
+        self.last_usage: dict | None = None
+        self.on_usage: Callable[[dict | None], None] | None = None
         self.on_text_delta = None      # callback(pedaco_de_texto) para streaming na UI
         self.on_reasoning_delta = None # callback(pedaco_de_pensamento)
         # Avisos do proprio agente (compactando, estouro de contexto) viram linha na tela.
@@ -124,6 +127,7 @@ class Agent:
                         "Reduza o limite aqui na tela: /ctx 60000"
                     ) from exc
             self.last_streamed = use_stream
+            self._usage_note()
             self.messages.append(msg)
             if msg.get("stopped"):
                 # Usuario parou no meio do streaming; o parcial fica guardado.
@@ -213,6 +217,7 @@ class Agent:
             # O fechamento tambem pode esbarrar no tamanho: compacta e fecha no modo normal.
             self._force_compress()
             final = self.llm.chat(self.messages)
+        self._usage_note()
         self.messages.append(final)
         self._save_session()
         return final.get("content", "")
@@ -250,6 +255,16 @@ class Agent:
             try:
                 self.on_note(text)
             except Exception:  # noqa: BLE001 - aviso nunca derruba o turno
+                pass
+
+    def _usage_note(self) -> None:
+        """Repassa a contagem de tokens do ultimo pedido para a tela."""
+        uso = getattr(self.llm, "last_usage", None)
+        self.last_usage = uso
+        if self.on_usage is not None:
+            try:
+                self.on_usage(uso)
+            except Exception:  # noqa: BLE001 - contador nunca derruba o turno
                 pass
 
     def steer(self, text: str) -> None:

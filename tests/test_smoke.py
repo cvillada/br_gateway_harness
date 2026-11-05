@@ -1935,15 +1935,15 @@ def _txt29(linha) -> str:
     return linha[1] if isinstance(linha, tuple) else "".join(t for _s, t in linha)
 
 
-ok("palco largo: 4 linhas com a trilha completa (start ate tela)",
-   len(_linhas29) == 4 and "[START]" in _txt29(_linhas29[0])
+ok("palco largo: 5 linhas com a trilha completa (start ate tela)",
+   len(_linhas29) == 5 and "[START]" in _txt29(_linhas29[0])
    and "[TELA]" in _txt29(_linhas29[0]))
 _coluna29 = _txt29(_linhas29[1]).find("^")
 ok("marcador fica exatamente sob a etapa em que o pedido esta",
    _coluna29 > 0
    and _txt29(_linhas29[0])[_coluna29:_coluna29 + len("[FERRAMENTA]")] == "[FERRAMENTA]")
 ok("palco mostra o tempo real da ferramenta e do turno",
-   "run_python 4s" in _txt29(_linhas29[2]) and "turno 14s" in _txt29(_linhas29[2]))
+   "run_python 4s" in _txt29(_linhas29[3]) and "turno 14s" in _txt29(_linhas29[3]))
 
 _estreito29 = _palco29.stage_rows(_st_palco29, 60, 1004.0, 0)
 ok("janela estreita: palco vira UMA linha (nao rouba 4 linhas da conversa)",
@@ -1955,8 +1955,8 @@ ok("etapa atual vai como item de menu selecionado; o resto da trilha normal",
    and any(e == "class:palco" and x == "[START]" for e, x in _linhas29[0]))
 
 _frags29 = _palco29.stage_lines(_st_palco29, 100, 1004.0, 0)
-ok("palco entrega as 4 linhas separadas por quebra dentro do texto",
-   sum(x.count("\n") for _e, x in _frags29) == 3)
+ok("palco entrega as 5 linhas separadas por quebra dentro do texto",
+   sum(x.count("\n") for _e, x in _frags29) == 4)
 
 ok("palco e ASCII puro (terminal de Windows e fonte raster)",
    all(ord(c) < 128 for linha in _linhas29 for c in _txt29(linha)))
@@ -1964,7 +1964,7 @@ ok("palco e ASCII puro (terminal de Windows e fonte raster)",
 # fase sem ferramenta (modelo escrevendo) nao inventa ferramenta
 _st_mod29 = {"busy": True, "fase": "modelo", "tool": None,
              "busy_since": 1000.0, "tool_since": 0.0}
-_res29 = _txt29(_palco29.stage_rows(_st_mod29, 100, 1003.0, 0)[2])
+_res29 = _txt29(_palco29.stage_rows(_st_mod29, 100, 1003.0, 0)[3])
 ok("palco na fase do modelo nao mostra ferramenta nenhuma",
    "o modelo esta escrevendo" in _res29 and "None" not in _res29)
 
@@ -1980,5 +1980,97 @@ _core_p29.submit("/palco liga")
 ok("/palco liga devolve o palco", _cfg_p29["palco"] is True)
 ok("ajuda anuncia o comando /palco",
    any("/palco" in "".join(t for t, _s in seg) for seg in _help_lines26()))
+
+# ---------- emenda da 0.2.9: tokens por etapa no palco ------------------------
+from bgh.llm import LLM as _LLM29
+ok("tokens abreviados no formato pedido (800, 2.00k, 1.20M)",
+   _palco29.abrevia(800) == "800" and _palco29.abrevia(2000) == "2.00k"
+   and _palco29.abrevia(1200000) == "1.20M")
+
+_st_tk29 = {**_st_palco29, "tokens": {"entrada": 12400, "saida": 980, "cache": 0}}
+_lin_tk29 = _txt29(_palco29.stage_rows(_st_tk29, 100, 1004.0, 0)[2])
+ok("tokens embaixo das etapas: entrada no AGENTE, saida no MODELO, total na TELA",
+   "12.40k" in _lin_tk29 and "980" in _lin_tk29 and "13.38k" in _lin_tk29
+   and _lin_tk29.index("12.40k") < _lin_tk29.index("980") < _lin_tk29.index("13.38k"))
+ok("FERRAMENTA nao ganha numero de token inventado (fica vazio)",
+   _lin_tk29[27:39].strip() == "")
+
+_est_tk29 = _txt29(_palco29.stage_rows(_st_tk29, 60, 1004.0, 0)[0])
+ok("janela estreita mostra os tokens abreviados na linha unica",
+   "12.40k/980 tk" in _est_tk29 and len(_est_tk29) <= 58)
+
+ok("sem contagem do servidor, a linha de tokens fica vazia (nada inventado)",
+   _txt29(_palco29.stage_rows(_st_palco29, 100, 1004.0, 0)[2]).strip() == "")
+
+# O cliente tem que GUARDAR o que o servidor informou (entrada/saida/cache).
+_uso29 = types.SimpleNamespace(
+    prompt_tokens=1200, completion_tokens=300,
+    prompt_tokens_details=types.SimpleNamespace(cached_tokens=800))
+_msg29 = types.SimpleNamespace(content="ok", reasoning_content=None, tool_calls=None)
+_resp29 = types.SimpleNamespace(choices=[types.SimpleNamespace(message=_msg29)], usage=_uso29)
+_llm_u29 = _LLM29({"base_url": "http://fake/v1", "model": "m", "max_retries": 0})
+_llm_u29.client = types.SimpleNamespace(chat=types.SimpleNamespace(
+    completions=types.SimpleNamespace(create=lambda **k: _resp29)))
+_llm_u29.chat([{"role": "user", "content": "oi"}])
+ok("cliente guarda a contagem de tokens do pedido (entrada/saida/cache)",
+   _llm_u29.last_usage == {"entrada": 1200, "saida": 300, "cache": 800})
+
+# Streaming: pede include_usage e le o ultimo pedaco (choices vazio).
+_pedidos29: list[dict] = []
+_delta29 = types.SimpleNamespace(content="oi", reasoning_content=None, tool_calls=None)
+_chunks29 = [types.SimpleNamespace(choices=[types.SimpleNamespace(delta=_delta29)], usage=None),
+             types.SimpleNamespace(choices=[], usage=_uso29)]
+
+
+def _cria_stream29(**kwargs):
+    _pedidos29.append(dict(kwargs))
+    return iter(_chunks29)
+
+
+_llm_s29 = _LLM29({"base_url": "http://fake/v1", "model": "m", "max_retries": 0})
+_llm_s29.client = types.SimpleNamespace(chat=types.SimpleNamespace(
+    completions=types.SimpleNamespace(create=_cria_stream29)))
+_msg_s29 = _llm_s29.chat_stream([{"role": "user", "content": "oi"}])
+ok("streaming pede include_usage e conta os tokens do pedaco final",
+   _msg_s29["content"] == "oi" and _pedidos29[0].get("stream_options") == {"include_usage": True}
+   and _llm_s29.last_usage["entrada"] == 1200)
+
+# Servidor que recusa o campo: perde SO o contador, resposta continua.
+_rejeitados29: list[dict] = []
+
+
+def _cria_rejeita29(**kwargs):
+    _rejeitados29.append(dict(kwargs))
+    if "stream_options" in kwargs:
+        raise Exception("unsupported parameter: stream_options")
+    return iter(_chunks29)
+
+
+_llm_r29 = _LLM29({"base_url": "http://fake/v1", "model": "m", "max_retries": 0})
+_llm_r29.client = types.SimpleNamespace(chat=types.SimpleNamespace(
+    completions=types.SimpleNamespace(create=_cria_rejeita29)))
+_msg_r29 = _llm_r29.chat_stream([{"role": "user", "content": "oi"}])
+ok("servidor sem stream_options: responde igual, so perde o contador",
+   _msg_r29["content"] == "oi" and "stream_options" not in _rejeitados29[-1]
+   and len(_rejeitados29) == 2)
+
+
+class _UsoLLM29:
+    def __init__(self):
+        self.last_usage = {"entrada": 10, "saida": 5, "cache": 0}
+
+    def chat(self, messages, tools=None):
+        return {"role": "assistant", "content": "ok"}
+
+    def summarize(self, text):
+        return ""
+
+
+_ag_u29 = _Agent26(dict(core_cfg), _UsoLLM29(), Gate(dict(core_cfg), ask_d))
+_recebido29: list = []
+_ag_u29.on_usage = _recebido29.append
+_ag_u29.run_turn("oi")
+ok("o turno repassa a contagem de tokens para a tela",
+   bool(_recebido29) and _recebido29[-1]["entrada"] == 10)
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

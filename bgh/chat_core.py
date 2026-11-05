@@ -316,6 +316,10 @@ class ChatCore:
         # novo: sem isso o cabecalho 'resposta' ficava preso da rodada anterior e a
         # resposta final saia colada no bloco de pensamento.
         self.agent.on_round_start = self._reset_stream_state
+        # Contador de tokens do pedido vai para a tela (palco mostra por etapa),
+        # quando a tela sabe desenhar isso (a tela fixa sabe; o modo classico nao).
+        if hasattr(self.sink, "on_usage"):
+            self.agent.on_usage = self.sink.on_usage
         # Abertura: se o teto gravado pertence a outro servidor/modelo, re-sonda
         # antes de qualquer barra ser desenhada (barra nunca mostra numero emprestado).
         self._refresh_server_context(troca=False, render=False)

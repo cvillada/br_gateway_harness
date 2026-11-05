@@ -154,6 +154,7 @@ STYLE = Style.from_dict(
         "palco": "#ffffff",                        # trilha: branca (destacada)
         "palco.sel": "#000000 bg:#5fd7ff bold",    # etapa atual: como item de menu selecionado
         "palco.on": "#5fd7ff bold",                # marcador embaixo da etapa: azul
+        "palco.tk": "#87d7ff",                     # contagem de tokens por etapa
         "palco.dim": "#d7d7d7",                    # linha de detalhes (mais clara)
     }
 )
@@ -195,6 +196,10 @@ class TuiSink:
     def answer(self, text: str) -> None:
         self.state["fase"] = "resposta"  # palco: a resposta comecou a voltar
         self.emit(text, newline=False, style="an")
+
+    def on_usage(self, uso) -> None:
+        """Contagem de tokens que o servidor informou neste pedido (palco)."""
+        self.state["tokens"] = dict(uso) if uso else None
 
     def tool_event(self, name: str, preview: str) -> None:
         # guarda o que esta rodando agora: a barra de baixo mostra a ferramenta e ha
@@ -295,7 +300,7 @@ def run_tui(cfg: dict) -> int:
     # sobrevive ao fechar/abrir (arquivo em ~/.bgh/input_history.txt).
     in_buf = Buffer(multiline=False, history=FileHistory(str(INPUT_HISTORY_FILE)))
     state = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0, "ctx": None,
-             "ctx_pct": None, "fase": None, "palco_frame": 0,
+             "ctx_pct": None, "fase": None, "palco_frame": 0, "tokens": None, "palco_hold": 0,
              "busy_since": 0.0, "tool": None, "tool_since": 0.0}
     printed = {"n": 0, "cols": 0}
     app: Application | None = None
@@ -390,14 +395,23 @@ def run_tui(cfg: dict) -> int:
         return palco.stage_lines(state, _largura(), time.time(),
                                  int(state.get("palco_frame") or 0))
 
+    def _palco_visivel_agora() -> bool:
+        """Ligado e com o turno em curso OU mostrando a entrega por 1,6s."""
+        if not palco_ligado:
+            return False
+        if state["busy"]:
+            return True
+        return (state.get("fase") is not None
+                and time.time() < float(state.get("palco_hold") or 0))
+
     def _palco_largo_visivel() -> bool:
-        return bool(palco_ligado and state["busy"] and _largura() >= palco.MIN_WIDTH)
+        return bool(_palco_visivel_agora() and _largura() >= palco.MIN_WIDTH)
 
     def _palco_curto_visivel() -> bool:
-        return bool(palco_ligado and state["busy"] and _largura() < palco.MIN_WIDTH)
+        return bool(_palco_visivel_agora() and _largura() < palco.MIN_WIDTH)
 
     palco_largo = ConditionalContainer(
-        content=Window(FormattedTextControl(_palco_frags), height=4, style="class:palco"),
+        content=Window(FormattedTextControl(_palco_frags), height=5, style="class:palco"),
         filter=Condition(_palco_largo_visivel))
     palco_curto = ConditionalContainer(
         content=Window(FormattedTextControl(_palco_frags), height=1, style="class:palco"),
@@ -473,6 +487,8 @@ def run_tui(cfg: dict) -> int:
         state["busy_since"] = time.time()   # a barra de baixo conta os segundos da espera
         state["tool"] = None
         state["fase"] = "pedido"            # palco: o pedido acabou de sair do chefe
+        state["tokens"] = None              # contador do turno anterior nao serve
+        state["palco_hold"] = 0             # recolhimento do palco: turno novo manda
         emit(f"voce> {text}", style="voce")  # eco na hora: a tela nunca fica muda
 
         def _worker():
@@ -489,8 +505,23 @@ def run_tui(cfg: dict) -> int:
                 state["busy"] = False
                 state["stop_hits"] = 0
                 state["tool"] = None
-                state["fase"] = None      # palco recolhe quando o turno termina
+                # O palco fica 1,6s mostrando a entrega (e os tokens do ultimo
+                # pedido, que o servidor so informa no fim): sem esse respiro o
+                # numero chegaria junto com o recolhimento e nunca apareceria.
+                state["fase"] = "pronto"
+                alvo_recolha = time.time() + 1.6
+                state["palco_hold"] = alvo_recolha
                 _schedule(app.invalidate)
+
+                def _recolhe(espera_ate=alvo_recolha) -> None:
+                    time.sleep(1.7)
+                    if state.get("palco_hold") == espera_ate and not state["busy"]:
+                        state["fase"] = None
+                        state["palco_hold"] = 0
+                        if app is not None:
+                            _schedule(app.invalidate)
+
+                threading.Thread(target=_recolhe, daemon=True).start()
 
         threading.Thread(target=_worker, daemon=True).start()
 
