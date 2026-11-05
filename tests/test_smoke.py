@@ -1600,8 +1600,17 @@ finally:
     _prompts26.platform.system = _orig_system26
 ok("no Windows o prompt exige cmd.exe desde a primeira tentativa e veta bash",
    "cmd.exe" in _bloco_win26 and "findstr" in _bloco_win26 and "2>/dev/null" in _bloco_win26)
+
+# Este teste perguntava o sistema REAL: rodando no CI do Windows ele reprovava
+# (o bloco do cmd.exe aparecia, como devia). Simular os dois lados deixa a suite
+# igual em qualquer maquina.
+_prompts26.platform.system = lambda: "Linux"
+try:
+    _bloco_lin26 = _prompts26.environment_block()
+finally:
+    _prompts26.platform.system = _orig_system26
 ok("em Linux o prompt nao fala de cmd (so aparece na maquina certa)",
-   "cmd.exe" not in _prompts26.environment_block())
+   "cmd.exe" not in _bloco_lin26)
 
 import contextlib as _ctxlib26
 import io as _io26
@@ -1636,10 +1645,17 @@ ok("indice do system prompt anuncia as skills novas ao modelo (descoberta direto
        for s in ("spec", "dev", "dev-web", "tdd")))
 
 _buf_tit26 = _io26.StringIO()
-with _ctxlib26.redirect_stdout(_buf_tit26):
-    _core_tit26 = ChatCore(dict(core_cfg), RecSink(),
-                           llm=_ListLLM26())
-    _core_tit26.banner()
+# Mesma razao do teste do prompt: no Windows o titulo vai por API da janela, entao
+# o caminho de terminal (OSC) e simulado para a suite valer nos tres sistemas.
+_orig_osname26 = os.name
+os.name = "posix"
+try:
+    with _ctxlib26.redirect_stdout(_buf_tit26):
+        _core_tit26 = ChatCore(dict(core_cfg), RecSink(),
+                               llm=_ListLLM26())
+        _core_tit26.banner()
+finally:
+    os.name = _orig_osname26
 ok("abertura batiza a janela do terminal como 'TEO Agent' (no Windows e via API da janela)",
    "\x1b]0;TEO Agent\x07" in _buf_tit26.getvalue())
 
