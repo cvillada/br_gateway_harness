@@ -69,7 +69,10 @@ def apply_update(wheel_url: str, timeout_s: int = 900) -> tuple[bool, str]:
     if not py:
         return False, ("esta instalacao roda como arquivo unico (executavel) e nao tem um "
                        "Python para receber a atualizacao - use o INSTALAR_TEO.bat novament")
-    cmd = [py, "-m", "pip", "install", "--no-deps", "--force-reinstall", wheel_url]
+    # --ignore-installed: instalacao antiga sem RECORD nao pode travar a atualizacao
+    # (o pip responde "uninstall-no-record-file"; aqui ele so sobrescreve).
+    cmd = [py, "-m", "pip", "install", "--no-deps", "--ignore-installed",
+           "--force-reinstall", wheel_url]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:

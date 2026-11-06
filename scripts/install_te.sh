@@ -40,15 +40,20 @@ echo "Baixando $NAME ..."
 curl -L -o "$DIR/$NAME" "$URL"
 
 echo "Instalando no ambiente virtual..."
-"$DIR/.venv/bin/pip" install --upgrade pip > /dev/null
+PYBIN="$DIR/.venv/bin/python"
+"$PYBIN" -m pip install --upgrade pip > /dev/null
 curl -L -o "$DIR/requirements.txt" \
   "https://raw.githubusercontent.com/$REPO/main/requirements.txt"
-"$DIR/.venv/bin/pip" install -r "$DIR/requirements.txt" > /dev/null
-# '--no-deps --force-reinstall' e obrigatorio: sem isso o pip ve a MESMA versao ja
-# instalada, diz 'requirement already satisfied' e deixa o codigo velho no lugar
-# (reinstalar nao atualizava). As dependencias vem do pip anterior.
-"$DIR/.venv/bin/pip" install --no-deps --force-reinstall "$DIR/$NAME"
-VER=$("$DIR/.venv/bin/pip" show bgh-motor 2>/dev/null | sed -n 's/^Version: //p')
+"$PYBIN" -m pip install -r "$DIR/requirements.txt" > /dev/null
+# --ignore-installed e o que salva instalacao quebrada: se o bgh antigo ficou SEM
+# RECORD (o pip nao consegue desinstalar), --force-reinstall sozinho falha com
+# "uninstall-no-record-file". Com ignore-installed o pip sobrescreve os arquivos.
+if ! "$PYBIN" -m pip install --no-deps --ignore-installed --force-reinstall "$DIR/$NAME"; then
+    echo "Tentando de novo com limpeza dos restos da instalacao anterior..."
+    rm -rf "$DIR"/.venv/lib/python*/site-packages/bgh_motor* 2>/dev/null || true
+    "$PYBIN" -m pip install --no-deps --ignore-installed "$DIR/$NAME"
+fi
+VER=$("$PYBIN" -c "import bgh; print(bgh.__version__)" 2>/dev/null || true)
 echo "Versao instalada: ${VER:-desconhecida}"
 
 echo "Criando atalho para abrir sem terminal..."

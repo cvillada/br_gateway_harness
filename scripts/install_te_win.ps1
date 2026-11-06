@@ -31,16 +31,29 @@ Write-Host ("Baixando " + $whl.name + " ...")
 Invoke-WebRequest -Uri $whl.browser_download_url -OutFile $wheel_local -TimeoutSec 120
 
 Write-Host "Instalando no ambiente virtual..."
-& "$dir\.venv\Scripts\pip.exe" install --upgrade pip | Out-Null
+$py = Join-Path $dir ".venv\Scripts\python.exe"
+# Sempre pelo python -m pip: o pip.exe do venv reclama "To modify pip, please run..."
+# quando tenta se atualizar.
+& $py -m pip install --upgrade pip | Out-Null
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/$repo/main/requirements.txt" -OutFile (Join-Path $dir "requirements.txt") -TimeoutSec 30
-& "$dir\.venv\Scripts\pip.exe" install -r (Join-Path $dir "requirements.txt") | Out-Null
-# '--no-deps --force-reinstall' e obrigatorio: sem isso o pip ve a MESMA versao ja
-# instalada, diz 'requirement already satisfied' e deixa o codigo velho no lugar
-# (reinstalar nao atualizava). As dependencias vem do passo anterior.
-& "$dir\.venv\Scripts\pip.exe" install --no-deps --force-reinstall $wheel_local
-if ($LASTEXITCODE -ne 0) { throw "O pip install falhou." }
-$versao = (& "$dir\.venv\Scripts\pip.exe" show bgh-motor | Select-String "^Version:")
-Write-Host ("Versao instalada: " + $(if ($versao) { ($versao -split "\s+")[1] } else { "desconhecida" }))
+& $py -m pip install -r (Join-Path $dir "requirements.txt") | Out-Null
+# --ignore-installed e o que salva instalacao quebrada: se o bgh antigo ficou SEM
+# RECORD (o pip nao consegue desinstalar), --force-reinstall sozinho falha com
+# "uninstall-no-record-file" e o cliente fica sem o programa. Com ignore-installed
+# o pip sobrescreve os arquivos e escreve metadados novos. --no-deps porque as
+# dependencias vieram no passo anterior.
+& $py -m pip install --no-deps --ignore-installed --force-reinstall $wheel_local
+if ($LASTEXITCODE -ne 0) {
+    # Plano B: apaga restos de metadados quebrados e tenta de novo.
+    Write-Host "Tentando de novo com limpeza dos restos da instalacao anterior..."
+    Get-ChildItem -Path (Join-Path $dir ".venv\Lib\site-packages") -Filter "bgh_motor*" -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    & $py -m pip install --no-deps --ignore-installed $wheel_local
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "O pip install falhou. Para resolver na mao, rode: `"$py`" -m pip install --ignore-installed --no-deps `"$wheel_local`""
+}
+$versao = (& $py -c "import bgh; print(bgh.__version__)" 2>$null)
+Write-Host ("Versao instalada: " + $(if ($versao) { $versao } else { "desconhecida" }))
 
 Write-Host "Criando atalho com icone na area de trabalho..."
 $bat = Join-Path $dir "abrir-teo.bat"

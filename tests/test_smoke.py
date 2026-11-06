@@ -1436,6 +1436,7 @@ try:
        and any("Baixando e instalando a versao v9.9.9" in l for l in _sink_upd26.lines))
     ok("instala com a receita oficial (pip --no-deps --force-reinstall no wheel da release)",
        len(_cmds_upd26) == 1 and "--force-reinstall" in _cmds_upd26[0]
+       and "--ignore-installed" in _cmds_upd26[0]
        and "--no-deps" in _cmds_upd26[0] and _cmds_upd26[0][-1].endswith(".whl"))
     ok("sucesso manda fechar e reabrir para o codigo novo valer",
        any("Atualizado para v9.9.9" in l and "abra o TEO de novo" in l for l in _sink_upd26.lines))
@@ -2417,5 +2418,19 @@ ok("a barra de continuacao sai do texto que vai para o modelo",
 ok("ajuda ensina a pular linha (Ctrl+J e a barra invertida)",
    any("Ctrl+J" in "".join(t for t, _s in seg) for seg in _help_lines26())
    and any("terminar a linha" in "".join(t for t, _s in seg) for seg in _help_lines26()))
+
+# ---------- v0.2.13: instalador sobrevive a instalacao quebrada (RECORD) ------
+_raiz213 = Path(__file__).resolve().parents[1]
+_ps213 = (_raiz213 / "scripts" / "install_te_win.ps1").read_text(encoding="utf-8")
+_sh213 = (_raiz213 / "scripts" / "install_te.sh").read_text(encoding="utf-8")
+ok("instalador do Windows instala com --ignore-installed (bgh antigo sem RECORD nao trava)",
+   "--ignore-installed" in _ps213 and "python.exe" in _ps213)
+ok("instalador do Windows usa python -m pip (nao o pip.exe que reclama de si mesmo)",
+   '-m pip install --upgrade pip' in _ps213 and 'Scripts\pip.exe" install --upgrade' not in _ps213)
+ok("instalador do Linux/macOS tambem usa --ignore-installed e python -m pip",
+   "--ignore-installed" in _sh213 and '.venv/bin/python"' in _sh213)
+ok("os dois instaladores mostram a versao lida do proprio pacote (prova de que instalou)",
+   "import bgh; print(bgh.__version__)" in _ps213
+   and "import bgh; print(bgh.__version__)" in _sh213)
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.13
+
+O instalador nao trava mais em cima de uma instalacao anterior quebrada.
+
+- Caso real (maquina do cliente): a reinstalacao parava com "Cannot uninstall
+  bgh-motor None / uninstall-no-record-file" - o pacote antigo estava sem o arquivo
+  RECORD, entao o pip nao conseguia desinstalar e o `--force-reinstall` falhava,
+  deixando a pessoa sem o TEO.
+- Os dois instaladores (Windows e Linux/macOS) passam a instalar com
+  `--ignore-installed`: o pip sobrescreve os arquivos em vez de tentar desinstalar.
+  Se ainda assim falhar, limpam os restos de metadados e tentam outra vez; a
+  mensagem final mostra o comando exato para resolver na mao.
+- Instaladores usam `python -m pip` (o pip.exe do ambiente reclamava "To modify pip,
+  please run..." ao se atualizar) e mostram a versao lida do proprio pacote
+  (`import bgh`), que e a prova de que a instalacao realmente aconteceu.
+- `/atualizar` tambem instala com `--ignore-installed`, pelo mesmo motivo.
+
 ## 0.2.12
 
 A tela nao trava mais em turno longo com muita saida.
