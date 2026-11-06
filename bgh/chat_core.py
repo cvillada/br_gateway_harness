@@ -345,6 +345,8 @@ class ChatCore:
         """Cabecalhos de pensamento/resposta valem por chamada do modelo, nao por turno."""
         self._flush_pend()
         self.st = {"thinking": False, "resposta": False}
+        if hasattr(self.sink, "rodada_nova"):
+            self.sink.rodada_nova()   # palco mostra em que rodada esta
 
     def steer(self, text: str) -> None:
         """Mensagem digitada durante o processamento: vai ao modelo na proxima

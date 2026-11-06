@@ -160,6 +160,10 @@ def resumo(state: dict, agora: float) -> str:
     ferramenta = state.get("tool")
     if ferramenta:
         partes.append(f"{ferramenta} {_segundos(state.get('tool_since'), agora)}s")
+    rodada = int(state.get("rodada") or 0)
+    if rodada > 1:
+        # turno que prorroga: a pessoa ve em que rodada esta (e nao um numero parado)
+        partes.append(f"rodada {rodada}")
     partes.append(f"turno {_segundos(state.get('busy_since'), agora)}s")
     return " | ".join(partes)
 

@@ -58,6 +58,14 @@ class LineBoard:
 
     def __init__(self):
         self.entries: list[list] = []  # [estilo, texto, aberto?]
+        # Cache das linhas ja quebradas. Sem isso, CADA pedaco de streaming
+        # re-quebrava TODA a conversa (textwrap em texto gigante): num turno longo
+        # com saida grande de ferramenta/navegador a tela travava e nem o CTRL+C
+        # era atendido (crash real em maquina de cliente, Windows).
+        self._rows_cache: list[list] = []
+        self._rows_consumidas = 0   # entradas que ja viraram linha no cache
+        self._rows_width = 0        # largura usada no cache
+        self._fechadas = 0          # entradas FECHADAS (podem ser cacheadas)
 
     def add(self, text: str, style: str | None, newline: bool) -> None:
         if not newline:
@@ -70,22 +78,44 @@ class LineBoard:
             self.entries[-1][2] = False
         for part in str(text).split("\n"):
             self.entries.append([style, part, False])
+        self._fechadas = len(self.entries)
 
     def close_last(self) -> None:
         if self.entries:
             self.entries[-1][2] = False
+            self._fechadas = len(self.entries)
 
     def rows(self, width: int) -> list[list]:
         """Linhas: cada linha e uma lista de pedacos (estilo, texto).
 
         Segmentos abertos (parts do streaming e da ajuda) pertencem a MESMA
         linha; o texto junto e quebrado na largura da janela sem perder as cores.
+        As linhas FECHADAS ficam em cache (nunca mudam); so a cauda aberta e
+        re-quebrada a cada pedaco.
         """
         # margem de 2 colunas: o texto nunca encosta na borda da tela (estilo Hermes)
         width = max(10, width - 2)
+        if width != self._rows_width:
+            # janela mudou de largura: tudo tem que ser quebrado de novo
+            self._rows_cache = []
+            self._rows_consumidas = 0
+            self._rows_width = width
+        alvo = min(self._fechadas, len(self.entries))
+        if alvo < self._rows_consumidas:      # entradas sumiram (reset): refaz
+            self._rows_cache = []
+            self._rows_consumidas = 0
+        if alvo > self._rows_consumidas:
+            self._rows_cache = self._rows_cache + self._rows_de(
+                self.entries[self._rows_consumidas:alvo], width)
+            self._rows_consumidas = alvo
+        cauda = self._rows_de(self.entries[self._rows_consumidas:], width)
+        return self._rows_cache + cauda
+
+    def _rows_de(self, entries: list, width: int) -> list[list]:
+        """Quebra um pedaco de entradas (sempre comecando em fronteira de grupo)."""
         groups: list[list] = []
         cur: list = []
-        for style, text, is_open in self.entries:
+        for style, text, is_open in entries:
             cur.append((style, text))
             if not is_open:
                 groups.append(cur)
@@ -203,6 +233,10 @@ class TuiSink:
     def on_usage(self, uso) -> None:
         """Contagem de tokens que o servidor informou neste pedido (palco)."""
         self.state["tokens"] = dict(uso) if uso else None
+
+    def rodada_nova(self) -> None:
+        """Cada chamada do modelo e uma rodada: o palco mostra em que rodada esta."""
+        self.state["rodada"] = int(self.state.get("rodada") or 0) + 1
 
     def tool_event(self, name: str, preview: str) -> None:
         # guarda o que esta rodando agora: a barra de baixo mostra a ferramenta e ha
@@ -333,7 +367,11 @@ def run_tui(cfg: dict) -> int:
             # janela mudou de largura: o que ja saiu nao volta a ser impresso
             printed["cols"] = cols
             printed["n"] = len(board.rows(cols))
-        rows = board.rows(cols)
+        try:
+            rows = board.rows(cols)
+        except Exception as exc:  # noqa: BLE001 - desenho nunca pode derrubar o app
+            log_error(exc, "quebra de linha da tela")
+            return
         open_tail = bool(board.entries and board.entries[-1][2])
         n_new, to_print = flush_plan(rows, open_tail, printed["n"], max(10, cols - 2))
         printed["n"] = n_new
@@ -491,6 +529,7 @@ def run_tui(cfg: dict) -> int:
         state["fase"] = "pedido" if eh_pedido else None
         state["tokens"] = None              # contador do turno anterior nao serve
         state["palco_hold"] = 0             # recolhimento do palco: turno novo manda
+        state["rodada"] = 0                 # contador de rodadas do turno
         emit(f"voce> {text}", style="voce")  # eco na hora: a tela nunca fica muda
 
         def _worker():
@@ -590,6 +629,10 @@ def run_tui(cfg: dict) -> int:
 
     try:
         app.run(pre_run=_start_ui)
+    except KeyboardInterrupt:
+        # CTRL+C durante o desenho (ex.: texto gigante sendo quebrado) saia como
+        # traceback na cara do usuario. Agora fecha limpo, como o /sair.
+        pass
     finally:
         # Se a pessoa fechou o app com uma pergunta/licenca pendente, devolve o
         # padrao dela (negar no menu, valor padrao no assistente) e libera o worker.

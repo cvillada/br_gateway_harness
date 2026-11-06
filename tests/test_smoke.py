@@ -2360,4 +2360,50 @@ except Exception as exc:  # noqa: BLE001
 ok("429 nao ganha retentativa extra por causa do campo de contagem",
    isinstance(_tipo_c210, _RateErr27) and _cli_c210.chamadas == 1)
 
+# ---------- v0.2.12: tela nao trava mais com conversa grande (cache de linhas) --
+import bgh.tui as _tui212
+
+_contador212 = {"n": 0}
+_orig_wrap212 = _tui212.textwrap.wrap
+
+
+def _conta_wrap212(*a, **k):
+    _contador212["n"] += 1
+    return _orig_wrap212(*a, **k)
+
+
+_board212 = _tui212.LineBoard()
+for _i212 in range(600):
+    _board212.add(f"linha fechada {_i212} com texto suficiente para embrulhar" * 2, "an", True)
+_linhas212 = _board212.rows(100)
+_tui212.textwrap.wrap = _conta_wrap212
+try:
+    _board212.rows(100)
+    _depois_da_1a = _contador212["n"]
+    for _i212 in range(50):
+        _board212.add("pedaco ", "an", False)
+        _board212.rows(100)
+    _extras = _contador212["n"] - _depois_da_1a
+finally:
+    _tui212.textwrap.wrap = _orig_wrap212
+ok("conversa grande: linhas fechadas ficam em cache (nao re-quebram a cada pedaco)",
+   len(_linhas212) >= 600 and _extras <= 60)
+ok("a cauda aberta continua sendo quebrada (texto novo nao perde)",
+   _extras > 0)
+
+# Turno que prorroga mostra a rodada no palco (nao um numero parado).
+_st_rod212 = {"busy": True, "fase": "ferramenta", "tool": "run_command",
+              "tool_since": 1000.0, "busy_since": 990.0, "rodada": 7}
+ok("palco mostra a rodada quando o turno prorroga (rodada 7)",
+   "rodada 7" in _palco29.resumo(_st_rod212, 1004.0))
+_st_rod1 = dict(_st_rod212)
+_st_rod1["rodada"] = 1
+ok("na primeira rodada a palavra 'rodada' nao aparece (menos ruido)",
+   "rodada" not in _palco29.resumo(_st_rod1, 1004.0))
+
+# Largura diferente refaz o cache (senao texto ficaria com quebra errada).
+_board212.rows(60)
+ok("janela muda de largura: o cache e refeito na largura nova",
+   _board212._rows_width == 58 and _board212._rows_consumidas >= 600)
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

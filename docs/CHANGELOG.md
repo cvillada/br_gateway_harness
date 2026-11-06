@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.12
+
+A tela nao trava mais em turno longo com muita saida.
+
+- Causa (medida em maquina de cliente): a tela re-quebrava TODAS as linhas da
+  conversa a cada pedaco de texto recebido (`textwrap` sobre o texto inteiro). Num
+  turno de 600 segundos, com raciocinio e saida de ferramenta acumulados, cada
+  quadro ficava mais caro ate congelar - e o CTRL+C caia dentro do `textwrap`,
+  virando traceback na tela. O turno longo em si era a prorrogacao funcionando.
+- Agora as linhas ja fechadas ficam em cache (sao quebradas uma vez) e so a cauda
+  que ainda esta chegando e refeita. Medido: 6000 linhas + 300 quadros de
+  streaming fizeram 300 quebras em vez de 1,8 milhao.
+- CTRL+C durante o desenho fecha limpo, sem traceback.
+- Desenho a prova de falha: erro de quebra de linha vai para o `erro.log` e a tela
+  continua, em vez de derrubar o programa.
+- O palco mostra "rodada N" quando o turno prorroga alem da primeira etapa, para
+  a espera longa ter progresso visivel.
+
 ## 0.2.11
 
 O streaming voltou ao normal em provedores cujo gateway recusa campos extras.
