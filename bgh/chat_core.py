@@ -144,6 +144,11 @@ HELP_SECTIONS = [
         ("@", "tela fixa: menu de arquivos para anexar; modo simples: lista os arquivos"),
         ("@<arquivo>", "anexa um arquivo; depois faca sua pergunta sobre ele"),
     ]),
+    ("Escrever em varias linhas (no voce>):", [
+        ("Ctrl+J", "pula linha sem enviar a mensagem"),
+        ("terminar a linha com \\ e ENTER", "continua na linha de baixo (igual shell)"),
+        ("Alt+Enter", "pula linha quando o terminal deixa (no cmd do Windows nao)"),
+    ]),
     ("Parar e reler:", [
         ("CTRL+C ou ESC durante a resposta", "para de responder na hora (igual ao Hermes)"),
         ("digitar ENTER durante a resposta", "avisa o turno em andamento; o modelo le na proxima rodada"),

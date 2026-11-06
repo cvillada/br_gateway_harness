@@ -2406,4 +2406,16 @@ _board212.rows(60)
 ok("janela muda de largura: o cache e refeito na largura nova",
    _board212._rows_width == 58 and _board212._rows_consumidas >= 600)
 
+# ---------- v0.2.12 (emenda): escrever em varias linhas no voce> --------------
+from bgh.tui import quer_continuar as _cont212
+from bgh.tui import tira_barra_final as _sem_barra212
+
+ok("barra invertida no fim do texto = pular linha (regra de shell)",
+   _cont212("linha 1 " + chr(92)) is True and _cont212("linha 1") is False)
+ok("a barra de continuacao sai do texto que vai para o modelo",
+   _sem_barra212("linha 1 " + chr(92)) == "linha 1")
+ok("ajuda ensina a pular linha (Ctrl+J e a barra invertida)",
+   any("Ctrl+J" in "".join(t for t, _s in seg) for seg in _help_lines26())
+   and any("terminar a linha" in "".join(t for t, _s in seg) for seg in _help_lines26()))
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

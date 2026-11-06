@@ -17,6 +17,12 @@ A tela nao trava mais em turno longo com muita saida.
   continua, em vez de derrubar o programa.
 - O palco mostra "rodada N" quando o turno prorroga alem da primeira etapa, para
   a espera longa ter progresso visivel.
+- Escrever em varias linhas no `voce>`: **Ctrl+J** pula linha, e terminar a linha
+  com `\` + ENTER continua na linha de baixo (regra de shell, funciona ate no cmd do
+  Windows). **Alt+Enter** tambem pula linha onde o terminal entrega a tecla (Linux;
+  no macOS so com "Use Option as Meta"; no cmd do Windows Alt+Enter e tela cheia,
+  entao fica de fora). A caixa de entrada cresce ate 8 linhas e volta a uma depois
+  de enviar. Tudo isso aparece no `/ajuda`, na secao "Escrever em varias linhas".
 
 ## 0.2.11
 

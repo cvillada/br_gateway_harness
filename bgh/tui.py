@@ -48,6 +48,22 @@ from .config import INPUT_HISTORY_FILE
 FRAMES = "|/-\\"  # bonequinho de espera do "rodando..." na barra de baixo
 
 
+def quer_continuar(texto: str) -> bool:
+    """Terminou com barra invertida? Entao o ENTER pula linha em vez de enviar.
+
+    Regra de shell, que funciona em qualquer terminal (inclusive no cmd do
+    Windows, onde Alt+Enter e o atalho de tela cheia): "primeira linha \\" + Enter
+    continua na linha de baixo.
+    """
+    return str(texto or "").rstrip().endswith("\\")
+
+
+def tira_barra_final(texto: str) -> str:
+    """Remove a barra invertida de continuacao e devolve o que fica no buffer."""
+    bruto = str(texto or "").rstrip()
+    return bruto[:-1].rstrip() if bruto.endswith("\\") else bruto
+
+
 class LineBoard:
     """Agrupa os pedacos coloridos em linhas logicas (cores preservadas).
 
@@ -335,7 +351,9 @@ def run_tui(cfg: dict) -> int:
     board = LineBoard()
     # Historico estilo bash: setas cima/baixo repetem o que ja foi digitado;
     # sobrevive ao fechar/abrir (arquivo em ~/.bgh/input_history.txt).
-    in_buf = Buffer(multiline=False, history=FileHistory(str(INPUT_HISTORY_FILE)))
+    # multiline=True: o buffer aceita "\n" (Ctrl+J / barra invertida). O ENTER
+    # continua enviando - quem manda nisso e o binding abaixo, nao o padrao.
+    in_buf = Buffer(multiline=True, history=FileHistory(str(INPUT_HISTORY_FILE)))
     state = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0, "ctx": None,
              "ctx_pct": None, "fase": None, "palco_frame": 0, "tokens": None, "palco_hold": 0,
              "busy_since": 0.0, "tool": None, "tool_since": 0.0}
@@ -411,7 +429,14 @@ def run_tui(cfg: dict) -> int:
 
     # ----- layout: so a parte fixa (o resto e o historico do proprio terminal) --
     rule_top = Window(height=1, char="-", style="class:rule")
-    input_win = Window(BufferControl(in_buf), height=1, style="class:input")
+    def _altura_entrada():
+        # cresce com as linhas digitadas (ate 8) e volta a 1 depois de enviar
+        try:
+            return max(1, min(8, in_buf.document.line_count))
+        except Exception:  # noqa: BLE001 - desenho nunca derruba a tela
+            return 1
+
+    input_win = Window(BufferControl(in_buf), height=_altura_entrada, style="class:input")
     input_row = VSplit([Label(text="voce> ", dont_extend_width=True), input_win])
     rule_bottom = Window(height=1, char="-", style="class:rule")
 
@@ -493,9 +518,29 @@ def run_tui(cfg: dict) -> int:
             return
         app.exit()
 
+    def _pula_linha() -> None:
+        """Insere uma quebra de linha no lugar de enviar a mensagem."""
+        if state.get("approval") is not None:
+            return  # menu/licenca pendente: ENTER resolve a escolha, nao o texto
+        in_buf.insert_text("\n")
+
+    @kb.add("c-j")
+    def _ctrl_j(event):
+        _pula_linha()          # Ctrl+J: funciona em qualquer terminal
+
+    @kb.add("escape", "enter")
+    def _alt_enter(event):
+        _pula_linha()          # Alt+Enter: Linux/macOS com Meta; no cmd e tela cheia
+
     @kb.add("enter")
     def _enter(event):
         text = in_buf.text
+        # Barra invertida no fim = continuar na linha de baixo (regra de shell),
+        # que funciona em qualquer terminal - inclusive no cmd do Windows.
+        if text.strip() and state.get("approval") is None and quer_continuar(text):
+            in_buf.text = tira_barra_final(text) + "\n"
+            in_buf.cursor_position = len(in_buf.text)
+            return
         # guarda para as setas cima/baixo; saida nao entra (crianca nao pode
         # sem querer dar ENTER duas vezes e fechar o TEO)
         if text.strip() and text.strip().lower() not in ("/sair", "/exit", "/quit"):

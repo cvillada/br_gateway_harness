@@ -211,6 +211,7 @@ Parar e reler (pensado para idoso e crianca - um toque so):
 | CTRL+C duas vezes seguidas | saida de seguranca se algo travar |
 | Roda do mouse ou barra lateral do seu terminal | reler o texto que subiu |
 | CTRL+C com a linha vazia | fecha o TEO (ESC nunca fecha sozinho) |
+| Ctrl+J, ou terminar a linha com `\` e ENTER | pula linha no `voce>` (escrever em varias linhas; no cmd do Windows Alt+Enter e tela cheia) |
 
 Barra fixa embaixo sempre diz o que apertar; durante a resposta ela mostra
 "respondendo... PARA PARAR: CTRL+C ou ESC".
