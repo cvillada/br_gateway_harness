@@ -2477,6 +2477,17 @@ _saida214b = _box214b.dispatch("limpar_apoio", json.dumps({"pasta": str(_link214
 ok("limpar_apoio acha a pasta mesmo quando o caminho e atalho/symlink",
    "Removi 1" in _saida214b and not (_real214 / "solto.py").exists())
 
+# Cancelar avisa UMA vez (antes o menu avisava e o chamador avisava de novo).
+_sink_canc = _SinkMenu29(["cancelar (voltar para a conversa)"])
+_core_canc = ChatCore(dict(_cfg_m29), _sink_canc, llm=_ListLLM26())
+os.chdir(_base29)
+try:
+    _core_canc.submit("@")
+finally:
+    os.chdir(_orig_cwd29)
+ok("cancelar o menu avisa uma vez so (sem mensagem repetida)",
+   sum(1 for l in _sink_canc.lines if "nada foi escolhido" in l) == 1)
+
 # Pasta com muita coisa: MENU_MAX por pagina e "mais itens" continua a lista
 # (antes a opcao existia mas cancelava - o usuario digitava e o TEO saia).
 _dir_pag = Path(_tmp214.mkdtemp(prefix="pag_"))

@@ -621,8 +621,7 @@ class ChatCore:
                 opcoes,
             )
             if escolha not in opcoes:
-                self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
-                return None
+                return None      # quem chamou avisa (uma vez so) que nada foi escolhido
             alvo = alvos[opcoes.index(escolha)]
             if alvo == "__proxima__":
                 deslocamento += self.MENU_MAX
@@ -631,8 +630,7 @@ class ChatCore:
                 deslocamento = 0
                 continue
             if alvo is None:
-                self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
-                return None
+                return None      # quem chamou avisa (uma vez so) que nada foi escolhido
             if os.path.isdir(alvo):
                 self.sink.line(f"entrando em: {alvo}", style="dim")
                 atual = alvo
