@@ -2426,7 +2426,7 @@ _sh213 = (_raiz213 / "scripts" / "install_te.sh").read_text(encoding="utf-8")
 ok("instalador do Windows instala com --ignore-installed (bgh antigo sem RECORD nao trava)",
    "--ignore-installed" in _ps213 and "python.exe" in _ps213)
 ok("instalador do Windows usa python -m pip (nao o pip.exe que reclama de si mesmo)",
-   '-m pip install --upgrade pip' in _ps213 and 'Scripts\pip.exe" install --upgrade' not in _ps213)
+   '-m pip install --upgrade pip' in _ps213 and r'Scripts\pip.exe" install --upgrade' not in _ps213)
 ok("instalador do Linux/macOS tambem usa --ignore-installed e python -m pip",
    "--ignore-installed" in _sh213 and '.venv/bin/python"' in _sh213)
 ok("os dois instaladores mostram a versao lida do proprio pacote (prova de que instalou)",
@@ -2476,6 +2476,51 @@ _box214b.dispatch("write_file", json.dumps({"path": str(_real214 / "solto.py"),
 _saida214b = _box214b.dispatch("limpar_apoio", json.dumps({"pasta": str(_link214)}))
 ok("limpar_apoio acha a pasta mesmo quando o caminho e atalho/symlink",
    "Removi 1" in _saida214b and not (_real214 / "solto.py").exists())
+
+# Caminho de imagem escrito NA MENSAGEM vira anexo de visao (caso do Mac do usuario).
+from bgh.tools.files import achar_imagens as _achar_img299
+
+_dir_img = Path(_tmp214.mkdtemp(prefix="img_citada_"))
+_foto_citada = _dir_img / "Captura de Tela 2026-06-14 as 11.24.21.png"
+_foto_citada.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 50)
+_encontradas = _achar_img299(f"Nesse arquivo {_foto_citada} pode analisar a imagem?")
+ok("acha o caminho da imagem escrito na mensagem (com espaco no nome)",
+   len(_encontradas) == 1 and _encontradas[0] == str(_foto_citada))
+ok("texto sem imagem nao vira anexo", _achar_img299("so texto, nada de foto") == [])
+
+
+class _Guarda219:
+    """LLM fake que guarda as mensagens que recebeu."""
+
+    def __init__(self):
+        self.recebidas = []
+        self.last_usage = None
+        self.last_finish = "stop"
+
+    def chat(self, messages, tools=None):
+        self.recebidas = list(messages)
+        return {"role": "assistant", "content": "tem uma foto de tela"}
+
+    def summarize(self, text):
+        return ""
+
+    def discover_context(self):
+        return None
+
+
+_cfg_cit: dict = dict(core_cfg)
+_cfg_cit["stream"] = False
+_sink_cit = RecSink()
+_llm_cit = _Guarda219()
+_core_cit = ChatCore(_cfg_cit, _sink_cit, llm=_llm_cit)
+_core_cit.submit(f"Nesse arquivo {_foto_citada} pode analisar a imagem?")
+_ultima = _llm_cit.recebidas[-1] if _llm_cit.recebidas else {}
+ok("mensagem citando imagem vai para o modelo COM a imagem (visao), nao como texto",
+   isinstance(_ultima.get("content"), list)
+   and any(isinstance(p, dict) and p.get("type") == "image_url"
+           for p in _ultima["content"]))
+ok("a tela avisa que viu a imagem",
+   any("Vi uma imagem" in l for l in _sink_cit.lines))
 
 # O prompt tem que mandar rascunho para o scratch e limpar a pasta do usuario.
 _prompt214 = _prompts26.build_system_prompt([], [], [])
@@ -2551,5 +2596,16 @@ _resp_sv299 = _ag_sv299.run_turn("leia a foto", imagem=str(_foto299))
 ok("provedor sem visao: TEO tira a foto, avisa e responde assim mesmo",
    _resp_sv299 == "segui sem a imagem"
    and any("nao le imagem" in n for n in _notas_sv299))
+ok("o TEO lembra que este modelo nao le imagem (decide antes da proxima vez)",
+   any("|" in m for m in (_ag_sv299.cfg.get("vision_blocklist") or [])))
+
+_ag_sv299b = _Agent26(_ag_sv299.cfg, _SemVisao299(), Gate(dict(_ag_sv299.cfg), ask_d))
+_notas_sv299b: list[str] = []
+_ag_sv299b.on_note = _notas_sv299b.append
+_resp_sv299b = _ag_sv299b.run_turn("leia de novo", imagem=str(_foto299))
+ok("na segunda vez nem manda a foto: avisa antes e responde",
+   _resp_sv299b == "segui sem a imagem"
+   and any("ja recusou imagem" in n for n in _notas_sv299b)
+   and not any(isinstance(m.get("content"), list) for m in _ag_sv299b.messages))
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

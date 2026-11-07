@@ -125,6 +125,38 @@ def image_data_url(path: str) -> tuple[str, int, str | None]:
     return f"data:image/{mime};base64,{b64}", tamanho, None
 
 
+def achar_imagens(texto: str, limite: int = 4) -> list[str]:
+    """Caminhos de imagem que existem e foram citados no texto do usuario.
+
+    Caso real (Mac do usuario): ele escreveu o caminho completo de uma captura de
+    tela na mensagem e o TEO tentou ler como texto/instalar Pillow, em vez de mandar
+    a foto para o modelo ver. Aqui a gente procura ".png/.jpg/..." no texto e testa
+    os sufixos ate achar um ARQUIVO QUE EXISTE (funciona com espaco no nome, como
+    "Captura de Tela 2026-06-14 as 11.24.21.png").
+    """
+    achados: list[str] = []
+    if not texto:
+        return achados
+    for m in re.finditer(r"(?i)\.(?:png|jpe?g|webp|gif|bmp)\b", str(texto)):
+        fim = m.end()
+        inicio_limite = max(0, fim - 260)
+        melhor = ""
+        for ini in range(fim - 1, inicio_limite - 1, -1):
+            candidato = str(texto)[ini:fim]
+            try:
+                if len(candidato) > 3 and os.path.isfile(os.path.expanduser(candidato)):
+                    melhor = candidato   # segue descendo para pegar o caminho MAIS LONGO
+            except (OSError, ValueError):
+                continue
+        if melhor:
+            caminho = os.path.expanduser(melhor)
+            if caminho not in achados:
+                achados.append(caminho)
+        if len(achados) >= limite:
+            break
+    return achados
+
+
 def entries(path: str) -> tuple[list[str], list[str], str | None]:
     """(pastas, arquivos, erro) da pasta - dados para MENU, sem formatacao.
 

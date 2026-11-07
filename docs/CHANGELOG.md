@@ -1,6 +1,24 @@
 # Changelog
 
+## 0.2.15
+
+O TEO reconhece sozinho quando a pessoa esta falando de uma imagem.
+
+- Caso real (Mac): o usuario escreveu o caminho completo de uma captura de tela na
+  mensagem ("nesse arquivo /Users/.../Captura de Tela ....png pode analisar?") e o
+  TEO tentou ler como texto - chegou a instalar Pillow. So mandava a foto para o
+  modelo quando o arquivo era anexado com `@`.
+- Agora, caminho de imagem escrito na propria mensagem e reconhecido (inclusive com
+  espaco no nome, como "Captura de Tela 2026-06-14 as 11.24.21.png") e a foto vai
+  para o modelo ver; a tela avisa "vi uma imagem na sua mensagem".
+- Memoria por modelo: se o provedor recusar a imagem, o TEO guarda que aquele
+  modelo nao le imagem e, na proxima vez, avisa ANTES em vez de mandar de novo -
+  decisao tomada antes, como deve ser. Trocar de modelo limpa essa memoria.
+- Quando nao da para ver a imagem, a mensagem oferece o caminho alternativo (ler
+  por OCR, com instalacao de biblioteca) em vez de so recusar.
+
 ## 0.2.14
+
 
 Duas coisas que faziam falta no dia a dia: o TEO le imagem de verdade e nao deixa lixo na pasta do usuario.
 

@@ -142,7 +142,8 @@ HELP_SECTIONS = [
         ("/", "tela fixa: menu da pasta atual (escolhe por numero); modo simples: lista"),
         ("/ <pasta> ou /ls <pasta>", "lista uma pasta especifica"),
         ("@", "tela fixa: menu de arquivos para anexar; modo simples: lista os arquivos"),
-        ("@<arquivo>", "anexa um arquivo ou uma FOTO (png, jpg...); depois faca a pergunta"),
+        ("@<arquivo>", "anexa um arquivo ou uma FOTO (png, jpg...); escrever o caminho da "
+                       "imagem na mensagem tambem funciona"),
     ]),
     ("Escrever em varias linhas (no voce>):", [
         ("Ctrl+J", "pula linha sem enviar a mensagem"),
@@ -876,6 +877,20 @@ class ChatCore:
             else:
                 self.sink.line("Comando desconhecido. /ajuda mostra a lista.")
             return "continue"
+
+        # Caminho de imagem escrito na propria mensagem: manda a FOTO para o modelo
+        # olhar (antes o TEO tentava ler como texto e ate instalava Pillow).
+        if not self.pending_image:
+            citadas = files_mod.achar_imagens(text)
+            if citadas:
+                self.pending_image = citadas[0]
+                extra = ""
+                if len(citadas) > 1:
+                    extra = (f" (voce citou {len(citadas)} imagens; por enquanto eu olho a "
+                             "primeira)")
+                self.sink.line(f"Vi uma imagem na sua mensagem: "
+                               f"{os.path.basename(citadas[0])}. Vou mandar para o modelo "
+                               f"olhar{extra}.", style="cyan")
 
         # Turno normal do modelo (com anexo pendente, se houver).
         user_text = f"{self.pending_attach}\n\n{text}" if self.pending_attach else text

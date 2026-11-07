@@ -100,10 +100,22 @@ class Agent:
             return {**mensagem, "content": "\n".join(str(p.get("text", "")) for p in partes)}
         return {**mensagem, "content": partes}
 
+    def _chave_visao(self) -> str:
+        return f"{self.cfg.get('base_url', '')}|{self.cfg.get('model', '')}"
+
     def _anexar_imagem(self, user_text: str, caminho: str) -> None:
         """Mensagem do usuario com a foto (parte de imagem para a visao)."""
         from .tools.files import image_data_url
 
+        bloqueados = self.cfg.get("vision_blocklist") or []
+        if isinstance(bloqueados, list) and self._chave_visao() in bloqueados:
+            # Este modelo ja recusou imagem antes: decide ANTES e avisa, em vez de
+            # mandar de novo e tomar outro 400.
+            self._note("Este modelo ja recusou imagem antes, entao nao vou mandar a foto. "
+                       "Para ver imagens, escolha um modelo com visao (/modelo) - ou me "
+                       "peca para ler por OCR.")
+            self.messages.append({"role": "user", "content": user_text})
+            return
         url, _tamanho, erro = image_data_url(caminho)
         if not url:
             self._note(erro or "nao consegui preparar a imagem; seguindo so com o texto.")
@@ -214,8 +226,18 @@ class Agent:
                 if not (self._tem_imagem() and _parece_falta_de_visao(exc)):
                     raise
                 self._tirar_imagem()
+                try:
+                    marca = self._chave_visao()
+                    lista = self.cfg.setdefault("vision_blocklist", [])
+                    if marca not in lista:
+                        lista.append(marca)
+                        from .config import save_config
+                        save_config(self.cfg)
+                except Exception:  # noqa: BLE001 - memoria de recurso nunca derruba o turno
+                    pass
                 self._note("O modelo deste provedor nao le imagem; vou seguir sem a foto. "
-                           "Para ler imagens, escolha um modelo com visao (/modelo).")
+                           "Para ler imagens, escolha um modelo com visao (/modelo) - ou me "
+                           "peca para ler por OCR, que eu instalo uma biblioteca.")
                 self._round_start()
                 msg = self._call_model(use_stream)
             self.last_streamed = use_stream

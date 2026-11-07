@@ -91,6 +91,9 @@ DEFAULTS = {
     "command_allowlist": [],
     # Tela fixa (entrada sempre embaixo, estilo Hermes). False volta ao modo classico.
     "tui": True,
+    # Modelos que JA recusaram imagem ("base_url|model"): na proxima vez o TEO
+    # avisa antes, em vez de mandar a foto e levar 400 outra vez.
+    "vision_blocklist": [],
     # Palco: trilha do pedido (chefe -> agente -> ferramenta -> modelo -> tela)
     # desenhada acima da linha de digitar, SO enquanto o TEO trabalha. False =
     # tela exatamente como antes (o /palco liga|desliga no chat faz o mesmo).
