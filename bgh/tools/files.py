@@ -255,6 +255,33 @@ LIMPAR_SPEC = {
 }
 
 
+def _dentro_de(caminho: str, raiz: str) -> bool:
+    """O caminho esta dentro da pasta pedida? (aguenta atalho/symlink e nome 8.3)
+
+    macOS resolve /var -> /private/var e o Windows pode devolver o nome curto
+    (RUNNER~1) para um dos lados: comparar texto puro erra. Aqui compara o caminho
+    real normalizado e, se ainda nao bater, sobe pasta por pasta com samefile.
+    """
+    if not raiz:
+        return True
+    alvo = os.path.normcase(os.path.realpath(caminho))
+    base = os.path.normcase(os.path.realpath(raiz))
+    if alvo == base or alvo.startswith(base + os.sep):
+        return True
+    pasta = caminho
+    for _ in range(16):
+        pai = os.path.dirname(pasta)
+        if not pai or pai == pasta:
+            break
+        try:
+            if os.path.samefile(pai, raiz):
+                return True
+        except OSError:
+            pass
+        pasta = pai
+    return False
+
+
 def limpar_apoio(args: dict, ctx) -> str:
     """Apaga SO os arquivos que o TEO criou nesta sessao (nunca os do usuario).
 
@@ -269,18 +296,17 @@ def limpar_apoio(args: dict, ctx) -> str:
     pasta = str(args.get("pasta") or "").strip()
     manter = str(args.get("manter") or "").strip()
     raiz = os.path.abspath(os.path.expanduser(pasta)) if pasta else ""
-    manter_abs = os.path.abspath(os.path.expanduser(manter)) if manter else ""
+    manter_abs = os.path.realpath(os.path.expanduser(manter)) if manter else ""
     apagados = 0
     mantidos: list[str] = []
     falhas = 0
     restantes: list[str] = []
     for caminho in list(criados):
         alvo = os.path.abspath(str(caminho))
-        dentro = (not raiz) or alvo == raiz or alvo.startswith(raiz + os.sep)
-        if not dentro:
+        if not _dentro_de(alvo, raiz):
             restantes.append(caminho)
             continue
-        if manter_abs and alvo == manter_abs:
+        if manter_abs and os.path.realpath(alvo) == manter_abs:
             mantidos.append(caminho)
             continue
         try:

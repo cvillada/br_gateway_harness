@@ -2463,6 +2463,20 @@ ok("limpar_apoio apaga o apoio e MANTEM o entregavel pedido",
 ok("limpar_apoio NUNCA apaga arquivo que o usuario ja tinha",
    (_pasta214 / "do_usuario.txt").is_file())
 
+# Pasta informada por ATALHO (macOS: /var -> /private/var): tem que achar igual.
+_real214 = Path(_tmp214.mkdtemp(prefix="apoio_real_"))
+_link214 = _real214.parent / (_real214.name + "_link")
+try:
+    os.symlink(_real214, _link214)
+except (OSError, NotImplementedError):
+    _link214 = _real214
+_box214b = _ToolBox214(dict(_cfg214), Gate(dict(_cfg214), ask_o))
+_box214b.dispatch("write_file", json.dumps({"path": str(_real214 / "solto.py"),
+                                            "content": "x"}))
+_saida214b = _box214b.dispatch("limpar_apoio", json.dumps({"pasta": str(_link214)}))
+ok("limpar_apoio acha a pasta mesmo quando o caminho e atalho/symlink",
+   "Removi 1" in _saida214b and not (_real214 / "solto.py").exists())
+
 # O prompt tem que mandar rascunho para o scratch e limpar a pasta do usuario.
 _prompt214 = _prompts26.build_system_prompt([], [], [])
 ok("prompt separa RASCUNHO de ENTREGA e manda limpar a pasta do usuario",
