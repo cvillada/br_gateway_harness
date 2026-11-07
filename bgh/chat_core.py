@@ -574,34 +574,46 @@ class ChatCore:
     MENU_MAX = 18  # itens por menu: numero alto demais nao se acha na tela
 
     def _escolher_caminho(self, inicio: str, para_anexar: bool = False) -> str | None:
-        """Menu numerado de pastas/arquivos: navega e devolve o arquivo escolhido.
+        """Menu numerado de pastas/arquivos: navega, pagina e devolve o arquivo.
 
         Motivo (pedido do usuario): pessoa idosa ou crianca nao deve digitar
         caminho. Cada linha DIZ o que acontece se escolher ("entrar em: ...",
         "anexar: ..."), o rotulo ensina a digitar o numero e a opcao 1 sempre
         cancela (Enter/ESC nao escolhem nada por engano).
+
+        Pasta com muita coisa: a lista PAGINA de MENU_MAX em MENU_MAX e a opcao
+        "mais itens" mostra o resto (antes ela existia mas cancelava a escolha -
+        o usuario digitava o numero dela e o TEO simplesmente saia).
         """
         atual = os.path.abspath(os.path.expanduser(inicio) or os.getcwd())
+        deslocamento = 0
         while True:
             pastas, arquivos, erro = files_mod.entries(atual)
             if erro:
                 self.sink.line(erro, style="yellow")
                 return None
+            itens: list[tuple[str, str]] = [
+                (f"entrar em: {nome}", os.path.join(atual, nome)) for nome in pastas
+            ]
+            itens += [(("anexar: " if para_anexar else "ver: ") + nome,
+                       os.path.join(atual, nome)) for nome in arquivos]
             opcoes: list[str] = ["cancelar (voltar para a conversa)"]
             alvos: list[str | None] = [None]
             pai = os.path.dirname(atual.rstrip(os.sep))
             if pai and pai != atual:
                 opcoes.append(".. (voltar uma pasta)")
                 alvos.append(pai)
-            for nome in pastas[:self.MENU_MAX]:
-                opcoes.append(f"entrar em: {nome}")
-                alvos.append(os.path.join(atual, nome))
-            for nome in arquivos[:self.MENU_MAX]:
-                opcoes.append(("anexar: " if para_anexar else "ver: ") + nome)
-                alvos.append(os.path.join(atual, nome))
-            if len(pastas) > self.MENU_MAX or len(arquivos) > self.MENU_MAX:
-                opcoes.append("... (tem mais; use /ls <pasta> para ver tudo)")
-                alvos.append(None)
+            fatia = itens[deslocamento:deslocamento + self.MENU_MAX]
+            for rotulo, caminho in fatia:
+                opcoes.append(rotulo)
+                alvos.append(caminho)
+            restantes = len(itens) - (deslocamento + len(fatia))
+            if restantes > 0:
+                opcoes.append(f"mais itens (mais {restantes})")
+                alvos.append("__proxima__")
+            if deslocamento > 0:
+                opcoes.append("voltar ao inicio da lista")
+                alvos.append("__inicio__")
             escolha = self.sink.ask_choice(
                 "ESCOLHER ARQUIVO PARA ANEXAR" if para_anexar else "ABRIR PASTA OU ARQUIVO",
                 f"Pasta atual: {atual}\n"
@@ -609,13 +621,22 @@ class ChatCore:
                 opcoes,
             )
             if escolha not in opcoes:
+                self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
                 return None
             alvo = alvos[opcoes.index(escolha)]
+            if alvo == "__proxima__":
+                deslocamento += self.MENU_MAX
+                continue
+            if alvo == "__inicio__":
+                deslocamento = 0
+                continue
             if alvo is None:
+                self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
                 return None
             if os.path.isdir(alvo):
                 self.sink.line(f"entrando em: {alvo}", style="dim")
                 atual = alvo
+                deslocamento = 0
                 continue
             return alvo
 

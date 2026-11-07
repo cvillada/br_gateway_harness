@@ -16,6 +16,10 @@ O TEO reconhece sozinho quando a pessoa esta falando de uma imagem.
   decisao tomada antes, como deve ser. Trocar de modelo limpa essa memoria.
 - Quando nao da para ver a imagem, a mensagem oferece o caminho alternativo (ler
   por OCR, com instalacao de biblioteca) em vez de so recusar.
+- Menu de pasta pagina de verdade: pasta com muita coisa mostra 18 itens por vez e
+  a opcao "mais itens (mais N)" mostra o resto (antes ela aparecia mas CANCELAVA a
+  escolha - quem digitava o numero dela voltava para a conversa sem entender). Em
+  qualquer pagina existe "voltar ao inicio da lista".
 
 ## 0.2.14
 

@@ -2477,6 +2477,23 @@ _saida214b = _box214b.dispatch("limpar_apoio", json.dumps({"pasta": str(_link214
 ok("limpar_apoio acha a pasta mesmo quando o caminho e atalho/symlink",
    "Removi 1" in _saida214b and not (_real214 / "solto.py").exists())
 
+# Pasta com muita coisa: MENU_MAX por pagina e "mais itens" continua a lista
+# (antes a opcao existia mas cancelava - o usuario digitava e o TEO saia).
+_dir_pag = Path(_tmp214.mkdtemp(prefix="pag_"))
+for _i_pag in range(25):
+    (_dir_pag / f"arquivo_{_i_pag:02d}.txt").write_text("x", encoding="utf-8")
+_sink_pag = _SinkMenu29(["mais itens (mais 7)", "cancelar (voltar para a conversa)"])
+_core_pag = ChatCore(dict(_cfg_m29), _sink_pag, llm=_ListLLM26())
+os.chdir(_dir_pag)
+try:
+    _core_pag.submit("@")
+finally:
+    os.chdir(_orig_cwd29)
+ok("lista grande pagina: 'mais itens' mostra o resto (nao cancela)",
+   bool(_sink_pag.menus) and _sink_pag.menus[0][-1] == "mais itens (mais 7)"
+   and len(_sink_pag.menus) > 1
+   and "voltar ao inicio da lista" in _sink_pag.menus[1])
+
 # Caminho de imagem escrito NA MENSAGEM vira anexo de visao (caso do Mac do usuario).
 from bgh.tools.files import achar_imagens as _achar_img299
 
