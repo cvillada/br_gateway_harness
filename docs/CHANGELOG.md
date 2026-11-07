@@ -1,6 +1,29 @@
 # Changelog
 
+## 0.2.14
+
+Duas coisas que faziam falta no dia a dia: o TEO le imagem de verdade e nao deixa lixo na pasta do usuario.
+
+- Ler imagem (visao): `@foto.png` (ou escolher a foto no menu do `@`) manda a imagem
+  para o modelo em vez de tentar adivinhar o conteudo. Antes ele instalava biblioteca
+  e fazia OCR caseiro. Aceita png, jpg, jpeg, webp, gif e bmp ate 5 MB; foto maior
+  recebe uma frase clara pedindo para diminuir.
+- Modelo sem visao: se o provedor recusar a imagem, o TEO avisa em uma linha
+  ("o modelo deste provedor nao le imagem; vou seguir sem a foto") e responde com o
+  texto - nunca deixa a pessoa sem resposta nem mostra erro tecnico.
+- A foto nao vai para o `session.json` (fica um marcador "[imagem anexada]") nem
+  entra na conta do medidor de contexto: base64 no arquivo deixaria a sessao com
+  megabytes e o medidor mentiria.
+- Pasta do usuario limpa: secao nova no prompt separando RASCUNHO de ENTREGA -
+  codigo de teste e arquivo de apoio vao para o `run_python`, que roda na pasta de
+  rascunho do TEO; `write_file`/`make_document` ficam so para o arquivo final.
+- Ferramenta nova `limpar_apoio(pasta, manter)`: apaga SOMENTE os arquivos que o
+  proprio TEO criou nesta conversa (ele passa a registrar cada `write_file`),
+  preservando o entregavel. Nunca toca em arquivo que ja era do usuario - para
+  esses continua valendo a licenca.
+
 ## 0.2.13
+
 
 O instalador nao trava mais em cima de uma instalacao anterior quebrada.
 

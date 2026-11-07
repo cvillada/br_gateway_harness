@@ -19,6 +19,15 @@ from .tools.skills import discover, index_lines
 # Mensagem mostrada/quando o usuario manda parar (botao CTRL+C / ESC na UI).
 STOPPED_NOTE = "(parei a resposta, como voce pediu)"
 
+# Sinais de que o provedor recusou a IMAGEM (modelo sem visao).
+VISION_MARKERS = ("image", "vision", "multimodal", "image_url", "media type",
+                  "content type")
+
+
+def _parece_falta_de_visao(exc: BaseException) -> bool:
+    texto = str(exc).lower()
+    return any(marcador in texto for marcador in VISION_MARKERS)
+
 
 class Agent:
     def __init__(self, cfg: dict, llm: LLM, gate: Gate, on_event=None):
@@ -57,6 +66,73 @@ class Agent:
         ]
         self._load_session()
 
+    # ----- mensagens com imagem (visao) ---------------------------------------
+    @staticmethod
+    def _texto_de(mensagem: dict) -> str:
+        """Texto puro da mensagem (ignora pedacos de imagem)."""
+        conteudo = mensagem.get("content")
+        if isinstance(conteudo, str):
+            return conteudo
+        partes = []
+        for parte in conteudo or []:
+            if isinstance(parte, dict) and parte.get("type") == "text":
+                partes.append(str(parte.get("text", "")))
+        return "\n".join(partes)
+
+    @staticmethod
+    def _sem_imagem(mensagem: dict) -> dict:
+        """Copia da mensagem com as imagens trocadas por marcador de texto.
+
+        Usado ao salvar a sessao e ao medir o contexto: base64 de foto nao pode
+        entrar no session.json (ficaria com megabytes) nem inflar o medidor.
+        """
+        conteudo = mensagem.get("content")
+        if not isinstance(conteudo, list):
+            return mensagem
+        partes = []
+        for parte in conteudo:
+            if isinstance(parte, dict) and parte.get("type") == "image_url":
+                partes.append({"type": "text", "text": "[imagem anexada nesta conversa]"})
+            else:
+                partes.append(parte)
+        if all(isinstance(p, dict) and p.get("type") == "text" for p in partes):
+            # so texto: volta a ser string (todo servidor aceita; e o session.json fica limpo)
+            return {**mensagem, "content": "\n".join(str(p.get("text", "")) for p in partes)}
+        return {**mensagem, "content": partes}
+
+    def _anexar_imagem(self, user_text: str, caminho: str) -> None:
+        """Mensagem do usuario com a foto (parte de imagem para a visao)."""
+        from .tools.files import image_data_url
+
+        url, _tamanho, erro = image_data_url(caminho)
+        if not url:
+            self._note(erro or "nao consegui preparar a imagem; seguindo so com o texto.")
+            self.messages.append({"role": "user", "content": user_text})
+            return
+        self.messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_text},
+                {"type": "image_url", "image_url": {"url": url}},
+            ],
+        })
+
+    def _tem_imagem(self) -> bool:
+        for m in self.messages:
+            c = m.get("content")
+            if isinstance(c, list) and any(
+                    isinstance(p, dict) and p.get("type") == "image_url" for p in c):
+                return True
+        return False
+
+    def _tirar_imagem(self) -> bool:
+        """Remove a imagem da mensagem (provedor sem visao): mantem o texto."""
+        for m in reversed(self.messages):
+            if m.get("role") == "user" and isinstance(m.get("content"), list):
+                m["content"] = self._texto_de(m)
+                return True
+        return False
+
     # ----- sessao -------------------------------------------------------------
     def _load_session(self) -> None:
         if not SESSION_FILE.exists():
@@ -71,8 +147,9 @@ class Agent:
     def _save_session(self) -> None:
         try:
             SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+            historico = [self._sem_imagem(m) for m in self.messages[1:]]
             SESSION_FILE.write_text(
-                json.dumps(self.messages[1:], ensure_ascii=False), encoding="utf-8"
+                json.dumps(historico, ensure_ascii=False), encoding="utf-8"
             )
         except OSError:
             pass
@@ -93,11 +170,14 @@ class Agent:
             SESSION_FILE.unlink()
 
     # ----- turno --------------------------------------------------------------
-    def run_turn(self, user_text: str) -> str:
+    def run_turn(self, user_text: str, imagem: str | None = None) -> str:
         self.last_reasoning = []
         self.last_compressed = False
         self.stop_event.clear()
-        self.messages.append({"role": "user", "content": user_text})
+        if imagem:
+            self._anexar_imagem(user_text, imagem)
+        else:
+            self.messages.append({"role": "user", "content": user_text})
         max_rounds = max(1, int(self.cfg.get("max_tool_rounds", 20)))   # tamanho da etapa
         teto = max(max_rounds,
                    int(self.cfg.get("max_tool_rounds_teto", max_rounds * 2)))
@@ -129,6 +209,15 @@ class Agent:
                         str(exc) + " Mesmo depois de compactar, o pedido nao coube no servidor. "
                         "Reduza o limite aqui na tela: /ctx 60000"
                     ) from exc
+            except LLMError as exc:
+                # Modelo sem visao: segue sem a foto (nunca deixa a pessoa sem resposta).
+                if not (self._tem_imagem() and _parece_falta_de_visao(exc)):
+                    raise
+                self._tirar_imagem()
+                self._note("O modelo deste provedor nao le imagem; vou seguir sem a foto. "
+                           "Para ler imagens, escolha um modelo com visao (/modelo).")
+                self._round_start()
+                msg = self._call_model(use_stream)
             self.last_streamed = use_stream
             self._usage_note()
             self.messages.append(msg)
@@ -258,7 +347,8 @@ class Agent:
 
     # ----- contexto -----------------------------------------------------------
     def _estimate_chars(self) -> int:
-        return sum(len(json.dumps(m, ensure_ascii=False)) for m in self.messages)
+        return sum(len(json.dumps(self._sem_imagem(m), ensure_ascii=False))
+                   for m in self.messages)
 
     def ctx_usage(self) -> dict:
         """Medidor para a UI: quantos chars do orcamento ja foram usados.
@@ -365,7 +455,7 @@ class Agent:
         if not head:
             return False
         transcript = "\n".join(
-            f"{m.get('role')}: {str(m.get('content', ''))[:500]}" for m in head
+            f"{m.get('role')}: {self._texto_de(m)[:500]}" for m in head
         )
         self._note("Compactando a conversa em resumo (o resumo custa uma espera extra)...")
         summary = self.llm.summarize(transcript)

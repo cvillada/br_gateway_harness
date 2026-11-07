@@ -222,7 +222,7 @@ Atalhos rapidos (nao perguntam licenca, so mostram):
 |--------|-----------|
 | `/` | na tela fixa abre o menu da pasta atual (escolhe por numero); no modo simples, lista |
 | `@` | na tela fixa abre o menu de arquivos para anexar; no modo simples, lista os arquivos |
-| `@<arquivo>` | anexa o arquivo; depois e so perguntar sobre ele |
+| `@<arquivo>` | anexa o arquivo; depois e so perguntar sobre ele. PNG/JPG/WEBP/GIF/BMP vao como IMAGEM para a visao do modelo (ate 5 MB) |
 | `/ls <pasta>` | lista uma pasta especifica (sem menu) |
 
 Comandos:

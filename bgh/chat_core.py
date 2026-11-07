@@ -142,7 +142,7 @@ HELP_SECTIONS = [
         ("/", "tela fixa: menu da pasta atual (escolhe por numero); modo simples: lista"),
         ("/ <pasta> ou /ls <pasta>", "lista uma pasta especifica"),
         ("@", "tela fixa: menu de arquivos para anexar; modo simples: lista os arquivos"),
-        ("@<arquivo>", "anexa um arquivo; depois faca sua pergunta sobre ele"),
+        ("@<arquivo>", "anexa um arquivo ou uma FOTO (png, jpg...); depois faca a pergunta"),
     ]),
     ("Escrever em varias linhas (no voce>):", [
         ("Ctrl+J", "pula linha sem enviar a mensagem"),
@@ -323,6 +323,7 @@ class ChatCore:
         self.agent = Agent(cfg, self.llm, self.gate, on_event=sink.tool_event)
         self.model_list: list[str] = []
         self.pending_attach: str | None = None
+        self.pending_image: str | None = None   # foto anexada (vai para a visao)
         # Estado do streaming: pensamento e resposta em blocos separados.
         self.st = {"thinking": False, "resposta": False}
         self._pend = ""  # '*' do fim de um pedaco aguarda o proximo ('**' dividido)
@@ -640,6 +641,17 @@ class ChatCore:
             target = Path(os.path.expanduser(arg))
             if target.is_dir():
                 self.sink.line(files_mod.list_dir(str(target), files_only=True))
+            elif target.is_file() and files_mod.is_image(str(target)):
+                # Imagem: vai para o modelo como IMAGEM (visao), nao como texto.
+                _url, tamanho, erro_img = files_mod.image_data_url(str(target))
+                if erro_img:
+                    self.sink.line(erro_img, style="yellow")
+                    return "continue"
+                self.pending_image = str(target)
+                self.pending_attach = None
+                self.sink.line(f"Imagem anexada: {target} "
+                               f"({files_mod.human_size(tamanho)}). Agora faca sua "
+                               "pergunta sobre ela.", style="cyan")
             elif target.is_file():
                 try:
                     content = target.read_text(encoding="utf-8", errors="replace")[:8000]
@@ -696,6 +708,7 @@ class ChatCore:
             elif name == "/nov":
                 self.agent.new_session()
                 self.pending_attach = None
+                self.pending_image = None
                 self.sink.line("Conversa zerada (memoria e skills preservadas).", style="dim")
                 self.print_ctx()   # rodape tem que mostrar a leitura nova na hora, nao a velha
             elif name == "/mem" and rest:
@@ -867,6 +880,8 @@ class ChatCore:
         # Turno normal do modelo (com anexo pendente, se houver).
         user_text = f"{self.pending_attach}\n\n{text}" if self.pending_attach else text
         self.pending_attach = None
+        imagem = self.pending_image
+        self.pending_image = None
         # Continuacao estilo Hermes: mensagens digitadas durante o turno que chegaram
         # tarde viram o proximo turno automaticamente (nada se perde).
         fila_turnos: list[str] = [user_text]
@@ -876,7 +891,10 @@ class ChatCore:
             self.st["resposta"] = False
             self._pend = ""
             try:
-                answer = self.agent.run_turn(turno)
+                # a imagem vale para o primeiro turno; os de continuacao (steering)
+                # seguem so com texto
+                answer = self.agent.run_turn(turno, imagem=imagem)
+                imagem = None
             except KeyboardInterrupt:
                 # CTRL+C no modo classico tambem para o turno.
                 self.agent.stop_event.set()

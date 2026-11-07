@@ -16,7 +16,9 @@ SPEC = {
         "description": (
             "Executa um script Python na maquina local e devolve stdout/stderr. "
             "Use para calcular, validar dados, testar o codigo que voce escreveu e diagnosticar o sistema. "
-            "O codigo roda no venv do Motor (tem requests/openai/rich)."
+            "O codigo roda no venv do Motor (tem requests/openai/rich) e na PASTA DE RASCUNHO do TEO: "
+            "arquivos criados ali nao aparecem na pasta do usuario. Para experimentar, use esta ferramenta - "
+            "write_file e so para o arquivo final que o usuario pediu."
         ),
         "parameters": {
             "type": "object",

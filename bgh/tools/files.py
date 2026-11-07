@@ -29,8 +29,10 @@ WRITE_SPEC = {
     "function": {
         "name": "write_file",
         "description": (
-            "Escreve conteudo em um arquivo (cria diretorios pai). Sobrescreve: se o arquivo ja existe, "
-            "pede confirmacao ao usuario antes."
+            "Grava o ARQUIVO FINAL que o usuario pediu (relatorio, documento, pagina). "
+            "Cria diretorios pai; se o arquivo ja existe, pede confirmacao antes. "
+            "Para testar codigo ou gerar arquivos de apoio use run_python (ele roda no "
+            "rascunho do TEO e nao suja a pasta do usuario)."
         ),
         "parameters": {
             "type": "object",
@@ -78,6 +80,49 @@ def human_size(n: int) -> str:
     if n >= 1000:
         return f"{n / 1000:.1f} KB"
     return f"{n} B"
+
+
+# Extensoes de imagem que a gente manda para o modelo (visao) e o teto de tamanho:
+# base64 cresce 33% e o pedido inteiro vai para a API, entao 5 MB e o limite util.
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def is_image(path: str) -> bool:
+    return Path(str(path)).suffix.lower() in IMAGE_EXTS
+
+
+def image_data_url(path: str) -> tuple[str, int, str | None]:
+    """(data_url, bytes, erro) da imagem para mandar ao modelo com visao.
+
+    Devolve erro em texto simples quando nao da: extensao fora da lista, arquivo
+    grande demais (base64 infla 33% e o pedido vai inteiro para o servidor) ou
+    problema de leitura.
+    """
+    import base64
+
+    alvo = Path(os.path.expanduser(str(path)))
+    if not alvo.is_file():
+        return "", 0, f"nao encontrei a imagem: {alvo}"
+    if not is_image(str(alvo)):
+        return "", 0, (f"'{alvo.suffix}' nao e uma imagem que eu saiba enviar "
+                       "(png, jpg, jpeg, webp, gif, bmp)")
+    try:
+        tamanho = alvo.stat().st_size
+    except OSError as exc:
+        return "", 0, f"nao consegui ler a imagem: {exc}"
+    if tamanho > MAX_IMAGE_BYTES:
+        return "", tamanho, (f"a imagem tem {human_size(tamanho)} - acima de "
+                             f"{human_size(MAX_IMAGE_BYTES)} eu nao envio. Diminua a foto "
+                             "ou recorte a parte que importa.")
+    try:
+        bruto = alvo.read_bytes()
+    except OSError as exc:
+        return "", tamanho, f"nao consegui ler a imagem: {exc}"
+    mime = {"jpg": "jpeg", "jpeg": "jpeg"}.get(alvo.suffix.lower().lstrip("."),
+                                               alvo.suffix.lower().lstrip("."))
+    b64 = base64.b64encode(bruto).decode("ascii")
+    return f"data:image/{mime};base64,{b64}", tamanho, None
 
 
 def entries(path: str) -> tuple[list[str], list[str], str | None]:
@@ -181,7 +226,78 @@ def write_file(args: dict, ctx) -> str:
         target.write_text(str(content), encoding="utf-8")
     except OSError as exc:
         return f"ERRO ao escrever {target}: {exc}"
+    criados = getattr(ctx, "criados", None)
+    if isinstance(criados, list) and str(target) not in criados:
+        criados.append(str(target))
     return f"OK: gravado {target} ({len(str(content))} chars)"
+
+
+LIMPAR_SPEC = {
+    "type": "function",
+    "function": {
+        "name": "limpar_apoio",
+        "description": (
+            "Apaga os arquivos de APOIO que o proprio TEO criou nesta conversa "
+            "(scripts, rascunhos, copias), deixando apenas o arquivo final pedido pelo "
+            "usuario. Nunca apaga arquivo que o usuario ja tinha."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pasta": {"type": "string",
+                          "description": "Limitar a esta pasta (padrao: todas)"},
+                "manter": {"type": "string",
+                           "description": "Arquivo a PRESERVAR (ex.: o relatorio final)"},
+            },
+            "required": [],
+        },
+    },
+}
+
+
+def limpar_apoio(args: dict, ctx) -> str:
+    """Apaga SO os arquivos que o TEO criou nesta sessao (nunca os do usuario).
+
+    Motivo (pedido do usuario): o TEO deixava scripts .py, copias e rascunhos na
+    pasta do usuario junto com o entregavel. Apagar arquivo do usuario continua
+    exigindo licenca; aqui e limpeza do proprio trabalho, entao roda direto - mas
+    so nos caminhos registrados por write_file.
+    """
+    criados = getattr(ctx, "criados", None)
+    if not isinstance(criados, list) or not criados:
+        return "Nada para limpar: eu nao criei nenhum arquivo nesta conversa."
+    pasta = str(args.get("pasta") or "").strip()
+    manter = str(args.get("manter") or "").strip()
+    raiz = os.path.abspath(os.path.expanduser(pasta)) if pasta else ""
+    manter_abs = os.path.abspath(os.path.expanduser(manter)) if manter else ""
+    apagados = 0
+    mantidos: list[str] = []
+    falhas = 0
+    restantes: list[str] = []
+    for caminho in list(criados):
+        alvo = os.path.abspath(str(caminho))
+        dentro = (not raiz) or alvo == raiz or alvo.startswith(raiz + os.sep)
+        if not dentro:
+            restantes.append(caminho)
+            continue
+        if manter_abs and alvo == manter_abs:
+            mantidos.append(caminho)
+            continue
+        try:
+            os.remove(alvo)
+            apagados += 1
+        except FileNotFoundError:
+            pass          # ja nao existia: nada a fazer
+        except OSError:
+            falhas += 1
+            restantes.append(caminho)
+    criados[:] = restantes
+    partes = [f"Removi {apagados} arquivo(s) de apoio que eu mesmo criei."]
+    if mantidos:
+        partes.append("Mantive: " + ", ".join(os.path.basename(m) for m in mantidos))
+    if falhas:
+        partes.append(f"{falhas} nao puderam ser apagados (talvez estejam abertos)")
+    return " ".join(partes)
 
 
 def search_files(args: dict, ctx) -> str:

@@ -23,11 +23,14 @@ class Ctx:
     cfg: dict
     gate: object  # bgh.approvals.Gate
     stop_event: object | None = None  # threading.Event: usuario mandou parar
+    # Arquivos que o TEO criou nesta sessao (write_file). Serve para limpar o
+    # apoio sem risco de apagar arquivo do usuario.
+    criados: list | None = None
 
 
 class ToolBox:
     def __init__(self, cfg: dict, gate, stop_event=None):
-        self.ctx = Ctx(cfg=cfg, gate=gate, stop_event=stop_event)
+        self.ctx = Ctx(cfg=cfg, gate=gate, stop_event=stop_event, criados=[])
         self.handlers = {
             "run_command": terminal.run,
             "run_python": python_exec.run,
@@ -40,6 +43,7 @@ class ToolBox:
             "skill": skills.load_skill_tool,
             "make_document": documents.make_document,
             "instalar_pacote": packages.run,
+            "limpar_apoio": files.limpar_apoio,
         }
         self.specs = [
             terminal.SPEC,
@@ -53,6 +57,7 @@ class ToolBox:
             skills.SPEC,
             documents.SPEC,
             packages.SPEC,
+            files.LIMPAR_SPEC,
         ]
 
     def dispatch(self, name: str, arguments_json: str) -> str:

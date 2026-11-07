@@ -1578,7 +1578,7 @@ _core_err26 = ChatCore(dict(core_cfg), _sink_err26,
                        llm=_ListLLM26())
 
 
-def _explode26(texto):
+def _explode26(texto, imagem=None):
     raise ValueError("boom simulado dos testes")
 
 
@@ -2432,5 +2432,110 @@ ok("instalador do Linux/macOS tambem usa --ignore-installed e python -m pip",
 ok("os dois instaladores mostram a versao lida do proprio pacote (prova de que instalou)",
    "import bgh; print(bgh.__version__)" in _ps213
    and "import bgh; print(bgh.__version__)" in _sh213)
+
+# ---------- v0.2.14: TEO limpa o proprio apoio (nao deixa lixo na pasta) ------
+import tempfile as _tmp214
+from bgh.tools import ToolBox as _ToolBox214
+
+_pasta214 = Path(_tmp214.mkdtemp(prefix="apoio214_"))
+(_pasta214 / "relatorio.html").write_text("<html>final</html>", encoding="utf-8")
+(_pasta214 / "do_usuario.txt").write_text("arquivo que ja era dele", encoding="utf-8")
+_cfg214: dict = dict(core_cfg)
+_box214 = _ToolBox214(_cfg214, Gate(dict(_cfg214), ask_o))
+_ctx214 = _box214.ctx
+_box214.dispatch("write_file", json.dumps({"path": str(_pasta214 / "script.py"),
+                                           "content": "print(1)"}))
+_box214.dispatch("write_file", json.dumps({"path": str(_pasta214 / "copia.txt"),
+                                           "content": "lixo"}))
+_box214.dispatch("write_file", json.dumps({"path": str(_pasta214 / "relatorio.html"),
+                                           "content": "<html>final</html>"}))
+ok("write_file registra o que o TEO criou (para poder limpar depois)",
+   len(_ctx214.criados) == 3)
+ok("limpar_apoio existe no registro de ferramentas",
+   "limpar_apoio" in _box214.handlers)
+_saida214 = _box214.dispatch("limpar_apoio",
+                             json.dumps({"pasta": str(_pasta214),
+                                         "manter": str(_pasta214 / "relatorio.html")}))
+ok("limpar_apoio apaga o apoio e MANTEM o entregavel pedido",
+   "Removi 2" in _saida214 and (_pasta214 / "relatorio.html").is_file()
+   and not (_pasta214 / "script.py").exists()
+   and not (_pasta214 / "copia.txt").exists())
+ok("limpar_apoio NUNCA apaga arquivo que o usuario ja tinha",
+   (_pasta214 / "do_usuario.txt").is_file())
+
+# O prompt tem que mandar rascunho para o scratch e limpar a pasta do usuario.
+_prompt214 = _prompts26.build_system_prompt([], [], [])
+ok("prompt separa RASCUNHO de ENTREGA e manda limpar a pasta do usuario",
+   "RASCUNHO x ENTREGA" in _prompt214 and "limpar_apoio" in _prompt214
+   and "pasta de rascunho" in _prompt214)
+
+# ---------- v0.2.14: ler imagem (visao) em vez de OCR caseiro ------------------
+import tempfile as _tmp299
+from bgh.tools.files import image_data_url as _img_url299
+from bgh.tools.files import is_image as _is_img299
+
+_dir299 = Path(_tmp299.mkdtemp(prefix="visao299_"))
+_foto299 = _dir299 / "foto.png"
+_foto299.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
+_txt299 = _dir299 / "nota.txt"
+_txt299.write_text("nao sou imagem", encoding="utf-8")
+_grande299 = _dir299 / "grande.png"
+_grande299.write_bytes(b"0" * (6 * 1024 * 1024))
+
+_url299, _n299, _err299 = _img_url299(str(_foto299))
+ok("imagem vira data URL para a visao do modelo",
+   _url299.startswith("data:image/png;base64,") and _n299 == 208 and _err299 is None)
+ok("arquivo de texto nao e aceito como imagem",
+   "nao e uma imagem" in (_img_url299(str(_txt299))[2] or ""))
+ok("foto grande demais e recusada com frase clara",
+   "Diminua a foto" in (_img_url299(str(_grande299))[2] or ""))
+ok("helper reconhece extensoes de imagem", _is_img299("a.JPG") and not _is_img299("a.py"))
+
+_cfg299: dict = dict(core_cfg)
+_cfg299["stream"] = False
+_llm299 = _OkLLM26()
+_ag299 = _Agent26(_cfg299, _llm299, Gate(dict(_cfg299), ask_d))
+_ag299.run_turn("o que tem nesta foto?", imagem=str(_foto299))
+_msg_user299 = [m for m in _ag299.messages if m.get("role") == "user"
+                and isinstance(m.get("content"), list)]
+ok("o pedido com foto leva texto + imagem (duas partes)",
+   bool(_msg_user299) and len(_msg_user299[-1]["content"]) == 2
+   and _msg_user299[-1]["content"][0]["type"] == "text"
+   and _msg_user299[-1]["content"][1]["type"] == "image_url")
+ok("o medidor de contexto nao conta o base64 da foto",
+   len(json.dumps(_ag299._sem_imagem(_msg_user299[-1]), ensure_ascii=False)) < 600)
+_sessao299 = Path(os.environ["BGH_HOME"], "session.json").read_text(encoding="utf-8")
+ok("a sessao salva NAO guarda o base64 (troca por marcador)",
+   "base64" not in _sessao299 and "[imagem anexada" in _sessao299)
+
+
+class _SemVisao299:
+    """Provedor que recusa imagem (modelo sem visao)."""
+
+    def __init__(self):
+        self.chamadas = 0
+
+    def chat(self, messages, tools=None):
+        self.chamadas += 1
+        tem_foto = any(
+            isinstance(m.get("content"), list)
+            and any(isinstance(p, dict) and p.get("type") == "image_url"
+                    for p in m["content"])
+            for m in messages)
+        if tem_foto:
+            raise _LLMErr27("Error code: 400 - Invalid content type: image_url")
+        return {"role": "assistant", "content": "segui sem a imagem"}
+
+    def summarize(self, text):
+        return ""
+
+
+_ag_sv299 = _Agent26(dict(_cfg299), _SemVisao299(), Gate(dict(_cfg299), ask_d))
+_notas_sv299: list[str] = []
+_ag_sv299.on_note = _notas_sv299.append
+_resp_sv299 = _ag_sv299.run_turn("leia a foto", imagem=str(_foto299))
+ok("provedor sem visao: TEO tira a foto, avisa e responde assim mesmo",
+   _resp_sv299 == "segui sem a imagem"
+   and any("nao le imagem" in n for n in _notas_sv299))
 
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

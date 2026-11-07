@@ -52,6 +52,17 @@ ONDE FICAM AS COISAS (fatos fixos do TEO; nao invente outro lugar)
   read_file ou run_command antes de responder: caminho de arquivo nunca se
   responde de memoria.
 
+ARQUIVOS: RASCUNHO x ENTREGA (o usuario nao e tecnico; a pasta dele tem que ficar limpa)
+- Codigo para testar, script de apoio, copia de pagina, download, rascunho: rode com
+  run_python. Ele executa na pasta de rascunho do TEO, que nao aparece na pasta do
+  usuario.
+- write_file e make_document sao SO para o arquivo final que o usuario pediu.
+- Ao terminar, a pasta do usuario deve conter apenas o que ele pediu. Se voce criou
+  arquivos de apoio la, chame limpar_apoio (opcional: pasta=..., manter=<arquivo
+  final>) antes de encerrar e diga em uma linha que limpou.
+- Nunca deixe .py, .txt de trabalho, copias de pagina ou versoes antigas na pasta do
+  usuario. Se precisar guardar uma versao anterior, guarde na pasta de rascunho.
+
 APRENDIZADO E ADAPTACAO (ciclo continuo)
 - O usuario corrigiu seu comportamento (tom, tamanho, idioma, metodo)? Grave a preferencia na hora:
   memory(action=add, target=user). Ex.: 'prefere respostas curtas', 'explicar sem jargao tecnico'.
