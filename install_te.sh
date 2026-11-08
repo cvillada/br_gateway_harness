@@ -93,8 +93,14 @@ source .venv/bin/activate
 exec bgh
 EOF
     chmod +x "$DESK/TEO.command"
-    # App com o gato no Dock/Finder (o .command acima fica como reserva).
-    if [ -n "$ICONE_DIR" ] && [ -f "$ICONE_DIR/teo.png" ] && command -v osacompile >/dev/null 2>&1; then
+    # --- atalho COM o gato: TEO.app montado a mao ---------------------------
+    # Osacompile + applet.icns deixava a Area de trabalho com o TEO.command
+    # (pergaminho branco) em parte dos Macs: aqui o bundle e montado arquivo por
+    # arquivo, com o icone no nome que o proprio Info.plist aponta.
+    APP="$DESK/TEO.app"
+    ICNS="$DIR/teo.icns"
+    if [ -n "$ICONE_DIR" ] && [ -f "$ICONE_DIR/teo.png" ] \
+       && command -v sips >/dev/null 2>&1 && command -v iconutil >/dev/null 2>&1; then
         ICONSET="${TMPDIR:-/tmp}/teo.iconset"
         rm -rf "$ICONSET"
         mkdir -p "$ICONSET"
@@ -103,18 +109,47 @@ EOF
             DOBRO=$((TAM * 2))
             sips -z "$DOBRO" "$DOBRO" "$ICONE_DIR/teo.png" --out "$ICONSET/icon_${TAM}x${TAM}@2x.png" >/dev/null 2>&1 || true
         done
-        if iconutil -c icns "$ICONSET" -o "$DIR/teo.icns" >/dev/null 2>&1; then
-            rm -rf "$DESK/TEO.app"
-            if osacompile -o "$DESK/TEO.app" \
-                -e "tell application \"Terminal\" to do script \"bash '$DIR/abrir-teo.sh'\"" >/dev/null 2>&1; then
-                cp -f "$DIR/teo.icns" "$DESK/TEO.app/Contents/Resources/applet.icns" 2>/dev/null || true
-                touch "$DESK/TEO.app" 2>/dev/null || true
-                echo "Icone do gato criado na Area de trabalho do Finder: TEO (dois cliques)."
-            fi
-        fi
+        iconutil -c icns "$ICONSET" -o "$ICNS" >/dev/null 2>&1 || true
         rm -rf "$ICONSET"
     fi
-    [ -d "$DESK/TEO.app" ] || echo "Icone criado na Area de trabalho do Finder: TEO (dois cliques)."
+    rm -rf "$APP"
+    mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+    cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>TEO</string>
+    <key>CFBundleDisplayName</key><string>TEO</string>
+    <key>CFBundleIdentifier</key><string>com.nubesbr.teo</string>
+    <key>CFBundleVersion</key><string>${VER:-1.0}</string>
+    <key>CFBundleShortVersionString</key><string>${VER:-1.0}</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleExecutable</key><string>teo</string>
+    <key>CFBundleIconFile</key><string>teo.icns</string>
+    <key>LSMinimumSystemVersion</key><string>10.13</string>
+    <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+PLIST
+    # `open -a Terminal arquivo.sh` = mesmo caminho do duplo clique no .command,
+    # e aceita caminho com espaco (sem osascript de aspas aninhadas).
+    cat > "$APP/Contents/MacOS/teo" <<SH
+#!/bin/bash
+exec /usr/bin/open -a Terminal "$DIR/abrir-teo.sh"
+SH
+    chmod +x "$APP/Contents/MacOS/teo"
+    if [ -f "$ICNS" ]; then
+        cp -f "$ICNS" "$APP/Contents/Resources/teo.icns"
+    fi
+    # mtime novo: e assim que o Finder percebe que o icone mudou
+    touch "$APP/Contents/Info.plist" "$APP/Contents/Resources" "$APP" 2>/dev/null || true
+    if [ -f "$APP/Contents/Resources/teo.icns" ]; then
+        echo "Icone do gato criado na Area de trabalho: TEO.app (dois cliques)."
+    else
+        echo "Atalho TEO criado, mas SEM o icone do gato (faltou sips/iconutil no sistema)."
+    fi
+    echo "O TEO.command tambem fica na Area de trabalho (icone de pergaminho, so reserva)."
     echo "Se o sistema pedir uma permissao na primeira vez, aceite ('Abrir')."
 else
     DESK=$(xdg-user-dir DESKTOP 2>/dev/null || true)

@@ -2,6 +2,13 @@
 
 ## 0.2.16
 
+Emenda (macOS): o atalho da Area de trabalho agora sai com o gato. O instalador
+antigo montava o app com `osacompile` e copiava o icone por cima; em parte dos Macs
+isso nao pegava e sobrava o `TEO.command` com o icone de pergaminho branco. Agora o
+`TEO.app` e montado arquivo por arquivo (Info.plist + executavel + teo.icns) e o
+instalador diz na tela quando o icone NAO entrou. Para quem ja instalou existe
+`scripts/consertar_icone_mac.sh`: conserta sem reinstalar.
+
 O TEO agora fala portugues, ingles e espanhol - e o atalho do desktop ganhou o gato.
 
 - Idioma da tela: portugues (de fabrica), ingles e espanhol. O instalador pergunta

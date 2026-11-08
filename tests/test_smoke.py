@@ -2955,4 +2955,24 @@ ok("os tres READMEs tem a mesma estrutura (titulos, tabelas e blocos de codigo)"
 ok("nenhum README ficou com acento/unicode fora do padrao do projeto",
    all(all(ord(c) < 128 for c in t) for t in _LEITURAS316c.values()))
 
+# ---------- 0.2.16 (emenda macOS): atalho com o gato no Finder --------------
+_conserto316d = (_RAIZ316 / "scripts" / "consertar_icone_mac.sh").read_text(encoding="utf-8")
+ok("consertador do macOS monta o TEO.app a mao, com icone proprio",
+   "CFBundleIconFile" in _conserto316d and "teo.icns" in _conserto316d
+   and "Contents/MacOS/teo" in _conserto316d and "iconutil" in _conserto316d)
+ok("consertador abre o TEO pelo Terminal sem osascript de aspas aninhadas",
+   "/usr/bin/open -a Terminal" in _conserto316d)
+ok("consertador roda fora do macOS em modo de teste (estrutura conferida)",
+   "TEO_ICONE_TESTE" in _conserto316d)
+
+_inst316d = (_RAIZ316 / "install_te.sh").read_text(encoding="utf-8")
+ok("instalador macOS nao usa mais osacompile (causa do pergaminho branco)",
+   "osacompile" not in _inst316d and "CFBundleIconFile" in _inst316d
+   and "Contents/MacOS/teo" in _inst316d)
+ok("instalador do repo e o da release sao o mesmo arquivo",
+   (_RAIZ316 / "install_te.sh").read_bytes()
+   == (_RAIZ316 / "scripts" / "install_te.sh").read_bytes())
+ok("instalador avisa quando o icone do gato NAO entrou",
+   "SEM o icone do gato" in _inst316d)
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")
