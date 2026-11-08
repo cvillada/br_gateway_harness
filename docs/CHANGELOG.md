@@ -1,13 +1,23 @@
 # Changelog
 
-## 0.2.16
+## 0.2.17
 
-Emenda (macOS): o atalho da Area de trabalho agora sai com o gato. O instalador
-antigo montava o app com `osacompile` e copiava o icone por cima; em parte dos Macs
-isso nao pegava e sobrava o `TEO.command` com o icone de pergaminho branco. Agora o
-`TEO.app` e montado arquivo por arquivo (Info.plist + executavel + teo.icns) e o
-instalador diz na tela quando o icone NAO entrou. Para quem ja instalou existe
-`scripts/consertar_icone_mac.sh`: conserta sem reinstalar.
+O atalho do Mac agora sai com o gato do TEO - e o README fala as tres linguas.
+
+- macOS: o atalho da Area de trabalho saia como um pergaminho branco (icone
+  generico de applet) quando o sistema nao aceitava o icone copiado por cima.
+  Agora o `TEO.app` e montado arquivo por arquivo, com o icone no nome que o
+  proprio app aponta (`teo.icns`), e o instalador avisa na tela quando o icone
+  NAO entrou (em vez de dizer que deu tudo certo).
+- Quem ja instalou nao precisa reinstalar: `scripts/consertar_icone_mac.sh`
+  conserta o atalho em dez segundos e mostra, antes de mexer, se o `TEO.app`
+  existe e se o `TEO.command` (o pergaminho) esta na Area de trabalho.
+- README em tres idiomas: `README.md` (portugues), `README.en.md` e
+  `README.es.md`, com o seletor de idioma no topo dos tres. A suite confere que
+  os tres continuam com a mesma estrutura (titulos, tabelas e exemplos).
+- CI: 369 testes verdes (ubuntu, windows e macos; Python 3.11 e 3.12).
+
+## 0.2.16
 
 O TEO agora fala portugues, ingles e espanhol - e o atalho do desktop ganhou o gato.
 

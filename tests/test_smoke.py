@@ -2975,4 +2975,14 @@ ok("instalador do repo e o da release sao o mesmo arquivo",
 ok("instalador avisa quando o icone do gato NAO entrou",
    "SEM o icone do gato" in _inst316d)
 
+# ---------- versao e changelog andam juntos (evita bump sem nota) -----------
+from bgh import __version__ as _ver316e
+
+_changelog316e = (_RAIZ316 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
+ok("CHANGELOG tem a secao da versao em uso",
+   f"## {_ver316e}" in _changelog316e)
+_pyproject316e = (_RAIZ316 / "pyproject.toml").read_text(encoding="utf-8")
+ok("versao do pacote e do pyproject sao a mesma",
+   f'version = "{_ver316e}"' in _pyproject316e)
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")
