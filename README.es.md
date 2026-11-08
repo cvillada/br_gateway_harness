@@ -266,9 +266,11 @@ escribe `/actualizar`". Sin internet avisa que no pudo revisar y sigue funcionan
 el `update_check` en `~/.bgh/config.json` apaga la consulta.
 
 Icono: el atajo del escritorio sale con el gato del TEO - Linux (`.desktop` con
-`Icon=`), Windows (atajo con `teo.ico` y el exe con icono) y macOS (`TEO.app`). Los
-iconos viven en `bgh/assets/` y los genera `scripts/make_icons.py` (sin
-dependencias).
+`Icon=`), Windows (atajo con `teo.ico` y el exe con icono) y macOS (`TEO.app` montado
+con el `teo.icns`). Los iconos viven en `bgh/assets/` y los genera
+`scripts/make_icons.py` (sin dependencias). Si en macOS el atajo aparece como un
+pergamino blanco (instalacion vieja), ejecuta `scripts/consertar_icone_mac.sh`: lo
+arregla sin reinstalar.
 
 - Pensamiento del modelo: si el servidor devuelve `reasoning_content`/`reasoning`
   (llama.cpp con Qwen thinking, DeepSeek-R1 etc.), aparece como `pensamiento> ...`

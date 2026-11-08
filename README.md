@@ -259,8 +259,10 @@ versao nova e avisa "existe versao nova do TEO (vX.Y.Z). Para atualizar, digite
 funcionando; o `update_check` no `~/.bgh/config.json` desliga a consulta.
 
 Icone: o atalho do desktop sai com o gato do TEO - Linux (`.desktop` com `Icon=`),
-Windows (atalho com `teo.ico` e o exe com icone) e macOS (app `TEO.app`). Os icones
-vivem em `bgh/assets/` e sao gerados por `scripts/make_icons.py` (sem dependencias).
+Windows (atalho com `teo.ico` e o exe com icone) e macOS (app `TEO.app` montado com o
+`teo.icns`). Os icones vivem em `bgh/assets/` e sao gerados por `scripts/make_icons.py`
+(sem dependencias). Se no Mac o atalho aparecer como pergaminho branco (instalacao
+antiga), rode `scripts/consertar_icone_mac.sh`: conserta sem reinstalar.
 
 - Pensamento do modelo: se o servidor devolve `reasoning_content`/`reasoning`
   (llama.cpp com Qwen thinking, DeepSeek-R1 etc.), aparece como
