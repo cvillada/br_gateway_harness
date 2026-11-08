@@ -98,6 +98,12 @@ DEFAULTS = {
     # desenhada acima da linha de digitar, SO enquanto o TEO trabalha. False =
     # tela exatamente como antes (o /palco liga|desliga no chat faz o mesmo).
     "palco": True,
+    # Checagem de versao nova na ABERTURA (uma vez, em segundo plano). False =
+    # nao consulta o GitHub ao abrir (maquina sem internet, rede restrita).
+    "update_check": True,
+    # Idioma da interface: pt | en | es. O instalador pergunta no inicio e o
+    # comando /lingua troca a qualquer momento (fica salvo aqui).
+    "lang": "pt",
 }
 
 
@@ -177,6 +183,21 @@ def sync_profile(cfg: dict, name: str | None = None) -> bool:
 def ensure_dirs() -> None:
     for d in (BGH_HOME, SKILLS_DIR, SCRATCH_DIR):
         d.mkdir(parents=True, exist_ok=True)
+
+
+def saved_lang() -> str:
+    """Idioma gravado no config.json, sem validar o resto do arquivo.
+
+    A tela precisa falar o idioma do usuario ANTES de saber se a conexao esta
+    certa (ex.: config quebrado, primeira execucao): aqui so se le esse campo.
+    """
+    try:
+        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return str(data.get("lang") or "pt")
+    except (OSError, json.JSONDecodeError):
+        pass
+    return "pt"
 
 
 def load_config() -> dict:

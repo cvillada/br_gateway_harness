@@ -38,12 +38,12 @@ from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style
-from prompt_toolkit.widgets import Label
 
-from . import palco
+from . import i18n, palco
 from .chat_core import (LINE, ChatCore, build_approval_options, help_lines, log_error,
                         parse_approval_choice)
 from .config import INPUT_HISTORY_FILE
+from .i18n import t
 
 FRAMES = "|/-\\"  # bonequinho de espera do "rodando..." na barra de baixo
 
@@ -157,9 +157,9 @@ class LineBoard:
             # para manter as colunas alinhadas; cada pedaco mantem sua cor
             spans: list[list] = []
             pos = 0
-            for st, t in g:
-                spans.append([pos, pos + len(t), st])
-                pos += len(t)
+            for st, pedaco in g:
+                spans.append([pos, pos + len(pedaco), st])
+                pos += len(pedaco)
             for off in range(0, len(combined), width):
                 pieces = []
                 for a, b, st in spans:
@@ -288,14 +288,13 @@ class TuiSink:
         sendo 'bgh setup' na janela de comando (usa getpass la).
         """
         self.line("")
-        self.line(prompt + (f" (padrao: {default})" if default else ""))
+        self.line(prompt + (t("tui.default", default=default) if default else ""))
         if secret:
-            self.line("(se preferir digitar a chave sem ela aparecer na tela, cancele com "
-                      "ESC e rode 'bgh setup' na janela de comando)")
+            self.line(t("tui.secret_hint"))
         ev = threading.Event()
         holder = {"codes": [], "choice": default, "ev": ev, "deny_code": default,
                   "free_text": True, "default": default,
-                  "hot": "CONFIGURANDO: digite a resposta e ENTER (Enter sozinho = padrao)"}
+                  "hot": t("tui.hot.config")}
         self.state["approval"] = holder  # GIL: atribuir dict simples e seguro
         self.emit("", newline=False)  # payload vazio so forca o repaint da barra
         ev.wait()
@@ -306,18 +305,18 @@ class TuiSink:
         """Menu de licenca impresso no historico; o worker aguarda a resposta."""
         options, codes = build_approval_options(allow_always)
         self.line("")
-        self.line("== O TEO precisa da sua licenca ==")
+        self.line(t("approval.header"))
         self.line(label)
         for ln in str(detail).splitlines()[:8]:
             if ln.strip():
                 self.line(f"   {ln}")
-        self.line("O que voce quer fazer? Digite o numero e ENTER:")
+        self.line(t("tui.approval_question"))
         for i, opt in enumerate(options, start=1):
             self.line(f"  [{i}] {opt}")
-        self.line(f"(Enter sozinho = [{len(options)}] nao / cancelar; ESC tambem nega)")
+        self.line(t("tui.approval_hint", n=len(options)))
         ev = threading.Event()
         holder = {"codes": codes, "choice": "d", "ev": ev, "deny_code": "d",
-                  "hot": "LICENCA PENDENTE: digite o numero e ENTER (ESC = nao)"}
+                  "hot": t("tui.hot.license")}
         self.state["approval"] = holder  # GIL: atribuir dict simples e seguro
         self.emit("", newline=False)  # payload vazio so forca o repaint da barra
         ev.wait()
@@ -335,11 +334,11 @@ class TuiSink:
         self.line(label)
         for i, opt in enumerate(options, start=1):
             self.line(f"  [{i}] {opt}")
-        self.line("(Enter sozinho = [1]; ESC tambem escolhe [1])")
+        self.line(t("tui.choice_hint"))
         ev = threading.Event()
         holder = {"codes": options, "choice": options[0], "ev": ev,
                   "deny_code": options[0],
-                  "hot": "OPCAO PENDENTE: digite o numero e ENTER (ESC = [1])"}
+                  "hot": t("tui.hot.choice")}
         self.state["approval"] = holder
         self.emit("", newline=False)  # forca o repaint da barra
         ev.wait()
@@ -437,7 +436,11 @@ def run_tui(cfg: dict) -> int:
             return 1
 
     input_win = Window(BufferControl(in_buf), height=_altura_entrada, style="class:input")
-    input_row = VSplit([Label(text="voce> ", dont_extend_width=True), input_win])
+    # Rotulo da linha de digitar desenhado A CADA pintura: o /lingua troca
+    # 'voce>' por 'you>'/'tu>' na mesma tela, sem reiniciar.
+    prompt_win = Window(FormattedTextControl(lambda: [("", t("sink.prompt"))]),
+                        dont_extend_width=True, height=1)
+    input_row = VSplit([prompt_win, input_win])
     rule_bottom = Window(height=1, char="-", style="class:rule")
 
     def _largura() -> int:
@@ -503,7 +506,7 @@ def run_tui(cfg: dict) -> int:
         holder = state.get("approval")
         if holder is not None:
             resolve_approval(holder.get("deny_code", "d"))
-            emit("(cancelado)")
+            emit(t("tui.cancelled"))
             return
         if state["busy"]:
             state["stop_hits"] += 1
@@ -511,7 +514,7 @@ def run_tui(cfg: dict) -> int:
                 app.exit()  # segunda pressao: saida de seguranca se algo travar
                 return
             core.stop()
-            emit("(parando...)")
+            emit(t("tui.stopping"))
             return
         if in_buf.text:
             in_buf.reset()
@@ -543,7 +546,7 @@ def run_tui(cfg: dict) -> int:
             return
         # guarda para as setas cima/baixo; saida nao entra (crianca nao pode
         # sem querer dar ENTER duas vezes e fechar o TEO)
-        if text.strip() and text.strip().lower() not in ("/sair", "/exit", "/quit"):
+        if text.strip() and i18n.canon(text.strip().lower().lstrip("/")) != "exit":
             in_buf.append_to_history()
         in_buf.reset()
         if state.get("approval") is not None:
@@ -553,14 +556,14 @@ def run_tui(cfg: dict) -> int:
             digitado = text.strip()
             if digitado and not digitado.startswith("/"):
                 core.steer(digitado)  # estilo Hermes: o modelo recebe na proxima rodada
-                emit(f"voce> {digitado}", style="voce")
-                emit("(avisado no meio do turno; o modelo le na proxima rodada)", style="cyan")
+                emit(t("turn.echo", texto=digitado), style="voce")
+                emit(t("tui.steer_hint"), style="cyan")
                 return
             if digitado:
                 in_buf.text = text  # comando / fica na linha, para enviar depois
-                emit("(estou respondendo; comandos / funcionam quando o turno terminar)")
+                emit(t("tui.busy_cmd"))
                 return
-            emit("(estou respondendo; para parar: CTRL+C ou ESC)")
+            emit(t("tui.busy_hint"))
             return
         if not text.strip():
             return
@@ -575,7 +578,7 @@ def run_tui(cfg: dict) -> int:
         state["tokens"] = None              # contador do turno anterior nao serve
         state["palco_hold"] = 0             # recolhimento do palco: turno novo manda
         state["rodada"] = 0                 # contador de rodadas do turno
-        emit(f"voce> {text}", style="voce")  # eco na hora: a tela nunca fica muda
+        emit(t("turn.echo", texto=text), style="voce")  # eco na hora: a tela nunca fica muda
 
         def _worker():
             try:
@@ -584,9 +587,7 @@ def run_tui(cfg: dict) -> int:
                     _schedule(app.exit)
             except Exception as exc:  # noqa: BLE001 - UI nunca cai junto com o turno
                 log_error(exc, "tela do TEO")   # traceback completo so no arquivo, nunca na tela
-                emit("Algo deu errado na tela do TEO; a conversa continua normalmente. "
-                     "O detalhe tecnico foi guardado no arquivo erro.log da pasta .bgh.",
-                     style="yellow")
+                emit(t("tui.crash"), style="yellow")
             finally:
                 state["busy"] = False
                 state["stop_hits"] = 0
@@ -663,6 +664,7 @@ def run_tui(cfg: dict) -> int:
         in_buf.load_history_if_not_yet_loaded()
         core.banner()      # boas-vindas + ajuda ja no historico do terminal
         core.print_ctx()   # medidor comeca na barra de baixo, sem esperar a 1a resposta
+        core.check_update_on_start()   # uma vez, em segundo plano (versao nova?)
 
     app = Application(
         layout=layout,
@@ -696,24 +698,25 @@ def compact_ctx(ctx: str, espaco: int) -> str:
     cabe: ai a barra mostra so o aviso, que e o que a pessoa precisa ler.
     """
     texto = str(ctx or "")
-    m = re.match(r"contexto: (\d+)% de (\d+) chars"
-                 r"(?: \((~?[\d.]+[kM]?)(?: de ([\d.]+[kM]?))? toks\))?"
-                 r" \((\d+) mensagens\)", texto)
+    m = re.match(r"(?:contexto|context): (\d+)% (?:de|of) (\d+) chars"
+                 r"(?: \((~?[\d.]+[kM]?)(?: (?:de|of) ([\d.]+[kM]?))? toks\))?"
+                 r" \((\d+) (?:mensagens|messages|mensajes)\)", texto)
     if not m:
         return texto if len(texto) <= espaco else ""
     pct, orcamento, toks, teto, msgs = (m.group(1), int(m.group(2)), m.group(3),
                                         m.group(4), m.group(5))
     base = (f"{orcamento // 1000}k" if orcamento >= 1000 and orcamento % 1000 == 0
             else str(orcamento))
+    de, msg, toks_u = t("tui.of"), t("tui.msg"), t("tui.toks")
     candidatos = []
     if toks and teto:
-        candidatos.append(f"ctx {pct}% de {base} ({toks}/{teto} toks) ({msgs} msg)")
+        candidatos.append(f"ctx {pct}% {de} {base} ({toks}/{teto} {toks_u}) ({msgs} {msg})")
     if toks:
-        candidatos.append(f"ctx {pct}% de {base} ({toks} toks) ({msgs} msg)")
-    candidatos.append(f"ctx {pct}% de {base} ({msgs} msg)")
+        candidatos.append(f"ctx {pct}% {de} {base} ({toks} {toks_u}) ({msgs} {msg})")
+    candidatos.append(f"ctx {pct}% {de} {base} ({msgs} {msg})")
     if toks:
-        candidatos.append(f"ctx {pct}% de {base} ({toks} toks)")
-    candidatos.extend([f"ctx {pct}% de {base}", f"ctx {pct}%"])
+        candidatos.append(f"ctx {pct}% {de} {base} ({toks} {toks_u})")
+    candidatos.extend([f"ctx {pct}% {de} {base}", f"ctx {pct}%"])
     for candidato in candidatos:
         if len(candidato) <= max(0, espaco):
             return candidato
@@ -740,7 +743,7 @@ def _status_text(state: dict, columns: int | None = None):
         return txt if len(txt) <= width - 2 else txt[:width - 3]
 
     if holder is not None:
-        hot = holder.get("hot", "LICENCA PENDENTE: digite o numero e ENTER (ESC = nao)")
+        hot = holder.get("hot", t("tui.hot.license"))
         return [("class:footer.hot", fit(hot))]
 
     ctx = state.get("ctx") or ""
@@ -748,12 +751,12 @@ def _status_text(state: dict, columns: int | None = None):
         # Espera vira numero visivel: 'rodando... 47s' + a ferramenta em andamento.
         # Sem isso, silencio na tela e lido como programa travado (reclamacao real).
         decorrido = int(time.time() - float(state.get("busy_since") or time.time()))
-        pieces = [FRAMES[state["spin"]], f"rodando... {decorrido}s"]
+        pieces = [FRAMES[state["spin"]], t("tui.running", s=decorrido)]
         tool = state.get("tool")
         if tool:
             tool_s = int(time.time() - float(state.get("tool_since") or time.time()))
             pieces.append(f"{tool} {tool_s}s")
-        pieces.append("PARA PARAR: CTRL+C ou ESC")
+        pieces.append(t("tui.stop_keys"))
         linha = " | ".join(pieces)
         if ctx:
             # Medidor so entra se caber inteiro: o aviso de parar e mais importante.
@@ -762,9 +765,8 @@ def _status_text(state: dict, columns: int | None = None):
                 linha = f"{linha} | {medidor}"
         return [("class:footer.hot", fit(linha))]
 
-    base_longa = ("ENTER = falar | CTRL+C com linha vazia = sair | /ajuda | "
-                  "reler: roda do mouse ou barra lateral do seu terminal")
-    base_curta = "ENTER = falar | CTRL+C vazio = sair | /ajuda"
+    base_longa = t("tui.footer_long", help=i18n.cmd("help"))
+    base_curta = t("tui.footer_short", help=i18n.cmd("help"))
     extra = state.get("ctx_extra") or ""
     medidor_longo = ctx
     if ctx and extra and len(ctx) + len(extra) + len(base_curta) + 3 <= width:

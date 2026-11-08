@@ -11,6 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from bgh.config import MEMORY_DB, ensure_dirs
+from bgh.i18n import t
 
 SPEC = {
     "type": "function",
@@ -54,7 +55,7 @@ def _connect() -> sqlite3.Connection:
 def add(text: str, target: str = "note") -> str:
     text = text.strip()
     if not text:
-        return "ERRO: memoria vazia"
+        return t("mem.empty_text")
     if target not in ("user", "note"):
         target = "note"
     if len(text) > 500:
@@ -66,22 +67,22 @@ def add(text: str, target: str = "note") -> str:
             (target, text, now),
         )
         if cur.rowcount == 0:
-            return "Ja existia essa memoria (nothing added)."
-    return f"Memoria gravada [{target}]: {text}"
+            return t("mem.exists")
+    return t("mem.saved", target=target, texto=text)
 
 
 def search(query: str) -> str:
     query = query.strip()
     if not query:
-        return "ERRO: informe a palavra-chave"
+        return t("mem.no_query")
     with _connect() as conn:
         rows = conn.execute(
             "SELECT id, target, text FROM memories WHERE text LIKE ? ORDER BY id DESC LIMIT 20",
             (f"%{query}%",),
         ).fetchall()
     if not rows:
-        return f"Nenhuma memoria contendo '{query}'."
-    return "\n".join(f"[{t}] {txt}" for _, t, txt in rows)
+        return t("mem.none", query=query)
+    return "\n".join(f"[{alvo}] {txt}" for _, alvo, txt in rows)
 
 
 def list_recent(limit: int = 30) -> str:
@@ -90,8 +91,8 @@ def list_recent(limit: int = 30) -> str:
             "SELECT target, text FROM memories ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
     if not rows:
-        return "A memoria esta vazia."
-    return "\n".join(f"- [{t}] {txt}" for t, txt in rows)
+        return t("mem.empty_base")
+    return "\n".join(f"- [{alvo}] {txt}" for alvo, txt in rows)
 
 
 def load_lines(target: str, limit: int = 40, max_chars: int = 2500) -> list[str]:
@@ -122,4 +123,4 @@ def run(args: dict, ctx) -> str:
         return search(str(args.get("query", "")))
     if action == "list":
         return list_recent()
-    return "ERRO: action invalida (use add, search ou list)"
+    return t("mem.bad_action")

@@ -20,7 +20,9 @@ jobs:
         run: >
           pyinstaller --onefile --clean --noconfirm --log-level=WARN
           --name motor.exe
+          --icon bgh/assets/teo.ico
           --add-data "bgh/skills_default;bgh/skills_default"
+          --add-data "bgh/assets;bgh/assets"
           motor_entry.py
       - uses: actions/upload-artifact@v4
         with:
@@ -43,6 +45,7 @@ jobs:
           pyinstaller --onefile --clean --noconfirm --log-level=WARN
           --name motor-macos
           --add-data "bgh/skills_default:bgh/skills_default"
+          --add-data "bgh/assets:bgh/assets"
           motor_entry.py
       - uses: actions/upload-artifact@v4
         with:

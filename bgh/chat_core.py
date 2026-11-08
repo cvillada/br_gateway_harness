@@ -9,12 +9,15 @@ import datetime
 import getpass
 import os
 import re
+import threading
 import traceback
 from pathlib import Path
 
 from rich.console import Console
 
+from . import i18n
 from .agent import Agent, STOPPED_NOTE
+from .i18n import t
 from .approvals import Gate
 from .config import CONFIG_PATH, SESSION_FILE, ConfigError, load_config, save_config, sync_profile
 from .llm import LLM, LLMError, LLMRateLimitError
@@ -98,19 +101,20 @@ def ctx_parts(cfg: dict, usage: dict) -> tuple[str, str]:
         if teto:
             # "usado de teto": escrever o numero depois do teto em chars fazia
             # parecer que o teto inteiro valia esses tokens (confusao real).
-            tok_txt = f" ({marca}{abrevia(tokens)} de {abrevia(teto)} toks)"
+            tok_txt = t("ctx.tokens_teto", marca=marca, tokens=abrevia(tokens),
+                        teto=abrevia(teto))
         else:
-            tok_txt = f" ({marca}{abrevia(tokens)} toks)"
+            tok_txt = t("ctx.tokens", marca=marca, tokens=abrevia(tokens))
     else:
         tok_txt = ""
-    txt = (f"contexto: {usage['pct']}% de {usage['budget']} chars"
-           f"{tok_txt} ({usage['messages']} mensagens)")
+    txt = t("ctx.meter", pct=usage["pct"], budget=usage["budget"], tokens=tok_txt,
+            messages=usage["messages"])
     extra = ""
     srv = cfg.get("server_context_tokens")
     if isinstance(srv, (int, float)) and srv > 0:
         entrega_chars = int(srv * CHARS_POR_TOKEN * FOLGA_LEITURA)
         if entrega_chars > usage["budget"]:
-            extra = f" | teto; o servidor entrega {int(srv):,} tokens".replace(",", ".")
+            extra = t("ctx.extra", tokens=f"{int(srv):,}".replace(",", "."))
     return txt, extra
 
 
@@ -137,67 +141,30 @@ CAT_ART = (
     '      TEO',
 )
 
-HELP_SECTIONS = [
-    ("Atalhos rapidos (nao precisam de permissao):", [
-        ("/", "tela fixa: menu da pasta atual (escolhe por numero); modo simples: lista"),
-        ("/ <pasta> ou /ls <pasta>", "lista uma pasta especifica"),
-        ("@", "tela fixa: menu de arquivos para anexar; modo simples: lista os arquivos"),
-        ("@<arquivo>", "anexa um arquivo ou uma FOTO (png, jpg...); escrever o caminho da "
-                       "imagem na mensagem tambem funciona"),
-    ]),
-    ("Escrever em varias linhas (no voce>):", [
-        ("Ctrl+J", "pula linha sem enviar a mensagem"),
-        ("terminar a linha com \\ e ENTER", "continua na linha de baixo (igual shell)"),
-        ("Alt+Enter", "pula linha quando o terminal deixa (no cmd do Windows nao)"),
-    ]),
-    ("Parar e reler:", [
-        ("CTRL+C ou ESC durante a resposta", "para de responder na hora (igual ao Hermes)"),
-        ("digitar ENTER durante a resposta", "avisa o turno em andamento; o modelo le na proxima rodada"),
-        ("Roda do mouse ou PageUp/PageDown", "reler o texto que subiu na tela"),
-        ("CTRL+C com a linha vazia", "fecha o TEO"),
-        ("Seta para cima / para baixo", "repete o que voce ja digitou (historico guardado)"),
-    ]),
-    ("Comandos:", [
-        ("/ajuda", "esta lista"),
-        ("/nov", "conversa nova (limpa contexto; memoria e skills continuam)"),
-        ("/mem <texto>", "grava uma preferencia sua na memoria permanente"),
-        ("/modelo", "lista os modelos do servidor; /modelo <nome ou numero> troca (fica salvo)"),
-        ("/provedor", "lista os provedores; /provedor <nome ou numero> troca na hora (fica salvo)"),
-        ("/pensamento liga|desliga", "mostra ou esconde o pensamento na tela; avancado (nivel "
-                                     "enviado ao servidor): auto off minimum low medium high xhigh max ultra"),
-        ("/palco liga|desliga", "mostra ou esconde a trilha do pedido durante a resposta (so na tela fixa)"),
-        ("/ctx", "medidor do contexto; /ctx <numero> define o limite e fica salvo "
-                 "(ex.: /ctx 65000; aceita 65k, 65.000, 65 mil)"),
-        ("/configurar", "conserta ou cria um provedor sem sair do TEO (o mesmo assistente do 'bgh setup')"),
-        ("/doctor", "diagnostico da conexao e da maquina, na propria tela"),
-        ("/atualizar", "confere se ha versao nova no GitHub; se houver, pede sua licenca e instala"),
-        ("/skills", "lista as skills conhecidas"),
-        ("/sair", "encerra"),
-    ]),
-]
-
-
 def help_lines() -> list[list]:
-    """Ajuda em pedacos: o COMANDO em roxo suave, a explicacao na cor normal."""
+    """Ajuda em pedacos: o COMANDO em roxo suave, a explicacao na cor normal.
+
+    O conteudo (tres idiomas lado a lado) mora em bgh/i18n.py; aqui so o desenho.
+    """
     out: list[list] = []
-    for header, pairs in HELP_SECTIONS:
+    for header, pairs in i18n.help_table():
         out.append([(header, None)])
         width = max(len(c) for c, _ in pairs) + 3
-        for cmd, desc in pairs:
-            color = PURPLE if cmd.startswith(("/", "@")) else None
-            out.append([(f"  {cmd:<{width}}", color), (desc, None)])
+        for comando, desc in pairs:
+            color = PURPLE if comando.startswith(("/", "@")) else None
+            out.append([(f"  {comando:<{width}}", color), (desc, None)])
         out.append([("", None)])
     return out
 
 
 def build_approval_options(allow_always: bool) -> tuple[list[str], list[str]]:
     """Menu numerico simples para o usuario; por dentro mapeia para o fluxo Hermes o/s/a/d."""
-    options = ["Sim, fazer desta vez", "Sim, e nao perguntar de novo nesta conversa"]
+    options = [t("common.approve_once"), t("common.approve_conv")]
     codes = ["o", "s"]
     if allow_always:
-        options.append("Sim, e sempre permitir isso depois")
+        options.append(t("common.approve_always"))
         codes.append("a")
-    options.append("Nao / cancelar")
+    options.append(t("common.cancel"))
     codes.append("d")
     return options, codes
 
@@ -270,7 +237,7 @@ class ConsoleSink:
         pass  # sem barra de status no modo classico
 
     def read_prompt(self) -> str:
-        return self.console.input("\n[bold cyan]voce> [/bold cyan]")
+        return self.console.input(f"\n[bold cyan]{t('sink.prompt')}[/bold cyan]")
 
     def ask_line(self, prompt: str, default: str = "", secret: bool = False) -> str:
         """Pergunta de texto livre (assistente do /configurar); Enter sozinho = padrao."""
@@ -285,16 +252,16 @@ class ConsoleSink:
     def ask_approval(self, label: str, detail: str, allow_always: bool) -> str:
         options, codes = build_approval_options(allow_always)
         self.console.print()
-        self.console.print("== O TEO precisa da sua licenca ==", style="bold yellow", markup=False)
+        self.console.print(t("approval.header"), style="bold yellow", markup=False)
         self.console.print(label, style="bold", markup=False)
         for ln in str(detail).splitlines()[:8]:
             if ln.strip():
                 self.console.print(f"   {ln}", markup=False)
-        self.console.print("O que voce quer fazer?", markup=False)
+        self.console.print(t("approval.question"), markup=False)
         for i, opt in enumerate(options, start=1):
             self.console.print(f"  [{i}] {opt}", markup=False)
         try:
-            raw = input(f"  Digite o numero (se so Enter, vale {len(options)}): ")
+            raw = input(t("approval.prompt_deny", n=len(options)))
         except (EOFError, KeyboardInterrupt):
             return "d"
         return parse_approval_choice(raw, codes)
@@ -307,7 +274,7 @@ class ConsoleSink:
         for i, opt in enumerate(options, start=1):
             self.console.print(f"  [{i}] {opt}", markup=False)
         try:
-            raw = input(f"  Digite o numero (Enter = {options[0]}): ")
+            raw = input(t("approval.prompt_choice", first=options[0]))
         except (EOFError, KeyboardInterrupt):
             return options[0]
         return parse_approval_choice(raw, options, default=options[0])
@@ -318,6 +285,7 @@ class ChatCore:
 
     def __init__(self, cfg: dict, sink, llm: LLM | None = None):
         self.cfg = cfg
+        i18n.set_lang(cfg.get("lang"))   # toda frase da tela sai no idioma salvo
         self.sink = sink
         self.llm = llm or LLM(cfg)
         self.gate = Gate(cfg, sink.ask_approval)
@@ -404,7 +372,7 @@ class ChatCore:
         if not self.cfg.get("show_thinking", True):
             return  # pensamento desligado na tela: o modelo pode reasoning, mas nao pintamos
         if not self.st["thinking"]:
-            self.sink.sep("pensamento do modelo (raciocinio; pode ignorar e ir direto para a resposta)")
+            self.sink.sep(t("turn.sep.thinking"))
             self.st["thinking"] = True
         self.sink.thinking(chunk)
 
@@ -413,7 +381,7 @@ class ChatCore:
             if self.st["thinking"]:
                 self.sink.line("")
                 self.st["thinking"] = False
-            self.sink.sep("resposta")
+            self.sink.sep(t("turn.sep.answer"))
             self.st["resposta"] = True
         buf = self._pend + chunk
         trail = len(buf) - len(buf.rstrip("*"))
@@ -438,17 +406,17 @@ class ChatCore:
             # o 'extra' so aparece quando cabe inteiro (a tela decide a ordem de corte)
             self.sink.set_ctx(core, usage["pct"], limite_pct, extra=extra)
             if self.agent.last_compressed:
-                self.sink.line("Contexto compactado: as partes antigas viraram um resumo.", style="dim")
+                self.sink.line(t("ctx.compacted"), style="dim")
             elif usage["pct"] >= limite_pct:
-                self.sink.line("Contexto enchendo; sera compactado na proxima rodada pesada.", style="dim")
+                self.sink.line(t("ctx.filling"), style="dim")
             return
         color = "green" if usage["pct"] < 50 else ("yellow" if usage["pct"] < 80 else "red")
         self.sink.sep()
         self.sink.line(txt, style=color)
         if self.agent.last_compressed:
-            self.sink.line("Contexto compactado: as partes antigas viraram um resumo.", style="dim")
+            self.sink.line(t("ctx.compacted"), style="dim")
         elif usage["pct"] >= limite_pct:
-            self.sink.line("Contexto enchendo; sera compactado na proxima rodada pesada.", style="dim")
+            self.sink.line(t("ctx.filling"), style="dim")
 
     def _ctx_parts(self, usage: dict) -> tuple[str, str]:
         return ctx_parts(self.cfg, usage)
@@ -466,42 +434,61 @@ class ChatCore:
             self.sink.line(art_line)
         self.sink.line("")
         self.sink.border()   # abre o bloco de boas-vindas
-        self.sink.line("TEO - agente local (comandos seguros rodam direto; perigosos pedem sua licenca)",
-                       style="bold")
-        self.sink.line(f"Modelo: {self.cfg['model']} em {self.cfg['base_url']} "
-                       f"(thinking: {self.cfg.get('thinking', 'auto')})", style="cyan")
+        self.sink.line(t("banner.title"), style="bold")
+        self.sink.line(t("banner.model", model=self.cfg["model"],
+                         base_url=self.cfg["base_url"],
+                         thinking=self.cfg.get("thinking", "auto")), style="cyan")
         if SESSION_FILE.exists():
-            self.sink.line("Conversa anterior retomada. /nov para comecar do zero.", style="dim")
+            self.sink.line(t("banner.resumed", new=i18n.cmd("new")), style="dim")
         for seg_line in help_lines():
             self.sink.parts(seg_line)
         self.sink.border()   # fecha o bloco de boas-vindas
+
+    def check_update_on_start(self) -> None:
+        """Confere versao nova UMA vez, na abertura, sem segurar a tela.
+
+        Roda em segundo plano de proposito: no cliente a rede pode estar lenta
+        ou fora, e a abertura nao pode ficar esperando o GitHub. A tela recebe
+        uma linha so quando ha o que dizer (versao nova ou falha de acesso).
+        """
+        if not self.cfg.get("update_check", True):
+            return
+        from . import __version__
+        from .updater import startup_check
+
+        def _worker() -> None:
+            try:
+                texto, versao = startup_check(__version__)
+            except Exception:  # noqa: BLE001 - cortesia de abertura nunca derruba o TEO
+                return
+            if texto:
+                self.sink.line(texto, style="cyan" if versao else "dim")
+
+        self._update_thread = threading.Thread(target=_worker, daemon=True)
+        self._update_thread.start()
 
     def _list_models(self) -> None:
         try:
             self.model_list = self.llm.list_models()
             if not self.model_list:
-                self.sink.line("O servidor nao publica lista de modelos.")
+                self.sink.line(t("cmd.model.no_list"))
             em_uso_marcado = False
             for i, m in enumerate(self.model_list, start=1):
-                marca = " (em uso)" if m == self.cfg["model"] else ""
+                marca = t("common.in_use") if m == self.cfg["model"] else ""
                 if marca:
                     em_uso_marcado = True
                 self.sink.line(f"  {i}. {m}{marca}")
             if self.model_list and not em_uso_marcado:
                 # Provedores as vezes renomeiam IDs: sem igual exato, a lista ficaria
                 # sem marca nenhuma e o usuario acharia que o medidor esta quebrado.
-                self.sink.line(f"  (modelo em uso: {self.cfg['model']}; nao apareceu na lista "
-                               "do servidor - escolher um numero acima alinhara o nome)",
+                self.sink.line(t("cmd.model.not_in_list", model=self.cfg["model"]),
                                style="dim")
         except LLMError as exc:
             log_error(exc, "lista de modelos")
-            self.sink.line("O servidor nao respondeu a lista de modelos agora. Tente de novo "
-                           "em instantes (o detalhe tecnico foi guardado no erro.log).",
-                           style="yellow")
+            self.sink.line(t("cmd.model.no_answer"), style="yellow")
         except Exception as exc:  # noqa: BLE001 - servidor estranho nunca derruba a tela
             log_error(exc, "lista de modelos")
-            self.sink.line("O servidor mandou uma lista que o TEO nao conseguiu ler. "
-                           "Rode /doctor para ver a conexao (detalhe no erro.log).",
+            self.sink.line(t("cmd.model.bad_answer", doctor=i18n.cmd("doctor")),
                            style="yellow")
 
     def _list_profiles(self) -> None:
@@ -509,29 +496,53 @@ class ChatCore:
 
         names = lp(self.cfg)
         if not names:
-            self.sink.line("(nenhum provedor cadastrado ainda)")
+            self.sink.line(t("cmd.provider.none"))
         for i, p in enumerate(names, start=1):
             prof = self.cfg["profiles"][p]
-            marca = " (em uso)" if p == self.cfg.get("active_profile") else ""
-            self.sink.line(f"  {i}. {p}{marca} - {prof['model']} em {prof['base_url']}")
+            marca = t("common.in_use") if p == self.cfg.get("active_profile") else ""
+            self.sink.line(t("cmd.provider.row", n=i, name=p, marca=marca,
+                             model=prof["model"], base_url=prof["base_url"]))
 
-    THINKING_OPTIONS = ["manter atual", "off", "minimum", "low", "medium",
-                        "high", "xhigh", "max", "ultra", "auto"]
+    def _thinking_options(self) -> list[str]:
+        """Niveis oferecidos apos trocar modelo/provedor (no idioma da tela)."""
+        return [t("common.keep_current"), "off", "minimum", "low", "medium",
+                "high", "xhigh", "max", "ultra", "auto"]
 
     def _ask_thinking_level(self) -> None:
         """Depois de trocar de modelo/provedor, oferece o nivel de pensamento."""
         if not hasattr(self.sink, "ask_choice"):
             return
+        opcoes = self._thinking_options()
         escolha = self.sink.ask_choice(
-            "NIVEL DE PENSAMENTO DO MODELO",
-            "O quanto o modelo deve 'pensar' antes de responder? (Enter = manter atual)",
-            self.THINKING_OPTIONS,
+            t("ask.thinking.title"),
+            t("ask.thinking.label"),
+            opcoes,
         )
-        if escolha and escolha != self.THINKING_OPTIONS[0]:
+        if escolha and escolha != opcoes[0]:
             self.cfg["thinking"] = escolha
             save_config(self.cfg)
             self.llm.cfg["thinking"] = escolha
-            self.sink.line(f"Pensamento: {escolha} (salvo)", style="cyan")
+            self.sink.line(t("ask.thinking.done", level=escolha), style="cyan")
+
+    def _set_lang(self, codigo: str) -> None:
+        """Troca o idioma na hora: config, tela e o pedido que vai ao modelo."""
+        self.cfg["lang"] = codigo
+        i18n.set_lang(codigo)
+        save_config(self.cfg)
+        if isinstance(getattr(self.agent, "cfg", None), dict):
+            self.agent.cfg["lang"] = codigo
+        ferramentas = getattr(self.agent, "tools", None)
+        if hasattr(ferramentas, "relocalize"):
+            ferramentas.relocalize()   # descricoes das ferramentas tambem trocam
+        if hasattr(self.agent, "refresh_prompt"):
+            self.agent.refresh_prompt()   # o modelo passa a responder no idioma novo
+        self.sink.line(t("lang.changed", name=i18n.LANG_NAMES[codigo]), style="cyan")
+        # A lista de ajuda no idioma novo e a prova visivel da troca.
+        self.sink.border()
+        for seg_line in help_lines():
+            self.sink.parts(seg_line)
+        self.sink.border()
+        self.print_ctx()   # o medidor do rodape tambem troca de idioma na hora
 
     def stop(self) -> None:
         """UI chama isto quando o usuario manda parar."""
@@ -548,8 +559,7 @@ class ChatCore:
 
         ask_fn = getattr(self.sink, "ask_line", None)
         if ask_fn is None:
-            self.sink.line("Este modo nao consegue perguntar na tela; rode 'bgh setup' "
-                           "na janela de comando.", style="yellow")
+            self.sink.line(t("cmd.setup.no_menu"), style="yellow")
             return "continue"
         run_setup(ask=ask_fn,
                   say=lambda *a: self.sink.line(" ".join(str(x) for x in a)),
@@ -565,8 +575,12 @@ class ChatCore:
         self.llm = LLM(self.cfg)
         self.llm.on_note = lambda texto: self.sink.line(texto, style="yellow")
         self.agent.llm = self.llm
-        self.sink.line(f"Conexao agora: {self.cfg['model']} @ {self.cfg['base_url']}. "
-                       "Ja vale na proxima mensagem.", style="cyan")
+        # O assistente tambem pode ter mudado o idioma (primeira configuracao):
+        # a tela e o pedido ao modelo passam a valer no idioma escolhido.
+        i18n.set_lang(self.cfg.get("lang"))
+        self.agent.refresh_prompt()
+        self.sink.line(t("cmd.setup.connected", model=self.cfg["model"],
+                         base_url=self.cfg["base_url"]), style="cyan")
         self._ask_thinking_level()
         return "continue"
 
@@ -593,15 +607,17 @@ class ChatCore:
                 self.sink.line(erro, style="yellow")
                 return None
             itens: list[tuple[str, str]] = [
-                (f"entrar em: {nome}", os.path.join(atual, nome)) for nome in pastas
+                (t("menu.enter_folder", nome=nome), os.path.join(atual, nome))
+                for nome in pastas
             ]
-            itens += [(("anexar: " if para_anexar else "ver: ") + nome,
-                       os.path.join(atual, nome)) for nome in arquivos]
-            opcoes: list[str] = ["cancelar (voltar para a conversa)"]
+            chave_item = "menu.attach" if para_anexar else "menu.view"
+            itens += [(t(chave_item, nome=nome), os.path.join(atual, nome))
+                      for nome in arquivos]
+            opcoes: list[str] = [t("menu.cancel")]
             alvos: list[str | None] = [None]
             pai = os.path.dirname(atual.rstrip(os.sep))
             if pai and pai != atual:
-                opcoes.append(".. (voltar uma pasta)")
+                opcoes.append(t("menu.up"))
                 alvos.append(pai)
             fatia = itens[deslocamento:deslocamento + self.MENU_MAX]
             for rotulo, caminho in fatia:
@@ -609,15 +625,14 @@ class ChatCore:
                 alvos.append(caminho)
             restantes = len(itens) - (deslocamento + len(fatia))
             if restantes > 0:
-                opcoes.append(f"mais itens (mais {restantes})")
+                opcoes.append(t("menu.more", n=restantes))
                 alvos.append("__proxima__")
             if deslocamento > 0:
-                opcoes.append("voltar ao inicio da lista")
+                opcoes.append(t("menu.back_start"))
                 alvos.append("__inicio__")
             escolha = self.sink.ask_choice(
-                "ESCOLHER ARQUIVO PARA ANEXAR" if para_anexar else "ABRIR PASTA OU ARQUIVO",
-                f"Pasta atual: {atual}\n"
-                "Digite o numero e ENTER. O numero 1 cancela.",
+                t("menu.title_attach") if para_anexar else t("menu.title_open"),
+                t("menu.label", atual=atual),
                 opcoes,
             )
             if escolha not in opcoes:
@@ -632,7 +647,7 @@ class ChatCore:
             if alvo is None:
                 return None      # quem chamou avisa (uma vez so) que nada foi escolhido
             if os.path.isdir(alvo):
-                self.sink.line(f"entrando em: {alvo}", style="dim")
+                self.sink.line(t("menu.entering", alvo=alvo), style="dim")
                 atual = alvo
                 deslocamento = 0
                 continue
@@ -653,7 +668,7 @@ class ChatCore:
                     # Menu numerado: escolher o arquivo e anexar, sem digitar caminho.
                     arg = self._escolher_caminho(os.getcwd(), para_anexar=True) or ""
                     if not arg:
-                        self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
+                        self.sink.line(t("common.nothing_chosen"), style="dim")
                         return "continue"
                 else:
                     self.sink.line(files_mod.list_dir(os.getcwd(), files_only=True))
@@ -669,28 +684,25 @@ class ChatCore:
                     return "continue"
                 self.pending_image = str(target)
                 self.pending_attach = None
-                self.sink.line(f"Imagem anexada: {target} "
-                               f"({files_mod.human_size(tamanho)}). Agora faca sua "
-                               "pergunta sobre ela.", style="cyan")
+                self.sink.line(t("attach.image_ok", target=target,
+                                 size=files_mod.human_size(tamanho)), style="cyan")
             elif target.is_file():
                 try:
                     content = target.read_text(encoding="utf-8", errors="replace")[:8000]
                 except OSError as exc:
                     log_error(exc, f"anexo de arquivo {target}")
-                    self.sink.line(f"Nao consegui ler {target} (o arquivo pode estar aberto em "
-                                   "outro programa ou protegido). O detalhe tecnico ficou no "
-                                   "erro.log.", style="yellow")
+                    self.sink.line(t("attach.read_fail", target=target), style="yellow")
                     return "continue"
                 self.pending_attach = f"[arquivo anexado: {target}]\n{content}"
                 try:
                     tamanho = files_mod.human_size(os.path.getsize(target))
                 except OSError:
                     tamanho = "?"
-                cortado = " (mostrando o comeco do arquivo)" if len(content) >= 8000 else ""
-                self.sink.line(f"Arquivo anexado: {target} ({tamanho}){cortado}. "
-                               "Agora digite sua pergunta sobre ele.", style="cyan")
+                cortado = t("attach.truncated") if len(content) >= 8000 else ""
+                self.sink.line(t("attach.file_ok", target=target, size=tamanho,
+                                 cortado=cortado), style="cyan")
             else:
-                self.sink.line(f"Nao encontrei esse arquivo: {target}")
+                self.sink.line(t("attach.not_found", target=target))
             return "continue"
 
         # Atalho / e /ls : menu da pasta (tela fixa) ou listagem.
@@ -700,15 +712,14 @@ class ChatCore:
                 # Menu numerado: navegar por numero e escolher o arquivo.
                 escolhido = self._escolher_caminho(os.getcwd())
                 if not escolhido:
-                    self.sink.line("(nada foi escolhido; a conversa continua)", style="dim")
+                    self.sink.line(t("common.nothing_chosen"), style="dim")
                 elif os.path.isfile(escolhido):
                     try:
                         tamanho = files_mod.human_size(os.path.getsize(escolhido))
                     except OSError:
                         tamanho = "?"
-                    self.sink.line(f"arquivo: {escolhido} ({tamanho})")
-                    self.sink.line("(para mandar o conteudo ao TEO, digite @ e escolha "
-                                   "o arquivo no menu)", style="dim")
+                    self.sink.line(t("listing.file", path=escolhido, size=tamanho))
+                    self.sink.line(t("listing.hint"), style="dim")
                 return "continue"
             alvo = os.path.expanduser(alvo) if alvo else os.getcwd()
             self.sink.line(files_mod.list_dir(alvo))
@@ -716,33 +727,34 @@ class ChatCore:
 
         if text.startswith("/"):
             parts = text.split(maxsplit=1)
-            name = parts[0].lower()
+            what = i18n.canon(parts[0].lower().lstrip("/"))
             rest = parts[1].strip() if len(parts) > 1 else ""
-            if name in ("/sair", "/exit", "/quit"):
+            if what == "exit":
                 return "exit"
-            elif name == "/ajuda":
+            elif what == "help":
                 self.sink.border()   # abre a lista
                 for seg_line in help_lines():
                     self.sink.parts(seg_line)
                 self.sink.border()   # fecha a lista
-            elif name == "/nov":
+            elif what == "new":
                 self.agent.new_session()
                 self.pending_attach = None
                 self.pending_image = None
-                self.sink.line("Conversa zerada (memoria e skills preservadas).", style="dim")
+                self.sink.line(t("cmd.new.done"), style="dim")
                 self.print_ctx()   # rodape tem que mostrar a leitura nova na hora, nao a velha
-            elif name == "/mem" and rest:
+            elif what == "mem" and rest:
                 from .tools import memory
 
                 self.sink.line(memory.add(rest, target="user"))
-            elif name == "/skills":
+            elif what == "skills":
                 from .tools.skills import discover, index_lines
 
                 lines = index_lines(discover())
-                self.sink.line("\n".join(f"- {line}" for line in lines) or "(nenhuma skill ainda)")
-            elif name in ("/modelos", "/modelo"):
-                if name == "/modelos" or not rest:
-                    self._list_models()  # sozinho lista; '/modelos' continua aceito (alias oculto)
+                self.sink.line("\n".join(f"- {line}" for line in lines)
+                               or t("cmd.skills.empty"))
+            elif what == "model":
+                if not rest:
+                    self._list_models()   # sozinho lista; nome ou numero trocam
                 else:
                     alvo2 = rest
                     if rest.isdigit() and self.model_list:
@@ -750,19 +762,20 @@ class ChatCore:
                         if 0 <= idx < len(self.model_list):
                             alvo2 = self.model_list[idx]
                         else:
-                            self.sink.line("Numero fora da lista. Digite /modelo para ver.")
+                            self.sink.line(t("cmd.model.off_list",
+                                             model=i18n.cmd("model")))
                             return "continue"
                     self.cfg["model"] = alvo2
                     save_config(self.cfg)
                     # Perfil salvo anda junto: sem isso, trocar de provedor depois
                     # devolvia o modelo antigo sem avisar.
                     sync_profile(self.cfg)
-                    self.sink.line(f"Modelo agora: {alvo2} (salvo no config)", style="cyan")
+                    self.sink.line(t("cmd.model.now", model=alvo2), style="cyan")
                     self._ask_thinking_level()
                     self._refresh_server_context(troca=True, render=True)
-            elif name in ("/provedores", "/provedor"):
-                if name == "/provedores" or not rest:
-                    self._list_profiles()  # sozinho lista; alias antigo aceito
+            elif what == "provider":
+                if not rest:
+                    self._list_profiles()   # sozinho lista
                 else:
                     from .config import list_profiles as lp, set_active_profile
 
@@ -774,127 +787,144 @@ class ChatCore:
                         self.llm = LLM(self.cfg)
                         self.agent.llm = self.llm
                         prof = self.cfg["profiles"][alvo3]
-                        self.sink.line(
-                            f"Provedor agora: {alvo3} - {prof['model']} em {prof['base_url']} "
-                            "(salvo; a conversa continua)",
-                            style="cyan",
-                        )
+                        self.sink.line(t("cmd.provider.now", name=alvo3,
+                                         model=prof["model"],
+                                         base_url=prof["base_url"]), style="cyan")
                         self._ask_thinking_level()
                         self._refresh_server_context(troca=True, render=True)
                     else:
-                        self.sink.line("Provedor nao encontrado. Digite /provedor sozinho para ver a lista.")
-            elif name in ("/pensamento", "/thinking"):
+                        self.sink.line(t("cmd.provider.not_found",
+                                         provider=i18n.cmd("provider")))
+            elif what == "thinking":
                 levels = ("auto", "off", "minimum", "low", "medium", "high",
                           "xhigh", "max", "ultra")
                 alvo_t = rest.lower()
-                if alvo_t in ("liga", "ligar"):
+                if alvo_t in ("liga", "ligar", "on", "enable", "show", "mostrar",
+                              "activar", "activa", "encender"):
                     # Controla a TELA: mostra o bloco cinza. O que vai ao servidor nao muda.
                     self.cfg["show_thinking"] = True
                     save_config(self.cfg)
-                    self.sink.line("Pensamento na tela: LIGADO (salvo)", style="cyan")
-                elif alvo_t in ("desliga", "desligar", "parar"):
+                    self.sink.line(t("cmd.thinking.on"), style="cyan")
+                elif alvo_t in ("desliga", "desligar", "parar", "hide", "esconder",
+                                "ocultar", "disable", "desactivar", "desactiva",
+                                "apagar"):
                     # Controla a TELA: esconde o bloco cinza. O modelo segue pensando
                     # (em provedores hospedados quem decide pensar e o provedor).
                     self.cfg["show_thinking"] = False
                     save_config(self.cfg)
-                    self.sink.line("Pensamento na tela: DESLIGADO (salvo); o modelo segue "
-                                   "trabalhando por dentro e a resposta chega igual", style="cyan")
+                    self.sink.line(t("cmd.thinking.off"), style="cyan")
                 elif alvo_t in levels:
                     self.cfg["thinking"] = alvo_t
                     save_config(self.cfg)
                     self.llm.cfg["thinking"] = alvo_t
-                    self.sink.line(f"Nivel de raciocinio enviado ao servidor: {alvo_t} (salvo). "
-                                   "Obs.: provedores hospedados podem ignorar o nivel pedido.",
-                                   style="cyan")
+                    self.sink.line(t("cmd.thinking.level", level=alvo_t), style="cyan")
                 elif not rest:
-                    tela = "ligado" if self.cfg.get("show_thinking", True) else "desligado"
-                    self.sink.line(
-                        f"Pensamento na tela: {tela} | nivel enviado ao servidor: "
-                        f"{self.cfg.get('thinking', 'auto')}. Uso: /pensamento liga | "
-                        "desliga | auto | off | minimum | low | medium | high | xhigh | max | ultra")
+                    tela = (t("onoff.on") if self.cfg.get("show_thinking", True)
+                            else t("onoff.off"))
+                    self.sink.line(t("cmd.thinking.status", onoff=tela,
+                                     level=self.cfg.get("thinking", "auto"),
+                                     cmd=i18n.cmd("thinking")))
                 else:
-                    self.sink.line(
-                        "Nao entendi. Use /pensamento liga ou /pensamento desliga (tela); "
-                        "avancado (servidor): auto off minimum low medium high xhigh max ultra")
-            elif name == "/palco":
+                    self.sink.line(t("cmd.thinking.bad", cmd=i18n.cmd("thinking")))
+            elif what == "stage":
                 alvo_p = rest.lower()
-                if alvo_p in ("liga", "ligar"):
+                if alvo_p in ("liga", "ligar", "on", "enable", "show", "mostrar",
+                              "activar", "activa", "encender"):
                     self.cfg["palco"] = True
                     save_config(self.cfg)
-                    self.sink.line("Palco: LIGADO (a trilha do pedido aparece durante a resposta).",
-                                   style="cyan")
-                elif alvo_p in ("desliga", "desligar", "parar"):
+                    self.sink.line(t("cmd.stage.on"), style="cyan")
+                elif alvo_p in ("desliga", "desligar", "parar", "off", "hide",
+                                "esconder", "ocultar", "disable", "desactivar",
+                                "desactiva", "apagar"):
                     self.cfg["palco"] = False
                     save_config(self.cfg)
-                    self.sink.line("Palco: DESLIGADO (tela como antes; salvo)", style="cyan")
+                    self.sink.line(t("cmd.stage.off"), style="cyan")
                 elif not rest:
-                    estado = "ligado" if self.cfg.get("palco", True) else "desligado"
-                    self.sink.line(f"Palco: {estado}. Uso: /palco liga | /palco desliga")
+                    estado = (t("onoff.on") if self.cfg.get("palco", True)
+                              else t("onoff.off"))
+                    self.sink.line(t("cmd.stage.status", onoff=estado,
+                                     cmd=i18n.cmd("stage")))
                 else:
-                    self.sink.line("Nao entendi. Use /palco liga ou /palco desliga", style="yellow")
-            elif name == "/ctx":
+                    self.sink.line(t("cmd.stage.bad", cmd=i18n.cmd("stage")),
+                                   style="yellow")
+            elif what == "ctx":
                 if rest:
                     novo = parse_budget(rest)
                     if novo is None:
                         # Silenciar argumento era lido como bug na maquina do cliente.
-                        self.sink.line("Esse numero nao vale. Uso: /ctx 65000 (aceita 65k, "
-                                       "65.000, 65 mil). Intervalo: 8000 a 1000000.", style="yellow")
+                        self.sink.line(t("cmd.ctx.bad", ctx=i18n.cmd("ctx")),
+                                       style="yellow")
                     else:
                         self.cfg["context_budget_chars"] = novo
                         for dono in (self.agent, self.llm):
-                            if getattr(dono, "cfg", None) is not None and dono.cfg is not self.cfg:
+                            if (getattr(dono, "cfg", None) is not None
+                                    and dono.cfg is not self.cfg):
                                 dono.cfg["context_budget_chars"] = novo
                         save_config(self.cfg)
-                        self.sink.line(f"Orcamento de contexto ajustado para {novo} caracteres "
-                                       "(salvo). Vale ja na proxima resposta.", style="cyan")
+                        self.sink.line(t("cmd.ctx.set", n=novo), style="cyan")
                 self.print_ctx()
-            elif name in ("/configurar", "/configure", "/setup"):
+            elif what == "lang":
+                if rest:
+                    codigo = i18n.lang_from_answer(rest)
+                    if codigo is None:
+                        self.sink.line(t("lang.bad"))
+                    else:
+                        self._set_lang(codigo)
+                else:
+                    opcoes = i18n.lang_options()
+                    escolha = self.sink.ask_choice(
+                        t("lang.title"),
+                        t("lang.ask", first=opcoes[0]),
+                        opcoes,
+                    )
+                    if escolha in opcoes:
+                        self._set_lang(i18n.LANGS[opcoes.index(escolha)])
+            elif what == "setup":
                 return self._run_setup_wizard()
-            elif name == "/doctor":
+            elif what == "doctor":
                 from .cli import doctor_report
 
                 doctor_report(lambda texto: self.sink.line(str(texto)))
-            elif name in ("/atualizar", "/update"):
+            elif what == "update":
                 from . import __version__
                 from .updater import apply_update, fetch_latest, python_bin, update_needed
 
                 info, err_upd = fetch_latest()
                 if info is None or err_upd:
-                    self.sink.line(f"Nao consegui verificar a versao nova: {err_upd}", style="yellow")
+                    self.sink.line(t("cmd.update.check_fail", err=err_upd),
+                                   style="yellow")
                     return "continue"
                 if not update_needed(__version__, info["version"]):
                     # Mesma versao: avisa que esta atualizado e pronto, sem oferecer instalacao.
-                    self.sink.line(f"O TEO ja esta atualizado (versao {info['version']}). "
-                                   "Pode continuar usando.", style="cyan")
+                    self.sink.line(t("cmd.update.uptodate", version=info["version"]),
+                                   style="cyan")
                     return "continue"
                 if not python_bin():
                     # Aberto pelo icone/arquivo executavel: nao ha pip por dentro para atualizar.
-                    self.sink.line(f"Existe versao nova ({info['version']}). Como o TEO foi aberto pelo "
-                                   "icone/arquivo executavel, baixe e rode o INSTALAR_TEO.bat outra vez "
-                                   "(dois cliques) - ele faz a atualizacao inteira.", style="yellow")
+                    self.sink.line(t("cmd.update.no_pip", version=info["version"]),
+                                   style="yellow")
                     return "continue"
                 escolha = None
                 if hasattr(self.sink, "ask_choice"):
                     escolha = self.sink.ask_choice(
-                        "ATUALIZAR O TEO",
-                        f"Encontrei a versao {info['version']} (a sua e a {__version__}). "
-                        "Atualizar agora?",
-                        ["Sim, atualizar", "Nao, deixar como esta"],
+                        t("cmd.update.title"),
+                        t("cmd.update.ask", new=info["version"], cur=__version__),
+                        [t("cmd.update.yes"), t("cmd.update.no")],
                     )
-                if escolha != "Sim, atualizar":
-                    self.sink.line("Atualizacao cancelada (nada mudou).", style="dim")
+                if escolha != t("cmd.update.yes"):
+                    self.sink.line(t("cmd.update.cancelled"), style="dim")
                     return "continue"
-                self.sink.line(f"Baixando e instalando a versao {info['version']}...", style="cyan")
+                self.sink.line(t("cmd.update.downloading", version=info["version"]),
+                               style="cyan")
                 ok_upd, msg_upd = apply_update(info["wheel_url"])
                 if ok_upd:
-                    self.sink.line(f"Atualizado para {info['version']}. Feche (/sair) e abra o TEO de novo "
-                                   "para o codigo novo comecar a valer.", style="cyan")
+                    self.sink.line(t("cmd.update.done", version=info["version"],
+                                     exit=i18n.cmd("exit")), style="cyan")
                 else:
-                    self.sink.line(f"A atualizacao nao completou: {msg_upd}", style="red")
-                    self.sink.line("Alternativa que funciona em qualquer maquina: baixar e rodar o "
-                                   "INSTALAR_TEO.bat da pagina de downloads do TEO.", style="yellow")
+                    self.sink.line(t("cmd.update.failed", err=msg_upd), style="red")
+                    self.sink.line(t("cmd.update.fallback"), style="yellow")
             else:
-                self.sink.line("Comando desconhecido. /ajuda mostra a lista.")
+                self.sink.line(t("cmd.unknown", help=i18n.cmd("help")))
             return "continue"
 
         # Caminho de imagem escrito na propria mensagem: manda a FOTO para o modelo
@@ -905,11 +935,10 @@ class ChatCore:
                 self.pending_image = citadas[0]
                 extra = ""
                 if len(citadas) > 1:
-                    extra = (f" (voce citou {len(citadas)} imagens; por enquanto eu olho a "
-                             "primeira)")
-                self.sink.line(f"Vi uma imagem na sua mensagem: "
-                               f"{os.path.basename(citadas[0])}. Vou mandar para o modelo "
-                               f"olhar{extra}.", style="cyan")
+                    extra = t("turn.image_more", n=len(citadas))
+                self.sink.line(t("turn.image_seen",
+                                 nome=os.path.basename(citadas[0]), extra=extra),
+                               style="cyan")
 
         # Turno normal do modelo (com anexo pendente, se houver).
         user_text = f"{self.pending_attach}\n\n{text}" if self.pending_attach else text
@@ -937,19 +966,17 @@ class ChatCore:
                 # Limite de uso/cota nao e defeito: amarelo (aviso) e dica certa,
                 # sem mandar a pessoa reconferir URL e chave.
                 self.sink.line(str(exc), style="yellow")
-                self.sink.line("Dica: /provedor mostra os outros provedores cadastrados.",
+                self.sink.line(t("turn.rate_hint", provider=i18n.cmd("provider")),
                                style="dim")
                 return "continue"
             except LLMError as exc:
                 self.sink.line(str(exc), style="red")
-                self.sink.line("Dica: digite /configurar aqui mesmo para conferir URL e chave "
-                               "(ou /doctor para o diagnostico completo).", style="yellow")
+                self.sink.line(t("turn.err_hint", setup=i18n.cmd("setup"),
+                                 doctor=i18n.cmd("doctor")), style="yellow")
                 return "continue"
             except Exception as exc:  # noqa: BLE001 - falha tecnica nunca vira traceback na tela
                 log_error(exc, "turno do modelo")
-                self.sink.line("Algo deu errado no TEO durante a resposta. A conversa continua; "
-                               "o detalhe tecnico foi guardado no arquivo erro.log da pasta .bgh.",
-                               style="yellow")
+                self.sink.line(t("turn.crash"), style="yellow")
                 return "continue"
 
             self._flush_pend()
@@ -962,13 +989,13 @@ class ChatCore:
                 self.sink.line("")  # fecha a linha do texto que ja apareceu ao vivo
             else:
                 if self.agent.last_reasoning:
-                    self.sink.sep("pensamento do modelo (raciocinio; pode ignorar e ir direto para a resposta)")
+                    self.sink.sep(t("turn.sep.thinking"))
                     for r in self.agent.last_reasoning:
                         trecho = r if len(r) <= 1200 else r[:1200] + "..."
                         self.sink.line(trecho, style="#808080 italic")
-                    self.sink.sep("resposta")
+                    self.sink.sep(t("turn.sep.answer"))
                 elif not self.st["resposta"]:
-                    self.sink.sep("resposta")
+                    self.sink.sep(t("turn.sep.answer"))
                 self.sink.line(md_clean(answer))
             if (not answer.strip() and answer != STOPPED_NOTE and not self.st["resposta"]):
                 # Caso medido em maquina de cliente (Windows, streaming ligado): o
@@ -976,18 +1003,15 @@ class ChatCore:
                 # antigo so valia para o modo SEM streaming, entao a tela ficava muda e
                 # a pessoa achava que o TEO tinha travado no meio.
                 if str(getattr(self.llm, "last_finish", "") or "") == "length":
-                    self.sink.line("O modelo gastou o limite de saida pensando e nao sobrou "
-                                   "texto para a resposta. Mande a pergunta de novo, use "
-                                   "/pensamento low ou aumente max_tokens no config.json.",
-                                   style="yellow")
+                    self.sink.line(t("turn.length_thinking",
+                                     thinking=i18n.cmd("thinking")), style="yellow")
                 else:
-                    self.sink.line("O modelo terminou sem texto de resposta. Mande a pergunta "
-                                   "de novo; se repetir, use /pensamento low.", style="yellow")
+                    self.sink.line(t("turn.empty", thinking=i18n.cmd("thinking")),
+                                   style="yellow")
             elif (answer.strip() and answer != STOPPED_NOTE
                   and str(getattr(self.llm, "last_finish", "") or "") == "length"):
                 # Resposta cortada no meio pelo teto de saida: avisa e ensina a seguir.
-                self.sink.line("(a resposta foi cortada pelo limite de saida; diga "
-                               "'continue' que eu sigo de onde parei)", style="yellow")
+                self.sink.line(t("turn.cut"), style="yellow")
             if answer == STOPPED_NOTE:
                 # Turno parado nao emenda as mensagens guardadas: quem mandou parar
                 # decide se quer continuar. Elas sao devolvidas como aviso.
@@ -995,14 +1019,13 @@ class ChatCore:
                 while self.agent.pop_steer() is not None:
                     descartadas += 1
                 if descartadas:
-                    self.sink.line(f"({descartadas} mensagem(s) digitadas durante o turno parado "
-                                   "nao foram enviadas; digite de novo quando quiser)", style="yellow")
+                    self.sink.line(t("turn.dropped", n=descartadas), style="yellow")
                 break
             while True:
                 sobra = self.agent.pop_steer()
                 if sobra is None:
                     break
-                self.sink.line(f"voce> {sobra}", style="cyan")
+                self.sink.line(t("turn.echo", texto=sobra), style="cyan")
                 fila_turnos.append(sobra)
         self.print_ctx()
         return "continue"

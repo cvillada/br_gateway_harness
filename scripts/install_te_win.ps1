@@ -8,6 +8,11 @@
 $ErrorActionPreference = "Stop"
 $repo = "cvillada/br_gateway_harness"
 
+# Idioma da interface do TEO (as mensagens do instalador sao em portugues).
+Write-Host "Idioma / Language / Idioma: 1) Portugues  2) English  3) Espanol"
+$opcaoIdioma = Read-Host "Opcao [1]"
+$idioma = switch ($opcaoIdioma) { "2" { "en" } "3" { "es" } default { "pt" } }
+
 Write-Host "Procurando a versao mais recente do TEO..."
 $rel = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -TimeoutSec 30
 $whl = $rel.assets | Where-Object { $_.name -like "bgh_motor-*.whl" } | Select-Object -First 1
@@ -71,6 +76,14 @@ try {
     $lnk.TargetPath = $bat
     $lnk.WorkingDirectory = $dir
     $lnk.Description = "Abrir o TEO"
+    # Icone do gato: vem DENTRO do pacote instalado (nada extra para baixar).
+    $iconDir = ""
+    try {
+        $iconDir = (& $py -c "import bgh, os; print(os.path.join(os.path.dirname(bgh.__file__), 'assets'))")
+    } catch { $iconDir = "" }
+    if ($iconDir -and (Test-Path (Join-Path $iconDir "teo.ico"))) {
+        $lnk.IconLocation = (Join-Path $iconDir "teo.ico")
+    }
     $lnk.Save()
     Write-Host "Pronto: existe um icone TEO na area de trabalho. Dois cliques nele = conversar."
 } catch {
@@ -84,5 +97,11 @@ Write-Host "  cd %USERPROFILE%\TEO"
 Write-Host "  .venv\Scripts\activate"
 Write-Host "  bgh"
 Write-Host ""
-Write-Host "Abrindo o TEO agora (na primeira vez ele pede a configuracao)..."
+# Primeira execucao: o assistente ja abre no idioma escolhido (sem perguntar duas vezes).
+$cfg = Join-Path $env:USERPROFILE ".bgh\config.json"
+if (-not (Test-Path $cfg)) {
+    Write-Host "Abrindo o assistente de configuracao do TEO (idioma: $idioma)..."
+    & (Join-Path $dir ".venv\Scripts\bgh.exe") setup --lang $idioma
+}
+Write-Host "Abrindo o TEO agora..."
 & "$dir\.venv\Scripts\bgh.exe"

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.16
+
+O TEO agora fala portugues, ingles e espanhol - e o atalho do desktop ganhou o gato.
+
+- Idioma da tela: portugues (de fabrica), ingles e espanhol. O instalador pergunta
+  o idioma antes de tudo e o assistente ja abre nele. A qualquer momento dentro do
+  TEO o comando `/lingua` (ou `/language`, `/idioma`) troca o idioma na hora:
+  banner, lista de ajuda, menus numericos, licenca, avisos e a barra de baixo -
+  sem fechar e abrir o programa.
+- Os comandos aceitam os tres idiomas em qualquer idioma de tela: `/ajuda`/`/help`/
+  `/ayuda`, `/nov`/`/new`/`/nuevo`, `/modelo`/`/model`/`/modelo`, `/pensamento`/
+  `/thinking`/`/pensamiento`, `/palco`/`/stage`/`/escenario`, `/configurar`/`/setup`,
+  `/atualizar`/`/update`/`/actualizar`, `/skills`/`/habilidades`,
+  `/sair`/`/exit`/`/salir`, `/lingua`/`/language`/`/idioma`. Quem ja decorou os
+  comandos em portugues nao perde nada.
+- O modelo tambem passa a responder no idioma escolhido (o pedido dele e as
+  descricoes das ferramentas vao traduzidas); se a pessoa escrever em outro
+  idioma, ele responde no idioma da mensagem.
+- Aviso de versao nova na abertura: ao abrir o TEO ele confere (uma vez, em
+  segundo plano, sem segurar a tela) se ha versao nova e avisa em uma linha
+  "existe versao nova do TEO (vX.Y.Z). Para atualizar, digite /atualizar". Se nao
+  houver internet, avisa que nao deu para conferir e que o TEO funciona
+  normalmente; se o GitHub responder um codigo (limite/fora do ar), a frase cita
+  o codigo em vez de culpar a conexao do usuario. Ja atualizado = silencio total.
+- Icone do gato no atalho do desktop: Linux (atalho .desktop com Icon=), Windows
+  (atalho com o .ico e o proprio motor.exe com icone) e macOS (app TEO com o gato
+  no Finder, mantendo o atalho de terminal como reserva). O icone vem DENTRO do
+  pacote instalado - nada extra para baixar - e o `scripts/make_icons.py` gera os
+  tres formatos sem dependencias.
+- Detalhe tecnico: catalogo unico em `bgh/i18n.py` (cada frase guarda as tres
+  versoes na mesma entrada, e a suite confere isso), `cfg["lang"]` no config.json,
+  `bgh/assets/` no wheel e nos binarios (PyInstaller `--add-data`/`--icon`).
+
 ## 0.2.15
 
 O TEO reconhece sozinho quando a pessoa esta falando de uma imagem.

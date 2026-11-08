@@ -7,20 +7,18 @@ evento (enter, ferramenta, primeiro texto), nao um relogio.
 
 Aparece acima da linha de digitar SO durante o processamento e recolhe no fim.
 ASCII puro: terminal de Windows e fonte raster nao lidam com desenho unicode.
+Os rotulos vem de bgh/i18n.py (pt/en/es) e a trilha e remontada quando o idioma
+muda (as colunas do marcador dependem do tamanho do rotulo).
 """
+
+from .i18n import get_lang, t
 
 # Largura minima para o palco de 4 linhas; abaixo disso vira uma linha de texto
 # (janela estreita nao pode perder 4 linhas para enfeite).
 MIN_WIDTH = 70
 
-# Etapas na ordem em que o pedido caminha. START = quem pediu (o usuario).
-ETAPAS = (
-    ("start", "START"),
-    ("agente", "AGENTE"),
-    ("ferramenta", "FERRAMENTA"),
-    ("modelo", "MODELO"),
-    ("tela", "TELA"),
-)
+# Chaves das etapas na ordem em que o pedido caminha. START = quem pediu.
+ETAPAS = ("start", "agente", "ferramenta", "modelo", "tela")
 
 # Fase do turno -> etapa acesa na trilha.
 FASE_ETAPA = {
@@ -34,17 +32,27 @@ FASE_ETAPA = {
     "parado": "tela",
 }
 
-# Texto curto e honesto de cada fase (o que a pessoa le embaixo da trilha).
-FASE_TEXTO = {
-    "pedido": "pedido entregue ao agente",
-    "agente": "o agente esta trabalhando",
-    "ferramenta": "o pessoal esta executando a tarefa",
-    "modelo": "o modelo esta escrevendo a resposta",
-    "resposta": "a resposta esta chegando na tela",
-    "pronto": "resposta entregue",
-    "erro": "voltou com erro",
-    "parado": "voce mandou parar",
-}
+FASES = ("pedido", "agente", "ferramenta", "modelo", "resposta", "pronto",
+         "erro", "parado")
+
+
+def fase_texto(fase: str) -> str:
+    """Texto curto e honesto da fase (o que a pessoa le embaixo da trilha)."""
+    if fase in FASES:
+        return t("palco.fase." + fase)
+    return fase
+
+
+def _etapas() -> tuple[tuple[str, str], ...]:
+    """(chave, rotulo) de cada etapa no idioma da tela."""
+    rotulos = {
+        "start": t("palco.stage.start"),
+        "agente": t("palco.stage.agent"),
+        "ferramenta": t("palco.stage.tool"),
+        "modelo": t("palco.stage.model"),
+        "tela": t("palco.stage.screen"),
+    }
+    return tuple((chave, rotulos[chave]) for chave in ETAPAS)
 
 
 def _trilha_partes() -> tuple[list, dict]:
@@ -56,7 +64,7 @@ def _trilha_partes() -> tuple[list, dict]:
     partes: list = [(None, "  ")]  # duas colunas de margem
     posicoes: dict[str, tuple[int, int]] = {}
     coluna = 2
-    for i, (chave, nome) in enumerate(ETAPAS):
+    for i, (chave, nome) in enumerate(_etapas()):
         if i:
             partes.append((None, " --> "))
             coluna += 5
@@ -65,6 +73,18 @@ def _trilha_partes() -> tuple[list, dict]:
         partes.append((chave, rotulo))
         coluna += len(rotulo)
     return partes, posicoes
+
+
+_CACHE: dict = {"lang": None, "partes": [], "posicoes": {}}
+
+
+def _trilha() -> tuple[list, dict]:
+    """Trilha do idioma atual (remontada quando o /lingua troca o idioma)."""
+    lang = get_lang()
+    if _CACHE["lang"] != lang:
+        partes, posicoes = _trilha_partes()
+        _CACHE.update({"lang": lang, "partes": partes, "posicoes": posicoes})
+    return _CACHE["partes"], _CACHE["posicoes"]
 
 
 PARTES_TRILHA, POSICOES = _trilha_partes()
@@ -134,6 +154,7 @@ def linha_tokens(state: dict, limite: int) -> str:
     saida = int(uso.get("saida") or 0)
     if not entrada and not saida:
         return ""
+    _partes, posicoes = _trilha()
     valores: list[tuple[str, str]] = []
     if entrada:
         valores.append(("agente", abrevia(entrada)))
@@ -143,7 +164,7 @@ def linha_tokens(state: dict, limite: int) -> str:
         valores.append(("tela", abrevia(entrada + saida)))
     grade = [" "] * max(int(limite), 1)
     for chave, texto in valores:
-        coluna, largura = POSICOES.get(chave, (0, len(texto)))
+        coluna, largura = posicoes.get(chave, (0, len(texto)))
         inicio = coluna + max(0, (largura - len(texto)) // 2)
         if inicio + len(texto) > len(grade):
             inicio = max(0, len(grade) - len(texto))
@@ -156,15 +177,15 @@ def linha_tokens(state: dict, limite: int) -> str:
 def resumo(state: dict, agora: float) -> str:
     """Uma linha com o estado real: fase, ferramenta (com tempo) e turno."""
     fase = state.get("fase") or "pedido"
-    partes = [FASE_TEXTO.get(fase, fase)]
+    partes = [fase_texto(fase)]
     ferramenta = state.get("tool")
     if ferramenta:
         partes.append(f"{ferramenta} {_segundos(state.get('tool_since'), agora)}s")
     rodada = int(state.get("rodada") or 0)
     if rodada > 1:
         # turno que prorroga: a pessoa ve em que rodada esta (e nao um numero parado)
-        partes.append(f"rodada {rodada}")
-    partes.append(f"turno {_segundos(state.get('busy_since'), agora)}s")
+        partes.append(t("palco.round", n=rodada))
+    partes.append(t("palco.turn", s=_segundos(state.get("busy_since"), agora)))
     return " | ".join(partes)
 
 
@@ -179,23 +200,24 @@ def stage_rows(state: dict, width: int, agora: float, frame: int = 0) -> list:
     limite = max(10, int(width) - 2)
 
     if int(width) < MIN_WIDTH:
-        fase_txt = FASE_TEXTO.get(fase, fase)
-        partes_n: list[str] = [fase_txt]
+        partes_n: list[str] = [fase_texto(fase)]
         uso = state.get("tokens") or {}
         if uso:
-            partes_n.append(f"{abrevia(uso.get('entrada'))}/{abrevia(uso.get('saida'))} tk")
+            partes_n.append(t("palco.tk", entrada=abrevia(uso.get("entrada")),
+                              saida=abrevia(uso.get("saida"))))
         ferramenta_n = state.get("tool")
         if ferramenta_n:
             partes_n.append(f"{ferramenta_n} {_segundos(state.get('tool_since'), agora)}s")
         return [[("class:palco.dim", _corta("  > " + " | ".join(partes_n), limite))]]
 
+    partes_trilha, posicoes = _trilha()
     etapa = FASE_ETAPA.get(fase, "agente")
-    coluna, largura_rotulo = POSICOES.get(etapa, (2, 6))
+    coluna, largura_rotulo = posicoes.get(etapa, (2, 6))
     # Marcador embaixo da etapa acesa; os quadros trocam sem piscar (2 em 2 ticks).
     marca = "^" * largura_rotulo if frame % 2 == 0 else "-" * largura_rotulo
     trilha = [
         ("class:palco.sel" if chave == etapa else "class:palco", texto)
-        for chave, texto in PARTES_TRILHA
+        for chave, texto in partes_trilha
     ]
     return [
         _corta_frags(trilha, limite),

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>TEO</title>
+  <polygon points="44,96 52,22 112,62" fill="#181820"/>
+  <polygon points="212,96 204,22 144,62" fill="#181820"/>
+  <polygon points="62,84 66,42 102,64" fill="#3a2f4a"/>
+  <polygon points="194,84 190,42 154,64" fill="#3a2f4a"/>
+  <ellipse cx="128" cy="144" rx="92" ry="84" fill="#181820"/>
+  <ellipse cx="98" cy="132" rx="17" ry="22" fill="#af87ff"/>
+  <ellipse cx="158" cy="132" rx="17" ry="22" fill="#af87ff"/>
+  <ellipse cx="93" cy="124" rx="6" ry="8" fill="#ffffff"/>
+  <ellipse cx="153" cy="124" rx="6" ry="8" fill="#ffffff"/>
+  <polygon points="118,166 138,166 128,178" fill="#ff9ecb"/>
+  <ellipse cx="118" cy="190" rx="12" ry="5" fill="#ff9ecb"/>
+  <ellipse cx="138" cy="190" rx="12" ry="5" fill="#ff9ecb"/>
+  <g stroke="#f2f2f2" stroke-width="4" stroke-linecap="round">
+    <line x1="18" y1="172" x2="96" y2="179"/>
+    <line x1="18" y1="194" x2="96" y2="188"/>
+    <line x1="238" y1="172" x2="160" y2="179"/>
+    <line x1="238" y1="194" x2="160" y2="188"/>
+  </g>
+</svg>

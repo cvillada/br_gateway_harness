@@ -8,9 +8,11 @@ import json
 import threading
 from typing import Callable
 
+from . import i18n
 from .approvals import Gate
 from .config import SESSION_FILE
 from .llm import ContextOverflowError, LLM, LLMError
+from .i18n import t
 from .prompts import build_system_prompt
 from .tools import ToolBox
 from .tools.memory import load_lines
@@ -55,16 +57,26 @@ class Agent:
         # ferramentas e rodadas na hora (igual ao CTRL+C do Hermes).
         self.stop_event = threading.Event()
         self.tools = ToolBox(cfg, gate, stop_event=self.stop_event)
-        skills = discover()
-        self.messages = [
-            {
-                "role": "system",
-                "content": build_system_prompt(
-                    load_lines("user"), load_lines("note"), index_lines(skills)
-                ),
-            }
-        ]
+        self.messages = [self._system_message()]
         self._load_session()
+
+    @staticmethod
+    def _system_message() -> dict:
+        """Prompt do sistema no idioma atual (tambem e o que /lingua refaz)."""
+        skills = discover()
+        return {
+            "role": "system",
+            "content": build_system_prompt(
+                load_lines("user"), load_lines("note"), index_lines(skills)
+            ),
+        }
+
+    def refresh_prompt(self) -> None:
+        """Refaz o pedido ao modelo depois de trocar o idioma (comando /lingua)."""
+        if self.messages and self.messages[0].get("role") == "system":
+            self.messages[0]["content"] = self._system_message()["content"]
+        else:
+            self.messages.insert(0, self._system_message())
 
     # ----- mensagens com imagem (visao) ---------------------------------------
     @staticmethod
@@ -111,14 +123,12 @@ class Agent:
         if isinstance(bloqueados, list) and self._chave_visao() in bloqueados:
             # Este modelo ja recusou imagem antes: decide ANTES e avisa, em vez de
             # mandar de novo e tomar outro 400.
-            self._note("Este modelo ja recusou imagem antes, entao nao vou mandar a foto. "
-                       "Para ver imagens, escolha um modelo com visao (/modelo) - ou me "
-                       "peca para ler por OCR.")
+            self._note(t("agent.vision_blocked", model=i18n.cmd("model")))
             self.messages.append({"role": "user", "content": user_text})
             return
         url, _tamanho, erro = image_data_url(caminho)
         if not url:
-            self._note(erro or "nao consegui preparar a imagem; seguindo so com o texto.")
+            self._note(erro or t("agent.image_fail"))
             self.messages.append({"role": "user", "content": user_text})
             return
         self.messages.append({
@@ -167,15 +177,7 @@ class Agent:
             pass
 
     def new_session(self) -> None:
-        skills = discover()
-        self.messages = [
-            {
-                "role": "system",
-                "content": build_system_prompt(
-                    load_lines("user"), load_lines("note"), index_lines(skills)
-                ),
-            }
-        ]
+        self.messages = [self._system_message()]
         self.gate.session_rules.clear()
         self.last_compressed = False   # aviso 'compactado' nao pode sobreviver ao zerar a conversa
         if SESSION_FILE.exists():
@@ -210,17 +212,15 @@ class Agent:
             except ContextOverflowError as exc:
                 # O servidor recusou o tamanho: compactar e tentar na hora.
                 # Antes isso era onde a tela "parava" quando o contexto enchia.
-                self._note("O servidor recusou o tamanho do contexto; vou compactar a conversa e tentar de novo.")
+                self._note(t("agent.overflow"))
                 self._force_compress()
                 self.last_compressed = True
                 try:
                     self._round_start()
                     msg = self._call_model(use_stream)
                 except ContextOverflowError:
-                    raise LLMError(
-                        str(exc) + " Mesmo depois de compactar, o pedido nao coube no servidor. "
-                        "Reduza o limite aqui na tela: /ctx 60000"
-                    ) from exc
+                    raise LLMError(str(exc) + t("agent.overflow_still",
+                                                ctx=i18n.cmd("ctx"))) from exc
             except LLMError as exc:
                 # Modelo sem visao: segue sem a foto (nunca deixa a pessoa sem resposta).
                 if not (self._tem_imagem() and _parece_falta_de_visao(exc)):
@@ -235,9 +235,7 @@ class Agent:
                         save_config(self.cfg)
                 except Exception:  # noqa: BLE001 - memoria de recurso nunca derruba o turno
                     pass
-                self._note("O modelo deste provedor nao le imagem; vou seguir sem a foto. "
-                           "Para ler imagens, escolha um modelo com visao (/modelo) - ou me "
-                           "peca para ler por OCR, que eu instalo uma biblioteca.")
+                self._note(t("agent.vision_refused", model=i18n.cmd("model")))
                 self._round_start()
                 msg = self._call_model(use_stream)
             self.last_streamed = use_stream
@@ -261,18 +259,14 @@ class Agent:
                     user_stopped = True
                     self.messages.append(
                         {"role": "tool", "tool_call_id": tc["id"],
-                         "content": "BLOQUEADO: o usuario mandou parar esta resposta."}
+                         "content": t("agent.tool_stopped")}
                     )
                     continue
                 sig = self._call_signature(fn)
                 sig_count[sig] = sig_count.get(sig, 0) + 1
                 if sig_count[sig] >= 3:
                     # Circuit breaker: mesmissima chamada pela 3a vez nao executa.
-                    result = (
-                        f"LOOP DETECTADO: a chamada IDENTICA a '{fn['name']}' ja foi repetida "
-                        f"{sig_count[sig]} vezes e nao vai executar de novo. Mude argumentos, "
-                        "caminho ou estrategia; se nao houver saida, explique o obstaculo ao usuario."
-                    )
+                    result = t("agent.loop", nome=fn["name"], n=sig_count[sig])
                 else:
                     if self.on_event:
                         self.on_event(fn["name"], fn.get("arguments", "")[:120])
@@ -297,40 +291,27 @@ class Agent:
             if self._compress_if_needed():
                 self.last_compressed = True
             if fail_streak >= 5:
-                self._note("5 ferramentas falharam em sequencia; vou fechar este turno com o que ja tenho.")
-                return self._close_window(
-                    "(5 ferramentas falharam em sequencia. Pare de tentar variantes do mesmo "
-                    "caminho e responda em portugues ao usuario: o que foi tentado, o que travou "
-                    "e o que ele pode fazer.)"
-                )
+                self._note(t("agent.fail_note"))
+                return self._close_window(t("agent.close_fail",
+                                            lang=t("agent.in_lang")))
             if rounds >= limite:
                 # Limite da etapa: se o turno esta PROGREDINDO, prorroga sozinho ate o
                 # teto (nao e parede, mas tambem nao vira loop infinito). Sem progresso
                 # (falha/loop na ultima rodada), fecha como antes.
                 if fail_streak == 0 and limite < teto:
                     novo = min(limite + max_rounds, teto)
-                    self._note(
-                        f"Ja usei {limite} ferramentas neste pedido; vou continuar por "
-                        f"mais {novo - limite} (CTRL+C ou ESC para parar)."
-                    )
+                    self._note(t("agent.extend_note", limite=limite,
+                                 extra=novo - limite))
                     limite = novo
                 else:
                     break
         if limite >= teto:
-            self._note(f"Parei em {limite} ferramentas para nao gastar demais; "
-                       "vou responder com o que ja coletei.")
-            return self._close_window(
-                f"(voce chegou ao teto de {limite} ferramentas deste turno. Responda em "
-                "portugues com o que ja coletou, sem prometer acao futura, e termine a "
-                "resposta dizendo ao usuario que ele pode escrever 'continue' para voce "
-                "seguir de onde parou.)"
-            )
+            self._note(t("agent.max_note", limite=limite))
+            return self._close_window(t("agent.close_teto", limite=limite,
+                                        lang=t("agent.in_lang")))
         # Estourou o limite de rodadas: fecha a janela pedindo resposta com o que tem.
-        self._note("Limite de ferramentas deste turno atingido; vou responder com o que ja coletei.")
-        return self._close_window(
-            "(limite de ferramentas deste turno atingido. Responda em portugues usando apenas "
-            "o que ja foi coletado; nao prometa acao futura, feche o assunto agora.)"
-        )
+        self._note(t("agent.round_note"))
+        return self._close_window(t("agent.close_round", lang=t("agent.in_lang")))
 
     # ----- janela final -------------------------------------------------------
     def _close_window(self, note: str) -> str:
@@ -436,14 +417,13 @@ class Agent:
     def _drain_steers(self) -> int:
         with self._steer_lock:
             pending, self.steer_queue = self.steer_queue, []
-        for t in pending:
+        for pedaco in pending:
             self.messages.append({
                 "role": "user",
-                "content": f"(mensagem do usuario durante o processamento): {t}",
+                "content": t("agent.steer_wrap", texto=pedaco),
             })
         if pending:
-            self._note(f"{len(pending)} mensagem(s) recebida(s) no meio do turno; "
-                       "entregue(s) ao modelo agora.")
+            self._note(t("agent.steer_note", n=len(pending)))
         return len(pending)
 
     def _round_start(self) -> None:
@@ -479,13 +459,13 @@ class Agent:
         transcript = "\n".join(
             f"{m.get('role')}: {self._texto_de(m)[:500]}" for m in head
         )
-        self._note("Compactando a conversa em resumo (o resumo custa uma espera extra)...")
+        self._note(t("agent.compacting"))
         summary = self.llm.summarize(transcript)
         if not summary:
             # Sem resumo possivel, corta o meio (falha aberta mas visivel ao modelo).
-            summary = "(partes antigas da conversa foram removidas por limite de contexto)"
+            summary = t("agent.summary_fallback")
         self.messages = [self.messages[0]] + [
-            {"role": "system", "content": "RESUMO DA CONVERSA ANTERIOR:\n" + summary}
+            {"role": "system", "content": t("agent.summary_header") + summary}
         ] + tail
         self._save_session()
         return True

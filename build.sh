@@ -11,6 +11,7 @@ rm -rf build dist *.egg-info
 .venv/bin/pyinstaller --onefile --clean --noconfirm --log-level=WARN \
     --name motor \
     --add-data "bgh/skills_default:bgh/skills_default" \
+    --add-data "bgh/assets:bgh/assets" \
     motor_entry.py
 
 echo ""

@@ -5,6 +5,7 @@ import re
 import time
 from pathlib import Path
 
+from ..i18n import t
 from .guard import STOPPED_NOTE, limit_n, limit_s, stopped
 
 READ_SPEC = {
@@ -103,22 +104,20 @@ def image_data_url(path: str) -> tuple[str, int, str | None]:
 
     alvo = Path(os.path.expanduser(str(path)))
     if not alvo.is_file():
-        return "", 0, f"nao encontrei a imagem: {alvo}"
+        return "", 0, t("files.img_missing", alvo=alvo)
     if not is_image(str(alvo)):
-        return "", 0, (f"'{alvo.suffix}' nao e uma imagem que eu saiba enviar "
-                       "(png, jpg, jpeg, webp, gif, bmp)")
+        return "", 0, t("files.img_ext", ext=alvo.suffix)
     try:
         tamanho = alvo.stat().st_size
     except OSError as exc:
-        return "", 0, f"nao consegui ler a imagem: {exc}"
+        return "", 0, t("files.img_read", erro=exc)
     if tamanho > MAX_IMAGE_BYTES:
-        return "", tamanho, (f"a imagem tem {human_size(tamanho)} - acima de "
-                             f"{human_size(MAX_IMAGE_BYTES)} eu nao envio. Diminua a foto "
-                             "ou recorte a parte que importa.")
+        return "", tamanho, t("files.img_big", size=human_size(tamanho),
+                              max=human_size(MAX_IMAGE_BYTES))
     try:
         bruto = alvo.read_bytes()
     except OSError as exc:
-        return "", tamanho, f"nao consegui ler a imagem: {exc}"
+        return "", tamanho, t("files.img_read", erro=exc)
     mime = {"jpg": "jpeg", "jpeg": "jpeg"}.get(alvo.suffix.lower().lstrip("."),
                                                alvo.suffix.lower().lstrip("."))
     b64 = base64.b64encode(bruto).decode("ascii")
@@ -165,7 +164,7 @@ def entries(path: str) -> tuple[list[str], list[str], str | None]:
     """
     root = _expand(path)
     if not root.is_dir():
-        return [], [], f"Nao encontrei a pasta: {root}"
+        return [], [], t("files.no_folder", root=root)
     pastas: list[str] = []
     arquivos: list[str] = []
     try:
@@ -180,7 +179,7 @@ def entries(path: str) -> tuple[list[str], list[str], str | None]:
             except OSError:
                 continue
     except OSError as exc:
-        return [], [], f"ERRO ao ler a pasta {root}: {exc}"
+        return [], [], t("files.read_error", root=root, erro=exc)
     return sorted(pastas)[:200], sorted(arquivos)[:200], None
 
 
@@ -188,32 +187,32 @@ def list_dir(path: str, files_only: bool = False) -> str:
     """Listagem amigavel para os atalhos '/' e '@' do chat (pastas primeiro, ocultos de fora)."""
     root = _expand(path)
     if not root.is_dir():
-        return f"Nao encontrei a pasta: {root}"
+        return t("files.no_folder", root=root)
     try:
         entries = sorted(
             (e for e in os.scandir(root) if not e.name.startswith(".")),
             key=lambda e: (not e.is_dir(), e.name.lower()),
         )
     except OSError as exc:
-        return f"ERRO ao ler a pasta {root}: {exc}"
+        return t("files.read_error", root=root, erro=exc)
     lines: list[str] = []
     for e in entries:
         if e.is_dir():
             if files_only:
                 continue
-            lines.append(f"[DIR] {e.name}/")
+            lines.append(t("files.dir_row", nome=e.name))
         else:
             try:
                 size = human_size(e.stat().st_size)
             except OSError:
                 size = "?"
-            lines.append(f"[ARQ] {e.name} ({size})")
+            lines.append(t("files.file_row", nome=e.name, size=size))
         if len(lines) >= 60:
-            lines.append("... (ainda tem mais; abra uma pasta mais especifica)")
+            lines.append(t("files.more"))
             break
-    body = "\n".join(lines) if lines else "(vazia)"
-    modo = "so arquivos" if files_only else "pastas e arquivos"
-    return f"pasta: {root}  [{modo}]\n{body}"
+    body = "\n".join(lines) if lines else t("files.empty")
+    modo = t("files.mode.files") if files_only else t("files.mode.all")
+    return t("files.header", root=root, modo=modo) + "\n" + body
 
 
 def read_file(args: dict, ctx) -> str:

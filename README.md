@@ -240,7 +240,24 @@ Comandos:
 | `/doctor` | diagnostico da conexao e da maquina na propria tela |
 | `/atualizar` | confere se ha versao nova no GitHub; se houver, pede licenca e instala (mesma versao: avisa que esta tudo certo) |
 | `/mem <texto>` | grava uma preferencia sua na memoria |
+| `/lingua` | troca o idioma da tela: 1) Portugues  2) English  3) Espanol (fica salvo). Atalhos: `/language`, `/idioma` |
 | `/nov` `/skills` `/ajuda` `/sair` | conversa nova, skills, ajuda, sair |
+
+Idioma: o TEO fala portugues (de fabrica), ingles e espanhol. O instalador pergunta
+o idioma no inicio e o `/lingua` troca a qualquer momento, na hora - banner, ajuda,
+menus, licenca, avisos e barra de baixo. Os comandos funcionam nos tres idiomas em
+qualquer idioma de tela (`/help`, `/new`, `/model`, `/thinking`, `/exit`...), e o
+modelo passa a responder no idioma escolhido (se a pessoa escrever em outro idioma,
+ele responde no idioma da mensagem).
+
+Versao nova: ao abrir, o TEO confere sozinho (uma vez, sem travar a tela) se ha
+versao nova e avisa "existe versao nova do TEO (vX.Y.Z). Para atualizar, digite
+`/atualizar`". Sem internet ele avisa que nao conseguiu conferir e segue
+funcionando; o `update_check` no `~/.bgh/config.json` desliga a consulta.
+
+Icone: o atalho do desktop sai com o gato do TEO - Linux (`.desktop` com `Icon=`),
+Windows (atalho com `teo.ico` e o exe com icone) e macOS (app `TEO.app`). Os icones
+vivem em `bgh/assets/` e sao gerados por `scripts/make_icons.py` (sem dependencias).
 
 - Pensamento do modelo: se o servidor devolve `reasoning_content`/`reasoning`
   (llama.cpp com Qwen thinking, DeepSeek-R1 etc.), aparece como

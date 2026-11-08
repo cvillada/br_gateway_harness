@@ -2636,4 +2636,289 @@ ok("na segunda vez nem manda a foto: avisa antes e responde",
    and any("ja recusou imagem" in n for n in _notas_sv299b)
    and not any(isinstance(m.get("content"), list) for m in _ag_sv299b.messages))
 
+# ---------- v0.2.16: tres idiomas (pt/en/es) + icone do gato -------------------
+import re as _re316
+import struct as _struct316
+
+from bgh import i18n as _i18n316
+from bgh import tui as _tui316
+
+_RAIZ316 = Path(__file__).resolve().parents[1]
+
+ok("idiomas declarados na ordem pt/en/es",
+   tuple(_i18n316.LANGS) == ("pt", "en", "es")
+   and _i18n316.LANG_NAMES["en"] == "English")
+
+# Toda frase da interface guarda as TRES versoes na mesma entrada.
+_ruins316 = [chave for chave, valor in _i18n316.TEXTS.items()
+             if not (isinstance(valor, tuple) and len(valor) == 3
+                     and all(isinstance(x, str) and x.strip() for x in valor))]
+ok("catalogo de textos: toda chave tem as tres versoes preenchidas", not _ruins316)
+
+# Nenhuma chave se repete entre blocos (um bloco novo pode apagar traducao antiga).
+_total_blocos316 = sum(len(b) for b in (_i18n316.COMMON, _i18n316.HELP_HEADERS,
+                                        _i18n316.CHAT, _i18n316.AGENT, _i18n316.GATE,
+                                        _i18n316.TUI, _i18n316.PALCO, _i18n316.LLM,
+                                        _i18n316.SETUP, _i18n316.CLI, _i18n316.TOOLS,
+                                        _i18n316.UPDATER, _i18n316.FILES, _i18n316.MEMORY))
+ok("catalogo sem chave repetida entre blocos",
+   _total_blocos316 == len(_i18n316.TEXTS))
+
+# Toda chave escrita no codigo existe no catalogo (traducao esquecida = chave na tela).
+_usadas316 = set()
+for _arq316 in (_RAIZ316 / "bgh").rglob("*.py"):
+    # chave literal (o '+' da frente indica chave montada em pedacos, nao entra)
+    _usadas316.update(_re316.findall(r'\bt\("([a-z0-9_.]+)"(?!\s*\+)',
+                                     _arq316.read_text(encoding="utf-8")))
+_faltando316 = sorted(c for c in _usadas316 if c not in _i18n316.TEXTS)
+ok("toda chave usada no codigo existe no catalogo", not _faltando316)
+
+# Ajuda: tabela pronta no idioma atual, com o comando de cada idioma.
+_ajuda_pt316 = dict(_i18n316.help_table())
+ok("tabela de ajuda em portugues traz os comandos pt",
+   any("/ajuda" == c for c, _d in _i18n316.help_table()[3][1]))
+_i18n316.set_lang("en")
+ok("tabela de ajuda em ingles traz /help e /exit",
+   any(c == "/help" for c, _d in _i18n316.help_table()[3][1])
+   and any(c == "/exit" for c, _d in _i18n316.help_table()[3][1]))
+ok("alias funciona em qualquer idioma (canon)", _i18n316.canon("ayuda") == "help"
+   and _i18n316.canon("salir") == "exit" and _i18n316.canon("nov") == "new")
+_i18n316.set_lang("pt")
+ok("escrita de comando acha o id em qualquer idioma",
+   _i18n316.cmd("help") == "/ajuda" and _i18n316.canon("thinking") == "thinking")
+
+# --- /lingua trocando a tela na hora -----------------------------------------
+class _LLMLang316:
+    """Modelo fake: o teste olha a TELA e o config, nao a resposta."""
+
+    def __init__(self, cfg=None):
+        self.cfg = cfg or {}
+        self.last_finish = "stop"
+        self.last_usage = None
+        self.last_reasoning: list = []
+        self.last_streamed = False
+
+    def chat(self, messages, tools=None):
+        return {"role": "assistant", "content": "ok"}
+
+    def chat_stream(self, messages, tools=None, on_text=None, on_reasoning=None,
+                    should_stop=None):
+        return {"role": "assistant", "content": "ok"}
+
+    def list_models(self):
+        return ["m1"]
+
+    def discover_context(self):
+        return None
+
+    def summarize(self, text):
+        return ""
+
+
+_cfg_lang316 = {"provider": "local", "base_url": "http://x/v1", "model": "m1",
+                "lang": "pt", "stream": False, "tui": False}
+_i18n316.set_lang("pt")
+_sink_lang316 = RecSink()
+_core_lang316 = ChatCore(dict(_cfg_lang316), _sink_lang316, llm=_LLMLang316(dict(_cfg_lang316)))
+ok("abertura comeca no portugues (idioma de fabrica)",
+   _i18n316.get_lang() == "pt")
+
+_core_lang316.submit("/lingua 2")
+ok("/lingua 2 troca a tela para ingles na hora",
+   _i18n316.get_lang() == "en" and _core_lang316.cfg["lang"] == "en"
+   and any("Language now: English" in linha for linha in _sink_lang316.lines))
+ok("/lingua grava o idioma no config.json",
+   json.loads((TMP / "config.json").read_text(encoding="utf-8")).get("lang") == "en")
+ok("o pedido ao modelo passa ao ingles na mesma hora",
+   "You are TEO" in _core_lang316.agent.messages[0]["content"])
+ok("as descricoes das ferramentas vao ao modelo em ingles",
+   "Runs a shell command" in _core_lang316.agent.tools.specs[0]["function"]["description"])
+
+_sink_lang316.lines.clear()
+_core_lang316.submit("/ajuda")
+_ajuda_en316 = "\n".join(_sink_lang316.lines)
+ok("/ajuda (pt) funciona e mostra a lista em ingles",
+   "/help" in _ajuda_en316 and "this list" in _ajuda_en316)
+ok("a ajuda em ingles nao mistura cabecalho em portugues",
+   "Atalhos rapidos" not in _ajuda_en316)
+
+_sink_lang316.lines.clear()
+_core_lang316.submit("/lingua pt")
+ok("/lingua pt volta ao portugues",
+   _i18n316.get_lang() == "pt"
+   and any("Idioma agora: Portugues" in linha for linha in _sink_lang316.lines))
+_core_lang316.submit("/lingua 7")
+ok("idioma invalido nao troca nada e explica", _i18n316.get_lang() == "pt"
+   and any("Escolha 1" in linha or "Nao entendi" in linha for linha in _sink_lang316.lines))
+
+# --- menu de idioma (sem argumento) ------------------------------------------
+_i18n316.set_lang("pt")
+_sink_menu316 = RecSink()
+_core_menu316 = ChatCore(dict(_cfg_lang316), _sink_menu316, llm=_LLMLang316(dict(_cfg_lang316)))
+_core_menu316.submit("/lingua")
+ok("menu do /lingua oferece os tres idiomas",
+   any("Portugues" in linha and "English" in linha for linha in _sink_menu316.lines))
+_i18n316.set_lang("pt")
+
+# --- prompt do modelo e medidor no idioma certo ------------------------------
+_prompt_en316 = _prompts26.build_system_prompt([], [], [])
+_i18n316.set_lang("en")
+_prompt_en316 = _prompts26.build_system_prompt([], [], [])
+ok("prompt do modelo em ingles manda responder em ingles",
+   "Always answer in English" in _prompt_en316 and "WHERE THINGS ARE" in _prompt_en316)
+_prompt_es316 = _prompts26.build_system_prompt([], [], [], lang="es")
+ok("prompt do modelo em espanhol",
+   "Responde siempre en espanol" in _prompt_es316)
+ok("medidor de contexto compacta em ingles",
+   _tui316.compact_ctx("context: 80% of 160000 chars (~45000 toks) (10 messages)", 70)
+   .startswith("ctx 80% of"))
+_footer_en316 = "".join(txt for _cls, txt in
+                        _tui316._status_text({"approval": None, "busy": False, "ctx": ""}, 120))
+ok("barra de baixo em ingles usa o atalho /help", "/help" in _footer_en316)
+_i18n316.set_lang("pt")
+ok("prompt em portugues continua o de fabrica",
+   "Responda sempre em portugues" in _prompts26.build_system_prompt([], [], []))
+
+# --- instalacao: idioma perguntado na primeira vez ---------------------------
+from bgh import setup_wizard as _wiz316
+
+from bgh import config as _cfgmod316
+
+_orig_path316 = _wiz316.CONFIG_PATH
+_orig_path_cfg316 = _cfgmod316.CONFIG_PATH
+_orig_probe316 = _wiz316._probe_context_tokens
+_cfg_novo316 = TMP / "config_novo.json"
+_respostas316 = iter(["2", "n", "1", "", "", "", "s", "n"])
+_saida316: list[str] = []
+try:
+    # pasta sem config.json = primeira execucao (o assistente pergunta o idioma)
+    _wiz316.CONFIG_PATH = _cfg_novo316
+    _cfgmod316.CONFIG_PATH = _cfg_novo316
+    _wiz316._probe_context_tokens = lambda probe_cfg: None
+    _wiz316.run(ask=lambda prompt, default="", secret=False: next(_respostas316),
+                say=lambda *a: _saida316.append(" ".join(str(x) for x in a)))
+finally:
+    _wiz316.CONFIG_PATH = _orig_path316
+    _cfgmod316.CONFIG_PATH = _orig_path_cfg316
+    _wiz316._probe_context_tokens = _orig_probe316
+ok("primeira configuracao pergunta o idioma e continua nele (English)",
+   json.loads(_cfg_novo316.read_text(encoding="utf-8")).get("lang") == "en"
+   and any("Choose where the model will run" in linha for linha in _saida316))
+_i18n316.set_lang("pt")
+
+# --- atalho com o icone do gato ---------------------------------------------
+_ativos316 = _RAIZ316 / "bgh" / "assets"
+_png316 = (_ativos316 / "teo.png").read_bytes()
+_ico316 = (_ativos316 / "teo.ico").read_bytes()
+_svg316 = (_ativos316 / "teo.svg").read_text(encoding="utf-8")
+ok("icone do gato em PNG 256x256",
+   _png316[:8] == b"\x89PNG\r\n\x1a\n" and _struct316.unpack(">II", _png316[16:24]) == (256, 256))
+ok("icone do gato em ICO para o Windows (PNG dentro)",
+   _struct316.unpack("<HHH", _ico316[:6]) == (0, 1, 1) and b"\x89PNG" in _ico316)
+ok("icone vetorial para Linux/macOS", _svg316.startswith("<?xml") and "<svg" in _svg316)
+ok("o wheel leva a pasta de icones",
+   "assets/*" in (_RAIZ316 / "pyproject.toml").read_text(encoding="utf-8"))
+ok("instalador Linux escreve Icon= no atalho do desktop",
+   'Icon=$DIR/teo.png' in (_RAIZ316 / "scripts/install_te.sh").read_text(encoding="utf-8"))
+ok("instalador Windows poe o teo.ico no atalho",
+   "IconLocation" in (_RAIZ316 / "scripts" / "install_te_win.ps1").read_text(encoding="utf-8"))
+ok("instaladores perguntam o idioma e passam --lang",
+   "Idioma / Language / Idioma" in (_RAIZ316 / "scripts/install_te.sh").read_text(encoding="utf-8")
+   and '--lang "$IDIOMA"' in (_RAIZ316 / "scripts/install_te.sh").read_text(encoding="utf-8")
+   and "setup --lang $idioma" in (_RAIZ316 / "scripts" / "install_te_win.ps1").read_text(encoding="utf-8"))
+ok("build do Windows usa o icone no exe",
+   "--icon bgh/assets/teo.ico" in (_RAIZ316 / ".github" / "workflows" /
+                                   "build-windows.yml").read_text(encoding="utf-8"))
+
+# ---------- 0.2.16 (parte 2): aviso de versao nova na ABERTURA ----------------
+from bgh import updater as _upd316b
+
+
+class _RespUpd316b:
+    def __init__(self, payload, code=200):
+        self._payload, self.status_code = payload, code
+
+    def json(self):
+        return self._payload
+
+
+_orig_requests316b = _upd316b.requests   # testes antigos trocam o modulo inteiro
+try:
+    # versao nova: avisa e ensina o comando (no idioma da tela)
+    _i18n316.set_lang("pt")
+    _upd316b.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespUpd316b({"tag_name": "v9.9.9"}))
+    _txt_nova316b, _ver_nova316b = _upd316b.startup_check("0.2.16")
+    ok("abertura avisa versao nova e manda usar o /atualizar",
+       _ver_nova316b == "v9.9.9" and "versao nova" in _txt_nova316b
+       and "/atualizar" in _txt_nova316b)
+
+    # mesma versao: silencio (nao poluir a abertura de quem ja esta atualizado)
+    _upd316b.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespUpd316b({"tag_name": "v0.2.16"}))
+    ok("abertura fica calada quando ja esta atualizado",
+       _upd316b.startup_check("0.2.16") == ("", None))
+
+    # sem internet: avisa exatamente isso, sem falar em erro tecnico
+    def _sem_rede316b(*a, **k):
+        raise ConnectionError("sem internet")
+
+    _upd316b.requests = types.SimpleNamespace(get=_sem_rede316b)
+    _txt_off316b, _ver_off316b = _upd316b.startup_check("0.2.16")
+    ok("sem internet na abertura: avisa que nao deu para conferir",
+       _ver_off316b is None and "Sem acesso a internet" in _txt_off316b
+       and "funciona normalmente" in _txt_off316b)
+
+    # GitHub recusando (limite de consulta): uma linha calma, sem assustar
+    _upd316b.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespUpd316b({}, code=503))
+    _txt_503_316b, _ver_503_316b = _upd316b.startup_check("0.2.16")
+    ok("GitHub fora na abertura: aviso curto citando o codigo",
+       _ver_503_316b is None and "503" in _txt_503_316b
+       and "funciona normalmente" in _txt_503_316b)
+
+    # mesmo aviso no idioma da tela
+    _i18n316.set_lang("en")
+    _upd316b.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespUpd316b({"tag_name": "v9.9.9"}))
+    _txt_en316b, _ = _upd316b.startup_check("0.2.16")
+    ok("aviso de abertura em ingles aponta o /update",
+       "new TEO version" in _txt_en316b and "/update" in _txt_en316b)
+    _i18n316.set_lang("pt")
+finally:
+    _upd316b.requests = _orig_requests316b
+
+# O nucleo dispara a checagem em SEGUNDO PLANO e escreve na tela so quando ha o que dizer.
+_orig_startup316b = _upd316b.startup_check
+try:
+    _upd316b.startup_check = lambda versao: ("Existe versao nova do TEO (v9.9.9). "
+                                             "Para atualizar, digite /atualizar.", "v9.9.9")
+    _sink_upd316b = RecSink()
+    _core_upd316b = ChatCore(dict(_cfg_lang316), _sink_upd316b, llm=_LLMLang316(dict(_cfg_lang316)))
+    _core_upd316b.check_update_on_start()
+    _core_upd316b._update_thread.join(timeout=3)
+    ok("abertura do TEO mostra o aviso de versao nova na tela",
+       any("Existe versao nova do TEO" in linha for linha in _sink_upd316b.lines))
+
+    _upd316b.startup_check = lambda versao: ("", None)
+    _sink_sil316b = RecSink()
+    _core_sil316b = ChatCore(dict(_cfg_lang316), _sink_sil316b, llm=_LLMLang316(dict(_cfg_lang316)))
+    _core_sil316b.check_update_on_start()
+    _core_sil316b._update_thread.join(timeout=3)
+    ok("abertura atualizada nao escreve nada", not _sink_sil316b.lines)
+
+    _cfg_off316b = dict(_cfg_lang316)
+    _cfg_off316b["update_check"] = False
+    _sink_off316b = RecSink()
+    _core_off316b = ChatCore(_cfg_off316b, _sink_off316b, llm=_LLMLang316(_cfg_off316b))
+    _core_off316b.check_update_on_start()
+    ok("update_check=false desliga a consulta na abertura",
+       getattr(_core_off316b, "_update_thread", None) is None)
+finally:
+    _upd316b.startup_check = _orig_startup316b
+
+ok("a checagem de abertura esta ligada nas duas telas",
+   "check_update_on_start()" in (_RAIZ316 / "bgh" / "cli.py").read_text(encoding="utf-8")
+   and "check_update_on_start()" in (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8"))
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")

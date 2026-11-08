@@ -13,13 +13,18 @@ import sys
 
 from rich.console import Console
 
+from . import i18n
+from .i18n import t
+
 console = Console()
 
 
 def chat(_args) -> int:
     from .chat_core import ChatCore, ConsoleSink
-    from .config import ConfigError, load_config
+    from .config import ConfigError, load_config, saved_lang
 
+    # Idioma salvo manda ate quando o config esta incompleto (ex.: falta a chave).
+    i18n.set_lang(saved_lang())
     try:
         cfg = load_config()
     except ConfigError as exc:
@@ -27,9 +32,9 @@ def chat(_args) -> int:
         # sem mandar a pessoa decorarle comando. Sem terminal interativo, orienta.
         console.print(f"[yellow]{exc}[/yellow]")
         if not sys.stdin.isatty():
-            console.print("Em modo nao-interativo, configure antes com: bgh setup")
+            console.print(t("cli.noninteractive"))
             return 1
-        console.print("\nVamos configurar juntos agora, em poucas perguntas de uma linha cada.")
+        console.print(t("cli.first_run"))
         from .setup_wizard import run as run_setup
 
         if run_setup() != 0:
@@ -58,6 +63,7 @@ def chat(_args) -> int:
     sink = ConsoleSink()
     core = ChatCore(cfg, sink)
     core.banner()
+    core.check_update_on_start()   # uma vez, em segundo plano (aviso de versao nova)
     while True:
         try:
             user = sink.read_prompt()
@@ -76,28 +82,29 @@ def approvals(args) -> int:
     from .config import load_config
 
     cfg = load_config()
+    i18n.set_lang(cfg.get("lang"))
     entries = list_allowlist(cfg)
     action = getattr(args, "action", "list")
     if action == "clear":
         if not entries:
-            console.print("Nenhuma permissao 'sempre' guardada.")
+            console.print(t("cli.no_always"))
             return 0
         choice = ConsoleSink().ask_approval(
-            "Apagar todas as permissoes 'sempre' guardadas?",
+            t("cli.clear_ask"),
             "\n".join(f"{i}. {e}" for i, e in enumerate(entries, start=1)),
             allow_always=False,
         )
         if choice in ("o", "s"):
             n = clear_allowlist(cfg)
-            console.print(f"Pronto: {n} permissao(oes) removida(s).")
+            console.print(t("cli.clear_done", n=n))
         else:
-            console.print("Nada removido.")
+            console.print(t("cli.nothing_removed"))
     elif action == "remove":
         removed = remove_allowlist(cfg, int(args.index))
-        console.print(f"Removido: {removed}" if removed else "Numero invalido (veja 'bgh approvals').")
+        console.print(t("cli.removed", item=removed) if removed else t("cli.bad_index"))
     else:
         if not entries:
-            console.print("Nenhuma permissao 'sempre' guardada.")
+            console.print(t("cli.no_always"))
         for i, e in enumerate(entries, start=1):
             console.print(f"  {i}. {e}")
     return 0
@@ -109,43 +116,42 @@ def doctor_report(say) -> None:
         try:
             p = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
             out = (p.stdout or p.stderr).strip()
-            return out or "(sem saida)"
+            return out or t("doctor.no_output")
         except Exception as exc:  # noqa: BLE001
-            return f"(falhou: {exc})"
+            return t("doctor.failed", erro=exc)
 
-    say("Diagnostico do TEO")
-    say("Maquina")
+    say(t("doctor.title"))
+    say(t("doctor.machine"))
     say(sh("uname -sr && lscpu | grep -E 'Model name|^CPU\\(s\\)' | head -3"))
     say(sh("free -h | head -2"))
     say(sh("df -h ~ | tail -1"))
     say("")
-    say("GPU")
+    say(t("doctor.gpu"))
     if shutil.which("nvidia-smi"):
         say(sh("nvidia-smi --query-gpu=name,memory.total,temperature.gpu --format=csv,noheader"))
     else:
-        say("(nvidia-smi nao encontrado; pode ser AMD/intel ou placa sem driver)")
+        say(t("doctor.no_nvidia"))
     say("")
-    say("Conexao com o modelo")
+    say(t("doctor.conn"))
     from .config import ConfigError, load_config
     from .llm import LLM, LLMError
 
     try:
         cfg = load_config()
     except ConfigError as exc:
-        say(f"(sem conexao ainda: {exc})")
+        say(t("doctor.no_conn", erro=exc))
         return
     try:
         llm = LLM(cfg)
-        names = ", ".join(llm.list_models()[:5]) or "(lista vazia)"
+        names = ", ".join(llm.list_models()[:5]) or t("doctor.empty_list")
         extra = ""
         teto_tokens = llm.discover_context()
         if teto_tokens:
-            extra = f" | contexto que o servidor entrega: {teto_tokens} tokens"
-        say(f"OK - {cfg['base_url']} responde. Modelos: {names}{extra}")
+            extra = t("doctor.context", tokens=teto_tokens)
+        say(t("doctor.ok", url=cfg["base_url"], names=names, extra=extra))
     except LLMError as exc:
-        say(f"Falha - {exc}")
-        say("Confira: o servidor do modelo esta ligado? A URL e a chave estao certas? "
-            "(/configurar no chat ou bgh setup na janela de comando)")
+        say(t("doctor.fail", erro=exc))
+        say(t("doctor.hint", setup=i18n.cmd("setup")))
 
 
 def doctor(_args) -> int:
@@ -158,21 +164,27 @@ def setup(args) -> int:
 
     return run(non_interactive=args.provider is not None,
                provider=getattr(args, "provider", None),
-               api_key=getattr(args, "api_key", None))
+               api_key=getattr(args, "api_key", None),
+               lang=getattr(args, "lang", None))
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="bgh", description="TEO - agente local simples")
+    from .config import saved_lang
+
+    i18n.set_lang(saved_lang())   # --help e as mensagens tambem no idioma salvo
+    parser = argparse.ArgumentParser(prog="bgh", description=t("cli.help.prog"))
     sub = parser.add_subparsers(dest="cmd")
-    chat_p = sub.add_parser("chat", help="conversa interativa (padrao)")
+    chat_p = sub.add_parser("chat", help=t("cli.help.chat"))
     chat_p.set_defaults(func=chat)
-    setup_p = sub.add_parser("setup", help="configurar o modelo em 1 minuto")
+    setup_p = sub.add_parser("setup", help=t("cli.help.setup"))
     setup_p.add_argument("--provider", choices=["deepseek", "nubesbr", "local"], default=None)
     setup_p.add_argument("--api-key", default=None)
+    setup_p.add_argument("--lang", choices=["pt", "en", "es"], default=None,
+                         help="idioma da interface (o instalador passa o que a pessoa escolheu)")
     setup_p.set_defaults(func=setup)
-    doctor_p = sub.add_parser("doctor", help="diagnostico da maquina e da conexao")
+    doctor_p = sub.add_parser("doctor", help=t("cli.help.doctor"))
     doctor_p.set_defaults(func=doctor)
-    appr_p = sub.add_parser("approvals", help="ver/limpar permissoes 'sempre' guardadas")
+    appr_p = sub.add_parser("approvals", help=t("cli.help.approvals"))
     appr_p.add_argument("action", nargs="?", default="list", choices=["list", "clear", "remove"])
     appr_p.add_argument("index", nargs="?", type=int, default=0)
     appr_p.set_defaults(func=approvals)

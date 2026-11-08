@@ -14,7 +14,9 @@ from typing import Callable
 import requests
 from openai import OpenAI
 
+from bgh import i18n
 from bgh.config import load_config
+from bgh.i18n import t
 
 # Niveis de pensamento que a interface oferece.
 THINKING_LEVELS = ("auto", "off", "on", "minimum", "low", "medium", "high",
@@ -91,7 +93,7 @@ def _wait_hint(exc: BaseException) -> str:
     except (TypeError, ValueError):
         return ""
     if 0 < segundos <= 600:
-        return f" O proprio servidor pediu {segundos} segundos de espera."
+        return t("llm.wait_hint", s=segundos)
     return ""
 
 # Catalog publico de modelos (mesma fonte de metadados que o Hermes usa quando o
@@ -229,11 +231,7 @@ class LLM:
     def _rate_limit_error(self, exc: BaseException) -> LLMRateLimitError:
         """Frase simples para leigo: o que aconteceu e o que fazer agora."""
         return LLMRateLimitError(
-            "O provedor pediu para esperar: o limite de uso deste momento foi atingido "
-            "(ou a cota da conta acabou)."
-            + _wait_hint(exc)
-            + " Espere um pouco e mande a pergunta de novo. Se acontecer sempre, "
-            "troque de provedor digitando /provedor."
+            t("llm.rate_limit", hint=_wait_hint(exc), provider=i18n.cmd("provider"))
         )
 
     def _apply_thinking(self, kwargs: dict) -> None:
@@ -281,19 +279,13 @@ class LLM:
                     kwargs.pop("extra_body", None)
                     continue
                 if "timeout" in text:
-                    raise LLMError(
-                        f"O modelo nao respondeu em {int(self.timeout_s)}s de espera. "
-                        "Em servidor remoto isso costuma ser contexto grande demais: "
-                        "baixe o orcamento de contexto ou ajuste request_timeout_s no config.json."
-                    ) from exc
+                    raise LLMError(t("llm.timeout", s=int(self.timeout_s))) from exc
                 if any(marker in text for marker in CONTEXT_MARKERS):
                     # Contexto estourou o teto do servidor: caso tratavel (o agente
                     # compacta e tenta de novo), nao morte do turno.
-                    raise ContextOverflowError(
-                        "O contexto passou do limite que o servidor aceita."
-                    ) from exc
-                raise LLMError(f"Falha ao falar com o modelo ({type(exc).__name__}): {exc}") from exc
-        raise LLMError("Falha ao falar com o modelo (fallback esgotado).")
+                    raise ContextOverflowError(t("llm.context_overflow")) from exc
+                raise LLMError(t("llm.fail", tipo=type(exc).__name__, erro=exc)) from exc
+        raise LLMError(t("llm.fail_fallback"))
 
     def chat(self, messages: list, tools: list | None = None) -> dict:
         """Devolve a mensagem do assistente como dict pronto para o historico.
@@ -312,7 +304,7 @@ class LLM:
         self._apply_thinking(kwargs)
         resp = self._create(kwargs)
         if not resp.choices:
-            raise LLMError("O modelo respondeu vazio (sem choices).")
+            raise LLMError(t("llm.empty"))
         self._record_usage(getattr(resp, "usage", None))
         self.last_finish = getattr(resp.choices[0], "finish_reason", None)
         msg = resp.choices[0].message
@@ -339,7 +331,8 @@ class LLM:
         try:
             listing = self.client.models.list()
         except Exception as exc:  # noqa: BLE001
-            raise LLMError(f"Nao consegui listar modelos em {self.cfg['base_url']}: {exc}") from exc
+
+            raise LLMError(t("llm.list_fail", url=self.cfg["base_url"], erro=exc)) from exc
         items = getattr(listing, "data", None)
         if not items:
             items = getattr(listing, "models", None) or []
@@ -454,8 +447,7 @@ class LLM:
                 raise self._rate_limit_error(exc) from exc
             # Servidor sem streaming (ou sem o campo de nivel): segue pelo caminho normal,
             # mas avisando na tela - espera dupla nao pode ser lida como trava.
-            self._note("O servidor nao aceitou a resposta em pedacos "
-                       f"({type(exc).__name__}); vou responder de uma vez (mais uma espera).")
+            self._note(t("llm.no_stream", tipo=type(exc).__name__))
             kwargs.pop("stream", None)
             kwargs.pop("extra_body", None)
             return self.chat(messages, tools)
@@ -506,13 +498,9 @@ class LLM:
                 raise self._rate_limit_error(exc) from exc
             esperado = int(time.time() - t0)
             if content_parts or reasoning_parts:
-                raise LLMError(
-                    f"A resposta caiu no meio depois de {esperado}s de espera "
-                    f"({type(exc).__name__}: {exc}). O texto que apareceu ficou guardado; "
-                    "pergunte de novo ou use um orcamento de contexto menor."
-                ) from exc
-            self._note(f"Nada chegou do servidor em {esperado}s; vou tentar sem streaming "
-                       "(uma espera a mais, e o pedido vai de novo para a fila).")
+                raise LLMError(t("llm.broken", s=esperado, tipo=type(exc).__name__,
+                                 erro=exc)) from exc
+            self._note(t("llm.silent", s=esperado))
             kwargs.pop("stream", None)
             return self.chat(messages, tools)
 
@@ -536,14 +524,7 @@ class LLM:
     def summarize(self, text: str) -> str:
         """Resumo sem ferramentas, usado na compressao de contexto."""
         prompt = [
-            {
-                "role": "system",
-                "content": (
-                    "Resuma a conversa abaixo em no maximo 15 pontos curtos. "
-                    "Preserve: decisoes tomadas, caminhos de arquivo citados, "
-                    "erros encontrados e pedidos ainda abertos. Responda so com o resumo."
-                ),
-            },
+            {"role": "system", "content": t("llm.summarize")},
             {"role": "user", "content": text},
         ]
         try:

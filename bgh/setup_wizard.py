@@ -24,6 +24,8 @@ from bgh.config import (
     save_profile,
     sync_profile,
 )
+from bgh import i18n
+from bgh.i18n import t
 from bgh.tools.skills import BUNDLED_SKILLS_DIR
 
 # Nome do campo da chave montado em pedacos (evita corrupcao de encoding em
@@ -64,24 +66,43 @@ MAX_TOKENS_PRESET = {"nubesbr": 3072, "deepseek": 2048, "local": 2048, "custom":
 
 
 def run(non_interactive: bool = False, provider: str | None = None, api_key: str | None = None,
-        ask=None, say=None, from_chat: bool = False) -> int:
-    """assistente de configuracao; 'ask'/'say' vem da tela quando roda do chat."""
+        ask=None, say=None, from_chat: bool = False, lang: str | None = None) -> int:
+    """assistente de configuracao; 'ask'/'say' vem da tela quando roda do chat.
+
+    Idioma: 'lang' (vindo do instalador com --lang) manda; sem ele, a PRIMEIRA
+    execucao (sem config.json) pergunta o idioma antes de tudo. Quem ja tem
+    config continua no idioma salvo (o /lingua troca a qualquer momento).
+    """
     ask_fn = ask or _ask
     def say_fn(text: str = "") -> None:
         (say or print)(str(text))
 
-    say_fn("Configuracao do TEO")
+    if lang:
+        i18n.set_lang(lang)
+    primeira_vez = not CONFIG_PATH.exists()
+    say_fn(t("setup.title"))
     say_fn("-" * 40)
+    if primeira_vez and not non_interactive:
+        say_fn(t("setup.lang_ask"))
+        codigo = i18n.lang_from_answer(ask_fn(t("setup.option"), "1")) or "pt"
+        i18n.set_lang(codigo)
+    idioma = i18n.get_lang()
 
     try:
         current = load_config()
         if current.get("model"):
             atual = current.get("active_profile") or current["provider"] or "atual"
-            say_fn(f"Atual: {atual} / {current['model']} @ {current['base_url']}")
-            if not non_interactive and ask_fn("Manter o provedor em uso?", "s").lower().startswith("n"):
+            say_fn(t("setup.current", name=atual, model=current["model"],
+                     base_url=current["base_url"]))
+            if not non_interactive and ask_fn(t("setup.keep"), "s").lower().startswith("n"):
                 pass  # cai nas perguntas abaixo
             else:
-                say_fn("Nada mudado.")
+                # Mesmo sem mudar de provedor, o idioma pedido no instalador vale:
+                # sem isso o 'bgh setup --lang en' sairia sem gravar nada.
+                if lang and current.get("lang") != lang:
+                    current["lang"] = lang
+                    save_config(current)
+                say_fn(t("setup.nothing_changed"))
                 return 0
     except Exception:
         pass  # primeira execucao mesmo
@@ -90,13 +111,13 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
         choice = provider or "deepseek"
         key = api_key or ""
     else:
-        say_fn("Escolha onde o modelo vai rodar:")
-        say_fn("  1) DeepSeek      - API na nuvem (mais facil; precisa de chave em api.deepseek.com)")
-        say_fn("  2) NubesBR       - servidor de IA hospedado (exige rede/tunel liberado)")
-        say_fn("  3) Local         - modelo na propria maquina (llama.cpp / LM Studio)")
-        say_fn("  4) Outro         - qualquer endpoint OpenAI-compativel")
+        say_fn(t("setup.where"))
+        say_fn(t("setup.opt.deepseek"))
+        say_fn(t("setup.opt.nubesbr"))
+        say_fn(t("setup.opt.local"))
+        say_fn(t("setup.opt.custom"))
         choice = {"1": "deepseek", "2": "nubesbr", "3": "local", "4": "custom"}.get(
-            ask_fn("Opcao", "1"), "deepseek"
+            ask_fn(t("setup.option"), "1"), "deepseek"
         )
 
     preset = PRESETS.get(choice, {})
@@ -105,9 +126,9 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
     needs_key = preset.get("needs_key", True)
 
     if not non_interactive:
-        base_url = ask_fn("URL do servidor do modelo", base_url)
-        model = ask_fn("Nome do modelo", model)
-        key = ask_fn("Chave de acesso (Enter se nao precisar)", "", secret=True) if needs_key else ""
+        base_url = ask_fn(t("setup.url"), base_url)
+        model = ask_fn(t("setup.model"), model)
+        key = ask_fn(t("setup.key"), "", secret=True) if needs_key else ""
     else:
         key = api_key or ""
 
@@ -122,6 +143,7 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
             "base_url": base_url,
             "model": model,
             KEY_FIELD: key,
+            "lang": idioma,
         }
     )
     # Servidor que pensa antes de responder precisa de saida maior que o pensamento.
@@ -153,24 +175,22 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
 
     if auto_limite:
         cfg["context_budget_chars"] = auto_limite
-        say_fn(f"Orcamento de contexto herdado do servidor: {auto_limite} caracteres "
-               f"(ele entrega ate {tokens_servidor} tokens).")
+        say_fn(t("setup.budget_inherited", n=auto_limite, tokens=tokens_servidor))
     else:
         cfg.pop("server_context_tokens", None)  # sem prova nova, nao mostra valor velho
         cfg.pop("server_context_key", None)
         preset_orcamento = int(BUDGET_SUGESTAO.get(choice, "60000"))
         cfg["context_budget_chars"] = preset_orcamento
-        say_fn(f"Orcamento de contexto: {preset_orcamento} caracteres (padrao deste provedor; "
-               "o TEO nao perguntou ao servidor). Para ajustar: /ctx 90000 na tela.")
+        say_fn(t("setup.budget_default", n=preset_orcamento, ctx=i18n.cmd("ctx")))
 
     ensure_profiles(cfg)
     name = "outro" if choice == "custom" else choice
     if not non_interactive:
         names = list_profiles(cfg)
         if names and name in names:
-            rep = ask_fn(f"'{name}' ja esta cadastrado. Atualizar os dados dessa opcao?", "s")
+            rep = ask_fn(t("setup.exists", name=name), "s")
             if rep.lower().startswith("n"):
-                name = ask_fn("Nome da nova opcao", f"{name}2")
+                name = ask_fn(t("setup.new_name"), f"{name}2")
 
     ensure_dirs()
     save_config(cfg)
@@ -179,42 +199,43 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
     # Skills de fabrica vao para a pasta do usuario (de onde o TEO aprende por cima).
     if BUNDLED_SKILLS_DIR.is_dir():
         shutil.copytree(BUNDLED_SKILLS_DIR, SKILLS_DIR, dirs_exist_ok=True)
-        say_fn(f"Skills instaladas em {SKILLS_DIR}")
+        say_fn(t("setup.skills", dir=SKILLS_DIR))
 
     say_fn("")
-    say_fn("Salvo em " + str(CONFIG_PATH) + " (permissao restrita ao seu usuario).")
+    say_fn(t("setup.saved", path=CONFIG_PATH))
 
     def test_conexao(cfg_now: dict) -> str:
         from bgh.llm import LLM, LLMError
 
         try:
             llm = LLM(cfg_now)
-            reply = llm.chat([{"role": "user", "content": "Responda apenas com a palavra: pronto"}])
-            return f"OK|Conexao OK. O modelo disse: {reply.get('content', '')[:80]}"
+            reply = llm.chat([{"role": "user", "content": t("setup.ping")}])
+            return "OK|" + t("setup.conn_ok", reply=str(reply.get("content", ""))[:80])
         except LLMError as exc:
             return f"FALHA|{exc}"
 
     if not non_interactive:
-        test = ask_fn("Testar a conexao agora?", "s")
+        test = ask_fn(t("setup.test"), "s")
         if test.lower().startswith("s"):
             status, msg = test_conexao(cfg).split("|", 1)
             if status == "OK":
                 say_fn(msg)
             else:
-                say_fn(f"FALHOU: {msg}")
+                say_fn(t("setup.failed", msg=msg))
                 # Auto-correcao para leigo: servidor pediu chave? Pede na hora e testa de novo.
                 if "401" in msg or "key" in msg.lower() or "chave" in msg.lower():
-                    say_fn("O servidor parece exigir uma chave de acesso.")
-                    key2 = ask_fn("Cole a chave aqui (Enter se nao tiver uma)", "", secret=True)
+                    say_fn(t("setup.wants_key"))
+                    key2 = ask_fn(t("setup.paste_key"), "", secret=True)
                     if key2:
                         cfg[KEY_FIELD] = key2
                         save_config(cfg)
                         status2, msg2 = test_conexao(cfg).split("|", 1)
-                        say_fn(msg2 if status2 == "OK" else f"FALHOU de novo: {msg2}")
+                        say_fn(msg2 if status2 == "OK"
+                               else t("setup.failed_again", msg=msg2))
                         if status2 == "OK":
                             status = "OK"
                 if status != "OK":
-                    say_fn("Confira URL e chave (digite /configurar de novo ou rode 'bgh doctor' fora do TEO).")
+                    say_fn(t("setup.check", setup=i18n.cmd("setup")))
 
     # O que foi testado tem que ser o mesmo que fica no perfil salvo: a chave
     # corrigida na auto-correcao ficava so no topo do config e o /provedor
@@ -223,5 +244,5 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
 
     say_fn("")
     if not from_chat:
-        say_fn("Pronto! Para conversar, digite apenas: bgh")
+        say_fn(t("setup.done"))
     return 0

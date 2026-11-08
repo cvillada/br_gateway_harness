@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bgh-motor"
-version = "0.2.15"
+version = "0.2.16"
 description = "Motor (bgh) - agente CLI local para a maquina do usuario"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,4 +24,4 @@ bgh = "bgh.cli:main"
 include = ["bgh*"]
 
 [tool.setuptools.package-data]
-bgh = ["skills_default/**/*"]
+bgh = ["skills_default/**/*", "assets/*"]
