@@ -1,3 +1,5 @@
+**Portugues** | [English](README.en.md) | [Espanol](README.es.md)
+
 # TEO (bgh) - agente CLI local para a maquina do usuario
 
 TEO e o apelido deste harness (br_gateway_harness): o nome do gato preto do autor.
@@ -96,11 +98,12 @@ curl -L -o install_te.sh https://raw.githubusercontent.com/cvillada/br_gateway_h
 bash install_te.sh
 ```
 
-O script faz tudo sozinho: baixa o wheel do Release mais novo, cria a pasta `~/TEO`,
-cria o ambiente virtual, copia o wheel para dentro dela, roda o pip install, cria um
-atalho para abrir o TEO sem terminal: um icone chamado **TEO** na Area de
-trabalho (no macOS, `TEO.command` no Finder; no Linux, lancador `TEO`) e abre o programa
-(na primeira vez, o assistente de configuracao comeca sozinho).
+O script faz tudo sozinho: pergunta o idioma (Portugues, English ou Espanol), baixa o
+wheel do Release mais novo, cria a pasta `~/TEO`, cria o ambiente virtual, copia o
+wheel para dentro dela, roda o pip install, cria um atalho com o icone do gato para
+abrir o TEO sem terminal - **TEO.app** no Finder (macOS) ou lancador `TEO` com
+`Icon=` (Linux) - e abre o programa (na primeira vez, o assistente de configuracao
+comeca sozinho, ja no idioma escolhido).
 
 #### macOS (metodo manual, se preferir fazer passo a passo)
 
@@ -308,17 +311,21 @@ vivem em `bgh/assets/` e sao gerados por `scripts/make_icons.py` (sem dependenci
 ```
 bgh/                pacote do agente
   cli.py            entrada dos comandos (chat / setup / doctor / approvals)
+  i18n.py           toda frase da tela nos 3 idiomas (pt/en/es)
   tui.py            TELA FIXA (prompt_toolkit): entrada embaixo, rolagem, botao parar
   chat_core.py      nucleo do chat compartilhado pelas duas telas (comandos, turnos)
   agent.py          loop + streaming + compressao + sessao + botao de parar
   llm.py            cliente OpenAI-compativel (stream + reasoning + thinking toggle)
-  approvals.py      gate de licencas (modelo Hermes, regras em portugues)
-  prompts.py        system prompt (identidade + memoria + skills)
+  approvals.py      gate de licencas (modelo Hermes)
+  prompts.py        system prompt por idioma (identidade + memoria + skills)
+  palco.py          trilha do pedido desenhada enquanto o TEO trabalha
+  assets/           o icone do gato (png/ico/svg) usado pelo atalho do desktop
   tools/            run_command (interrumpivel), run_python, read/write/search, web, memory, skill, documento
   skills_default/   skills de fabrica (copiadas para ~/.bgh/skills no setup)
 tests/test_smoke.py testes offline (sem modelo)
 pyproject.toml      empacotamento (wheel)
 build.sh            gera wheel + binario unico
+scripts/            instaladores (Windows/macOS/Linux) + make_icons.py
 ```
 
 Estado do usuario fica todo em `~/.bgh/` (config.json 600, memory.db, skills/, session.json).

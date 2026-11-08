@@ -2921,4 +2921,38 @@ ok("a checagem de abertura esta ligada nas duas telas",
    "check_update_on_start()" in (_RAIZ316 / "bgh" / "cli.py").read_text(encoding="utf-8")
    and "check_update_on_start()" in (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8"))
 
+# ---------- 0.2.16 (docs): README nos 3 idiomas, com seletor ----------------
+_LEITURAS316c = {}
+for _nome316c in ("README.md", "README.en.md", "README.es.md"):
+    _arq316c = _RAIZ316 / _nome316c
+    ok(f"{_nome316c} existe", _arq316c.is_file())
+    _LEITURAS316c[_nome316c] = _arq316c.read_text(encoding="utf-8")
+
+ok("cada README aponta para os outros dois idiomas no topo",
+   all(("README.md" in _LEITURAS316c["README.en.md"].splitlines()[0])
+       and ("README.es.md" in _LEITURAS316c["README.en.md"].splitlines()[0])
+       and ("README.en.md" in _LEITURAS316c["README.es.md"].splitlines()[0])
+       and ("README.es.md" in _LEITURAS316c["README.md"].splitlines()[0])
+       and ("README.en.md" in _LEITURAS316c["README.md"].splitlines()[0])
+       and ("README.md" in _LEITURAS316c["README.es.md"].splitlines()[0])
+       for _ in (0,)))
+
+def _perfil_readme316c(txt: str) -> tuple[int, int, int, int, int]:
+    linhas = txt.splitlines()
+    return (
+        sum(1 for l in linhas if l.startswith("## ")),
+        sum(1 for l in linhas if l.startswith("### ")),
+        sum(1 for l in linhas if l.startswith("#### ")),
+        sum(1 for l in linhas if l.startswith("|")),
+        sum(1 for l in linhas if l.strip().startswith("```")),
+    )
+
+
+_perfis316c = {n: _perfil_readme316c(t) for n, t in _LEITURAS316c.items()}
+ok("os tres READMEs tem a mesma estrutura (titulos, tabelas e blocos de codigo)",
+   len(set(_perfis316c.values())) == 1)
+
+ok("nenhum README ficou com acento/unicode fora do padrao do projeto",
+   all(all(ord(c) < 128 for c in t) for t in _LEITURAS316c.values()))
+
 print(f"\nTODOS OS {PASS} TESTES PASSARAM")
