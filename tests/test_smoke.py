@@ -2975,6 +2975,55 @@ ok("instalador do repo e o da release sao o mesmo arquivo",
 ok("instalador avisa quando o icone do gato NAO entrou",
    "SEM o icone do gato" in _inst316d)
 
+# ---------- migracao: config.json antigo escapa do teto de saida (0.2.18) ---
+from bgh import config as _cfgmod318
+
+_orig_path318 = _cfgmod318.CONFIG_PATH
+try:
+    # Instalacao antiga: wizard gravou 2048 (padrao da epoca) no disco.
+    _velho318 = TMP / "config_migracao.json"
+    _velho318.write_text(json.dumps({
+        "base_url": "http://127.0.0.1:9/v1", "model": "x", "max_tokens": 2048,
+    }), encoding="utf-8")
+    _cfgmod318.CONFIG_PATH = _velho318
+    ok("config antigo com 2048 vira o padrao novo ao abrir o TEO",
+       _cfgmod318.load_config()["max_tokens"] == 8192)
+    _pos318 = json.loads(_velho318.read_text(encoding="utf-8"))
+    ok("migracao carimba o arquivo (nao roda de novo)",
+       _pos318.get(_cfgmod318.MAX_TOKENS_MIGRADA) is True
+       and _pos318["max_tokens"] == 8192)
+    # Pre-sets antigos do assistente (nubesbr gravava 3072) tambem sobem.
+    _velho318b = TMP / "config_migracao_b.json"
+    _velho318b.write_text(json.dumps({
+        "base_url": "http://127.0.0.1:9/v1", "model": "x", "max_tokens": 3072,
+    }), encoding="utf-8")
+    _cfgmod318.CONFIG_PATH = _velho318b
+    ok("preset velho 3072 do nubesbr tambem sobe para o padrao novo",
+       _cfgmod318.load_config()["max_tokens"] == 8192)
+    # Ajuste manual DEPOIS da migracao e sagrado (para baixo e para cima).
+    _cfgmod318.CONFIG_PATH = _velho318
+    _ajustado318 = json.loads(_velho318.read_text(encoding="utf-8"))
+    _ajustado318["max_tokens"] = 4096
+    _velho318.write_text(json.dumps(_ajustado318), encoding="utf-8")
+    ok("max_tokens baixado a mao depois da migracao e respeitado",
+       _cfgmod318.load_config()["max_tokens"] == 4096)
+    _ajustado318["max_tokens"] = 16384
+    _velho318.write_text(json.dumps(_ajustado318), encoding="utf-8")
+    ok("max_tokens subido a mao depois da migracao e respeitado",
+       _cfgmod318.load_config()["max_tokens"] == 16384)
+    # Quem abriu ANTES da migracao e ja tinha subido o teto a mao: so carimba.
+    _alto318 = TMP / "config_alto.json"
+    _alto318.write_text(json.dumps({
+        "base_url": "http://127.0.0.1:9/v1", "model": "x", "max_tokens": 60000,
+    }), encoding="utf-8")
+    _cfgmod318.CONFIG_PATH = _alto318
+    ok("instalacao que ja tinha teto alto no arquivo conserva o valor e ganha carimbo",
+       _cfgmod318.load_config()["max_tokens"] == 60000
+       and json.loads(_alto318.read_text(encoding="utf-8"))
+       .get(_cfgmod318.MAX_TOKENS_MIGRADA) is True)
+finally:
+    _cfgmod318.CONFIG_PATH = _orig_path318
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.18
+
+O aviso amarelo do "continue" acaba tambem para quem instalou antes.
+
+- Limite de saida das instalacoes antigas: desde que o padrao subiu para 8192,
+  so quem instalava do zero recebia o valor novo - o `config.json` do cliente
+  antigo tinha 2048 gravado pelo assistente da epoca, e o valor gravado manda
+  sobre o padrao. Resultado: resposta longa cortada no meio com o aviso
+  "diga 'continue'" para sempre, ate reinstalar.
+- Agora, na primeira execucao do TEO 0.2.18, o valor antigo (2048 ou 3072)
+  sobe sozinho para o padrao atual e o arquivo ganha um carimbo
+  (`max_tokens_migrado`). Uma vez so: ajuste manual depois da migracao no
+  `config.json`, para baixo ou para cima, continua sendo respeitado.
+- Quem ja tinha subido o teto a mao no `config.json` antes da migracao
+  conserva o valor escolhido e so ganha o carimbo. Instalacao do zero ja
+  vinha em 8192 e nao muda nada.
+- CI: 377 testes verdes (ubuntu, windows e macos; Python 3.11 e 3.12).
+
 ## 0.2.17
 
 O atalho do Mac agora sai com o gato do TEO - e o README fala as tres linguas.

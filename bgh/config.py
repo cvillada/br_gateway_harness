@@ -200,12 +200,43 @@ def saved_lang() -> str:
     return "pt"
 
 
+# Chave que carimba o config.json do cliente como ja migrado (0.2.18).
+MAX_TOKENS_MIGRADA = "max_tokens_migrado"
+
+
+def _migra_max_tokens(cfg: dict, gravado: dict | None) -> bool:
+    """Sobe uma vez o teto de saida das instalacoes antigas para o padrao novo.
+
+    Antes de 0.2.18 o assistente gravava 2048 (3072 no nubesbr) no config.json
+    de cada cliente. O padrao subiu para 8192, mas o valor gravado no arquivo
+    tem prioridade sobre o padrao - entao so quem instalasse do zero escapava
+    do corte no meio da resposta (aviso amarelo do 'continue'). Aqui o valor
+    antigo sobe para o padrao atual UMA vez e o arquivo ganha um carimbo:
+    ajuste manual do usuario depois da migracao (para baixo ou para cima)
+    passa a ser sempre respeitado. Devolve True se o config precisa ser
+    regravado com o novo valor e o carimbo.
+    """
+    if gravado is None or gravado.get(MAX_TOKENS_MIGRADA):
+        return False
+    padrao = int(DEFAULTS["max_tokens"])
+    try:
+        valor = int(gravado.get("max_tokens", padrao))
+    except (TypeError, ValueError):
+        valor = padrao
+    if valor < padrao:
+        cfg["max_tokens"] = padrao
+    cfg[MAX_TOKENS_MIGRADA] = True
+    return True
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
+    gravado: dict | None = None
     if CONFIG_PATH.exists():
         try:
             data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
             if isinstance(data, dict):
+                gravado = data
                 cfg.update(data)
         except (json.JSONDecodeError, OSError) as exc:
             raise ConfigError(f"config.json corrompido em {CONFIG_PATH}: {exc}")
@@ -219,6 +250,8 @@ def load_config() -> dict:
         if val:
             cfg[field] = val
     ensure_profiles(cfg)
+    if _migra_max_tokens(cfg, gravado):
+        save_config(cfg)
     if not cfg.get("base_url") or not cfg.get("model"):
         raise ConfigError(
             "TEO ainda nao configurado. Rode um unico comando: bgh setup"
