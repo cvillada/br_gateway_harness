@@ -1455,6 +1455,28 @@ CLI = {
     "cli.bad_index": ("Numero invalido (veja 'bgh approvals').",
                       "Invalid number (see 'bgh approvals').",
                       "Numero invalido (mira 'bgh approvals')."),
+    "cli.tui_fail": ("Esta janela nao aceitou a tela fixa; sigo no modo simples "
+                     "(rolagem), que funciona igual. Para voltar a tela fixa, abra o "
+                     "TEO numa janela maior ou no Windows Terminal.",
+                     "This window did not accept the fixed screen; I go on in the "
+                     "simple (scrolling) mode, which works the same. To get the fixed "
+                     "screen back, open TEO in a larger window or in Windows Terminal.",
+                     "Esta ventana no acepto la pantalla fija; sigo en el modo simple "
+                     "(desplazamiento), que funciona igual. Para volver a la pantalla "
+                     "fija, abre el TEO en una ventana mas grande o en Windows Terminal."),
+    "doctor.screen": ("Tela / console:", "Screen / console:", "Pantalla / consola:"),
+    "doctor.size": ("janela: {cols} colunas x {rows} linhas",
+                    "window: {cols} columns x {rows} rows",
+                    "ventana: {cols} columnas x {rows} lineas"),
+    "doctor.tui": ("tela fixa (tui): {onoff}", "fixed screen (tui): {onoff}",
+                   "pantalla fija (tui): {onoff}"),
+    "doctor.temp": ("pasta temporaria gravavel: {ok} ({path})",
+                    "temporary folder writable: {ok} ({path})",
+                    "carpeta temporal escribible: {ok} ({path})"),
+    "doctor.admin": ("rodando como administrador: {onoff}",
+                     "running as administrator: {onoff}",
+                     "corriendo como administrador: {onoff}"),
+
     "doctor.title": ("Diagnostico do TEO", "TEO diagnostics", "Diagnostico del TEO"),
     "doctor.machine": ("Maquina", "Machine", "Maquina"),
     "doctor.gpu": ("GPU", "GPU", "GPU"),

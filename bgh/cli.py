@@ -7,9 +7,12 @@ Chat tem duas telas:
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 from rich.console import Console
 
@@ -54,11 +57,20 @@ def chat(_args) -> int:
         prepare_console(cfg)
     if use_tui:
         try:
-            from .tui import run_tui
+            from .tui import run_tui as _run_tui
         except ImportError:
-            use_tui = False
-        if use_tui:
-            return run_tui(cfg)
+            _run_tui = None       # sem prompt_toolkit instalado: modo simples
+        if _run_tui is not None:
+            try:
+                return _run_tui(cfg)
+            except Exception as exc:  # noqa: BLE001 - console exotico no cliente
+                # Janela que nao aceita a tela fixa nao pode ficar MUDA (relato real
+                # no Windows: "a tela nao roda"). Cai no modo simples e avisa.
+                from .chat_core import log_error
+
+                log_error(exc, "abertura da tela fixa")
+                console.print(t("cli.tui_fail"))
+                use_tui = False
 
     from . import tela
 
@@ -118,6 +130,45 @@ def approvals(args) -> int:
     return 0
 
 
+def _console_report(say) -> None:
+    """Estado da tela/console: e o que explica "nao abriu" ou "ficou estranho".
+
+    Roda nos tres sistemas (o resto do /doctor usa comandos de Linux).
+    """
+    say(t("doctor.screen"))
+    try:
+        cols, rows = shutil.get_terminal_size()
+    except OSError:
+        cols, rows = (0, 0)
+    say(t("doctor.size", cols=cols, rows=rows))
+    from .config import load_config as _load
+
+    try:
+        tui_on = bool(_load().get("tui", True))
+    except Exception:  # noqa: BLE001 - config quebrado ja e relatado depois
+        tui_on = False
+    say(t("doctor.tui", onoff=t("state.on") if tui_on else t("state.off")))
+    pasta = Path(tempfile.gettempdir())
+    gravavel = False
+    try:
+        teste = pasta / "teo_teste_escrita.txt"
+        teste.write_text("x", encoding="utf-8")
+        teste.unlink()
+        gravavel = True
+    except OSError:
+        gravavel = False
+    say(t("doctor.temp", ok=t("state.on") if gravavel else t("state.off"), path=pasta))
+    if os.name == "nt":
+        admin = False
+        try:
+            import ctypes
+
+            admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:  # noqa: BLE001 - API ausente: segue como desconhecido
+            admin = False
+        say(t("doctor.admin", onoff=t("state.on") if admin else t("state.off")))
+
+
 def doctor_report(say) -> None:
     """Diagnostico impresso linha a linha por 'say' (console do cli ou tela fixa)."""
     def sh(cmd: str) -> str:
@@ -129,6 +180,8 @@ def doctor_report(say) -> None:
             return t("doctor.failed", erro=exc)
 
     say(t("doctor.title"))
+    _console_report(say)
+    say("")
     say(t("doctor.machine"))
     say(sh("uname -sr && lscpu | grep -E 'Model name|^CPU\\(s\\)' | head -3"))
     say(sh("free -h | head -2"))

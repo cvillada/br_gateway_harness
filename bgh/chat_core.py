@@ -9,6 +9,10 @@ import datetime
 import getpass
 import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import threading
 import traceback
 from pathlib import Path
@@ -57,15 +61,62 @@ def set_window_title(texto: str) -> None:
         pass
 
 
-def maximize_window() -> None:
-    """Deixa a janela do TEO maximizada desde a abertura.
+def _maximiza_mac() -> None:
+    """Maximiza a janela no macOS pelo AppleScript (o Terminal.app ignora ESC[9;0t).
+
+    Terminal.app e iTerm2 nao implementam a sequencia xterm de maximizar, entao a
+    unica via confiavel e falar com o proprio app. pide permissao de Automacao na
+    primeira vez (uma janela do sistema; depois nunca mais).
+    """
+    programa = (os.environ.get("TERM_PROGRAM") or "").lower()
+    alvo = "iTerm2" if "iterm" in programa else "Terminal"
+    script = (
+        'tell application "Finder" to set b to bounds of window of desktop\n'
+        f'tell application "{alvo}" to set bounds of front window to b'
+    )
+    try:
+        subprocess.run(["osascript", "-e", script], timeout=5,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def _maximiza_x11(titulo: str) -> None:
+    """Maximiza pelo gerenciador de janelas (X11) — VTE/gnome-terminal nao obedecem ESC[9;0t.
+
+    Usa o TITULO da janela (que o TEO acabou de definir) e cai fora no Wayland, onde
+    ferramenta de X11 nao alcanca a janela.
+    """
+    if not os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        return
+    ferramenta = shutil.which("wmctrl")
+    if not ferramenta:
+        return
+    try:
+        subprocess.run([ferramenta, "-r", titulo, "-b",
+                        "add,maximized_vert,maximized_horz"],
+                       timeout=4, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def maximize_window(titulo: str = "TEO Agent") -> None:
+    """Deixa a janela do TEO maximizada desde a abertura, nos TRES sistemas.
 
     Motivo: em janela estreita o rodape perde pedacos (o medidor de contexto e as
     teclas brigam pelo mesmo espaco) e o publico do TEO nao vai ficar arrastando
-    borda de janela. Windows tem API propria (funciona de verdade); Linux/macOS
-    recebem a sequencia padrao do xterm e o terminal que nao conhece simplesmente
-    ignora. Sempre antes de a tela desenhar: redimensionar com a tela viva
-    bagunca o layout.
+    borda de janela. Cada sistema pede um caminho diferente:
+
+      Windows  API do proprio console (ShowWindow) - funciona sempre;
+      macOS    AppleScript (Terminal.app/iTerm2 ignoram a sequencia xterm);
+      Linux    ESC[9;0t (xterm/kitty) e, em X11, wmctrl pelo titulo da janela.
+               No Wayland nao existe caminho de dentro do app: a janela abre no
+               tamanho que o terminal/atalho definiu.
+
+    Sempre antes de a tela desenhar: redimensionar com a tela viva bagunca o layout.
     """
     try:
         if os.name == "nt":
@@ -74,8 +125,11 @@ def maximize_window() -> None:
             hwnd = ctypes.windll.kernel32.GetConsoleWindow()
             if hwnd:
                 ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+        elif sys.platform == "darwin":
+            _maximiza_mac()
         else:
-            print("\x1b[9;0t", end="", flush=True)  # xterm: maximizar janela
+            print("\x1b[9;0t", end="", flush=True)  # xterm/kitty: maximizar
+            _maximiza_x11(titulo)
     except Exception:  # noqa: BLE001 - cortesia, nunca necessidade
         pass
 
@@ -83,7 +137,7 @@ def maximize_window() -> None:
 def prepare_console(cfg: dict | None = None) -> None:
     """Nome na janela + tela maximizada (+ letra no Windows): antes da 1a tela."""
     set_window_title("TEO Agent")
-    maximize_window()
+    maximize_window("TEO Agent")
     if os.name == "nt":
         # Tamanho da letra escolhido no /fonte vale ja nesta abertura (Windows tem
         # API para isso; Linux/macOS dependem do proprio terminal).

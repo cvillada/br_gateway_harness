@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.25
+
+Janela maximizada nos TRES sistemas - e uma tela que nunca fica muda.
+
+- Windows: ja funcionava pela API do console (continua igual).
+- macOS: o Terminal.app e o iTerm2 ignoram a sequencia de maximizar do xterm
+  (`ESC[9;0t`), por isso a janela abria no tamanho padrao. Agora o TEO pede ao
+  proprio app, por AppleScript. Na primeira vez o macOS mostra o pedido de
+  permissao de Automacao (uma vez so).
+- Linux: a sequencia `ESC[9;0t` continua para xterm/kitty e, em X11, o TEO
+  maximiza pelo titulo da janela com `wmctrl`. No Wayland nao existe caminho de
+  dentro do programa (a janela abre no tamanho que o terminal/atalho definiu) -
+  limitacao do sistema, nao do TEO.
+- Tela fixa que falha nao deixa mais a janela muda: se a tela nao conseguir abrir
+  num console exotico, o TEO avisa em uma linha e segue no modo simples
+  (rolagem), que faz a mesma coisa.
+- O `/doctor` ganhou um bloco de TELA que roda nos tres sistemas: tamanho da
+  janela, se a tela fixa esta ligada, se a pasta temporaria e gravavel (o
+  executavel precisa dela para descompactar) e, no Windows, se esta rodando como
+  administrador. E o que permite descobrir por que "a tela nao roda" na maquina
+  do cliente.
+- Suite local: 510 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+  roda no push, junto do build.
+
 ## 0.2.24
 
 Uma tela de apresentacao: `/sobre`.

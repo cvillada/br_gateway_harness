@@ -3727,6 +3727,50 @@ ok("a ajuda anuncia o /sobre nos tres idiomas",
            for linha in pares)
        for tri in (("/sobre", "/about", "/acerca"),)))
 
+# -- 0.2.25: maximizar nos tres sistemas + doctor da tela + queda para o modo simples
+from bgh import chat_core as _cc325
+from bgh import cli as _cli325
+
+_cc325_txt = (_RAIZ316 / "bgh" / "chat_core.py").read_text(encoding="utf-8")
+_cli325_txt = (_RAIZ316 / "bgh" / "cli.py").read_text(encoding="utf-8")
+ok("maximizar existe nos TRES sistemas (Windows, macOS e Linux)",
+   "SW_MAXIMIZE" in _cc325_txt and "_maximiza_mac" in _cc325_txt
+   and "_maximiza_x11" in _cc325_txt)
+ok("macOS: Terminal.app/iTerm2 sao maximizados por AppleScript (ignoram ESC[9;0t)",
+   "osascript" in _cc325_txt and "bounds of front window" in _cc325_txt
+   and "iTerm2" in _cc325_txt)
+ok("Linux: wmctrl pelo titulo da janela, e nada de X11 no Wayland",
+   "wmctrl" in _cc325_txt and "maximized_vert,maximized_horz" in _cc325_txt
+   and "WAYLAND_DISPLAY" in _cc325_txt)
+ok("maximizar nunca derruba a abertura (qualquer erro e engolido)",
+   "except Exception" in _cc325_txt and "x1b[9;0t" in _cc325_txt)
+_max325 = _cc325.maximize_window
+try:
+    _max325("TEO Agent")     # tem que rodar sem excecao nesta maquina
+    _max_ok325 = True
+except Exception:
+    _max_ok325 = False
+ok("chamar maximize_window nao levanta excecao", _max_ok325)
+
+ok("se a tela fixa falhar no cliente, cai no modo simples em vez de ficar muda",
+   "cli.tui_fail" in _cli325_txt and "_run_tui(cfg)" in _cli325_txt
+   and "abertura da tela fixa" in _cli325_txt)
+par325 = []
+_cli325._console_report(lambda x: par325.append(str(x)))
+ok("/doctor mostra o estado da TELA (tamanho, tui, pasta temporaria)",
+   any("Tela / console" in l for l in par325)
+   and any("colunas x" in l and "linhas" in l for l in par325)
+   and any("tela fixa" in l for l in par325)
+   and any("temporaria gravavel" in l for l in par325))
+ok("no Windows o /doctor tambem diz se esta como administrador",
+   "IsUserAnAdmin" in _cli325_txt and "doctor.admin" in _cli325_txt)
+ok("as frases novas existem nas tres linguas",
+   all(_i18n316.TEXTS[k][i] for k in ("cli.tui_fail", "doctor.screen", "doctor.size",
+                                     "doctor.tui", "doctor.temp", "doctor.admin")
+       for i in range(3)))
+ok("a pasta temporaria do /doctor e testada de VERDADE (grava e apaga)",
+   "teo_teste_escrita.txt" in _cli325_txt and "unlink()" in _cli325_txt)
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 
