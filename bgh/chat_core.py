@@ -1134,6 +1134,21 @@ class ChatCore:
             elif what == "dictate":
                 return self.ditar(forcar_baixar=str(rest).strip().lower()
                                   in ("baixar", "download", "bajar"))
+            elif what == "about":
+                # Quem fez, por que o nome e os agradecimentos (bloco fechado,
+                # como a ajuda: abre e fecha com a regua '=').
+                from . import __version__
+
+                self.sink.border()
+                self.sink.line(t("cmd.sobre.title"), style="an")
+                self.sink.line("")
+                self.sink.line(t("cmd.sobre.texto"))
+                self.sink.line(t("cmd.sobre.agradece"))
+                self.sink.line("")
+                self.sink.line(t("cmd.sobre.rodape", version=__version__,
+                                 repo="github.com/cvillada/br_gateway_harness"),
+                               style="dim")
+                self.sink.border()
             elif what == "setup":
                 return self._run_setup_wizard()
             elif what == "doctor":

@@ -72,6 +72,7 @@ ALIASES = {
     "background": ("fundo", "background", "fondo"),
     "font": ("fonte", "font", "fuente"),
     "dictate": ("ditar", "dictate", "dictar"),
+    "about": ("sobre", "about", "acerca"),
 }
 
 # Como cada comando aparece ESCRITO na ajuda/avisos, por idioma.
@@ -95,6 +96,7 @@ CMD = {
     "background": ("/fundo", "/background", "/fondo"),
     "font": ("/fonte", "/font", "/fuente"),
     "dictate": ("/ditar", "/dictate", "/dictar"),
+    "about": ("/sobre", "/about", "/acerca"),
 }
 
 
@@ -324,6 +326,10 @@ HELP_SECTIONS = [
          "accesibilidad: escribe HABLANDO - el TEO escucha el microfono, transcribe "
          "en el idioma de la pantalla y pone el texto en la linea para que lo revises "
          "antes del ENTER"),
+        ("/sobre", "/about", "/acerca",
+         "quem fez o TEO, por que esse nome e os agradecimentos",
+         "who made TEO, why that name and the thanks",
+         "quien hizo el TEO, por que ese nombre y los agradecimientos"),
         ("/sair", "/exit", "/salir", "encerra", "quits", "cierra"),
     ]),
 ]
@@ -442,6 +448,25 @@ CHAT = {
                       "{cmd} shows the options.",
                       "Elige 1 (normal), 2 (grande), 3 (mayor) o 4 (enorme). "
                       "{cmd} muestra las opciones."),
+
+    "cmd.sobre.title": ("Sobre o TEO", "About TEO", "Sobre el TEO"),
+    "cmd.sobre.texto": (
+        "Este harness foi criado por Claudinei Villada, inspirado no agente Hermes "
+        "e construido para rodar com modelos locais. Recebeu o nome de TEO em "
+        "homenagem ao gato dele.",
+        "This harness was created by Claudinei Villada, inspired by the Hermes "
+        "agent and built to run with local models. It was named TEO in honour of "
+        "his cat.",
+        "Este harness fue creado por Claudinei Villada, inspirado en el agente "
+        "Hermes y hecho para correr con modelos locales. Recibio el nombre de TEO "
+        "en homenaje a su gato."),
+    "cmd.sobre.agradece": (
+        "Agradecimentos a familia e aos amigos.",
+        "Thanks to family and friends.",
+        "Agradecimientos a la familia y a los amigos."),
+    "cmd.sobre.rodape": ("Versao {version} - licenca MIT - {repo}",
+                         "Version {version} - MIT license - {repo}",
+                         "Version {version} - licencia MIT - {repo}"),
 
     "cmd.ditar.title": ("Escrever falando", "Write by speaking", "Escribir hablando"),
     "cmd.ditar.ouvindo": ("Pode falar agora: eu paro sozinho quando voce terminar "

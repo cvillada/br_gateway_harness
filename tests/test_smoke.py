@@ -3696,6 +3696,37 @@ finally:
     _ditar322.tem_modelo = _orig_mod323
     _limp321.limpar()
 
+# -- 0.2.24: /sobre - quem fez, por que TEO e os agradecimentos ---------------
+_sink324 = RecSink()
+_core324 = ChatCore(dict(core_cfg), _sink324, llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+_sink324.lines.clear()
+_core324.submit("/sobre")
+_texto324 = "\n".join(_sink324.lines)
+ok("/sobre abre e fecha com a regua '='",
+   _sink324.lines[0].startswith("====") and _sink324.lines[-1].startswith("===="))
+ok("/sobre diz quem criou, de onde veio a ideia e que roda com modelos locais",
+   "Claudinei Villada" in _texto324 and "Hermes" in _texto324
+   and "modelos locais" in _texto324)
+ok("/sobre explica o nome TEO (homenagem ao gato)",
+   "TEO" in _texto324 and "homenagem" in _texto324 and "gato" in _texto324)
+ok("/sobre agradece a familia e aos amigos",
+   "familia" in _texto324 and "amigos" in _texto324)
+from bgh import __version__ as _ver324
+ok("/sobre mostra a versao em uso e o endereco do codigo",
+   _ver324 in _texto324 and "br_gateway_harness" in _texto324)
+ok("o texto do /sobre e ASCII puro nas tres linguas (regra do projeto)",
+   all(all(ord(ch) < 128 for ch in _i18n316.t(k))
+       for k in ("cmd.sobre.texto", "cmd.sobre.agradece", "cmd.sobre.rodape")))
+ok("o /sobre tem as tres traducoes com o mesmo autor e o mesmo gato",
+   all("Claudinei Villada" in _i18n316.TEXTS["cmd.sobre.texto"][i]
+       and "TEO" in _i18n316.TEXTS["cmd.sobre.texto"][i]
+       for i in range(3)))
+ok("a ajuda anuncia o /sobre nos tres idiomas",
+   all(any(linha[:3] == tri for _hdr, pares in _i18n316.HELP_SECTIONS
+           for linha in pares)
+       for tri in (("/sobre", "/about", "/acerca"),)))
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.24
+
+Uma tela de apresentacao: `/sobre`.
+
+- `/sobre` (`/about`, `/acerca`) mostra quem fez o TEO, de onde veio a ideia e por
+  que esse nome - "Este harness foi criado por Claudinei Villada, inspirado no
+  agente Hermes e construido para rodar com modelos locais. Recebeu o nome de TEO
+  em homenagem ao gato dele." - com os agradecimentos a familia e aos amigos, a
+  versao em uso e o endereco do codigo.
+- Nas tres linguas, como o resto da tela, e fechado pela regua `=` (a mesma da
+  ajuda), entao fica facil de achar rolando para tras.
+- Suite local: 500 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+  roda no push, junto do build.
+
 ## 0.2.23
 
 Uma TECLA para falar em vez de digitar - o `/ditar` continua existindo.
