@@ -151,6 +151,9 @@ HELP_HEADERS = {
     "help.h.commands": ("Comandos:", "Commands:", "Comandos:"),
     "help.h.lang": ("Idioma / Language / Idioma:", "Idioma / Language / Idioma:",
                     "Idioma / Language / Idioma:"),
+    "help.h.falar": ("Falar em vez de digitar (acessibilidade):",
+                     "Speaking instead of typing (accessibility):",
+                     "Hablar en vez de escribir (accesibilidad):"),
 }
 
 HELP_SECTIONS = [
@@ -305,6 +308,24 @@ HELP_SECTIONS = [
          "antes del ENTER"),
         ("/sair", "/exit", "/salir", "encerra", "quits", "cierra"),
     ]),
+    ("help.h.falar", [
+        ("F2", "F2", "F2",
+         "comeca a ouvir o microfone e poe o texto na linha; para sozinho quando "
+         "voce cala (um bip avisa que comecou e outro que parou)",
+         "starts listening to the microphone and puts the text on the line; stops "
+         "by itself when you go quiet (one beep when it starts, another when it stops)",
+         "empieza a escuchar el microfono y pone el texto en la linea; para solo "
+         "cuando callas (un bip avisa que empezo y otro que paro)"),
+        ("espaco com a linha vazia", "space on an empty line",
+         "espacio con la linea vacia",
+         "a mesma coisa, na tecla mais facil de achar no teclado",
+         "the same thing, on the easiest key to find on the keyboard",
+         "lo mismo, en la tecla mas facil de encontrar en el teclado"),
+        ("ESC durante a escuta", "ESC while listening", "ESC mientras escucha",
+         "para de ouvir na hora, sem enviar nada",
+         "stops listening right away, without sending anything",
+         "deja de escuchar al instante, sin enviar nada"),
+    ]),
 ]
 
 # ---------------------------------------------------------------------------
@@ -445,6 +466,9 @@ CHAT = {
                           "modelo...').",
                           "Say what you want and I write it (e.g. 'ask the model...').",
                           "Di lo que quieres y yo lo escribo (ej.: 'pregunta al modelo...')."),
+    "cmd.ditar.parado": ("Parei de ouvir. Nada foi enviado.",
+                        "I stopped listening. Nothing was sent.",
+                        "Deje de escuchar. No se envio nada."),
     "cmd.ditar.vazio": ("Nao entendi nada. Fale mais perto do microfone, sem pressa, "
                         "e tente de novo com {cmd}.",
                         "I did not understand anything. Speak closer to the microphone, "
@@ -529,9 +553,12 @@ CHAT = {
                            "No encontre la voz del sistema en esta maquina, asi que no puedo "
                            "leer en voz alta (Linux: spd-say o espeak-ng; Windows: "
                            "PowerShell; Mac: say). La conversacion sigue normal."),
-    "cmd.voz.hello": ("Voz ligada. Eu vou ler as respostas em voz alta.",
-                      "Voice on. I will read the answers out loud.",
-                      "Voz activada. Voy a leer las respuestas en voz alta."),
+    "cmd.voz.hello": ("Voz ligada. Eu vou ler as respostas em voz alta. Para "
+                      "escrever falando em vez de digitar, aperte F2.",
+                      "Voice on. I will read the answers out loud. To write by "
+                      "speaking instead of typing, press F2.",
+                      "Voz activada. Voy a leer las respuestas en voz alta. Para "
+                      "escribir hablando en vez de teclear, presiona F2."),
     "voz.truncada": ("(resposta longa: a voz le so o comeco; o resto esta na tela)",
                      "(long answer: the voice reads only the beginning; the rest is on the screen)",
                      "(respuesta larga: la voz lee solo el comienzo; el resto esta en pantalla)"),
@@ -1168,6 +1195,7 @@ TUI = {
                   "Algo salio mal en la pantalla del TEO; la conversacion sigue "
                   "normalmente. El detalle tecnico quedo en erro.log de la carpeta .bgh."),
     "tui.running": ("rodando... {s}s", "running... {s}s", "corriendo... {s}s"),
+    "tui.listening": ("ouvindo", "listening", "escuchando"),
     "tui.stop_keys": ("PARA PARAR: CTRL+C ou ESC", "TO STOP: CTRL+C or ESC",
                       "PARA PARAR: CTRL+C o ESC"),
     "tui.footer_long": (

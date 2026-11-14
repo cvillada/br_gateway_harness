@@ -256,6 +256,13 @@ class ConsoleSink:
         """Modo classico: nao existe linha editavel; o texto vira a proxima entrada."""
         self.pendente = str(texto)
 
+    def bipar(self) -> None:
+        """Campainha do terminal: aviso sonoro do ditado (nao depende de audio)."""
+        try:
+            print("\a", end="", flush=True)
+        except (OSError, ValueError):
+            pass
+
     def read_prompt(self) -> str:
         if self.pendente:
             texto, self.pendente = self.pendente, ""
@@ -679,6 +686,87 @@ class ChatCore:
             return alvo
 
     # ----- turno -----------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Ditado (acessibilidade): o comando /ditar e a tecla F2/espaco chamam AQUI
+    # ------------------------------------------------------------------
+    def ditar(self, forcar_baixar: bool = False) -> str:
+        """Escuta o microfone e poe o texto na linha. Devolve 'continue'.
+
+        Chamado pelo `/ditar` e, na tela fixa, pela tecla F2 (ou espaco com a
+        linha vazia) - quem nao enxerga nao pode depender de digitar comando.
+        O reconhecedor segue o idioma da TELA (/lingua).
+        """
+        from . import ditar
+
+        idioma_d = i18n.get_lang()
+        nome_idioma = i18n.LANG_NAMES.get(idioma_d, idioma_d)
+        if not ditar.tem_motor():
+            self.sink.line(t("cmd.ditar.sem_motor"), style="yellow")
+            return "continue"
+        if not ditar.tem_modelo(idioma_d):
+            quer = bool(forcar_baixar)
+            opcoes_d = [t("common.approve_once"), t("common.cancel")]
+            if not quer and hasattr(self.sink, "ask_choice"):
+                escolha_d = self.sink.ask_choice(
+                    t("cmd.ditar.title"),
+                    t("cmd.ditar.baixar_ask", idioma=nome_idioma,
+                      mb=ditar.tamanho_mb(idioma_d)),
+                    opcoes_d)
+                quer = escolha_d == opcoes_d[0]
+            if not quer:
+                self.sink.line(t("cmd.ditar.baixar_hint", idioma=nome_idioma,
+                                 cmd=i18n.cmd("dictate")), style="dim")
+                return "continue"
+            ultimo = {"pct": -10}
+
+            def _progresso(pct: int) -> None:
+                # uma linha a cada 20%: barulho na tela nao ajuda ninguem
+                if pct - ultimo["pct"] >= 20:
+                    ultimo["pct"] = pct
+                    self.sink.line(t("cmd.ditar.baixando", idioma=nome_idioma,
+                                     pct=pct), style="dim")
+
+            baixou_d, detalhe_d = ditar.baixar_modelo(idioma_d, ao_progresso=_progresso)
+            if not baixou_d:
+                motivo_d = ("sem internet" if detalhe_d == "sem_conexao"
+                            else "o arquivo veio com problema")
+                self.sink.line(t("cmd.ditar.baixou_falhou", motivo=motivo_d,
+                                 cmd=i18n.cmd("dictate")), style="yellow")
+                return "continue"
+            _quantos_d, bytes_d = limpeza.varrer(ditar.modelo_dir(idioma_d))
+            self.sink.line(t("cmd.ditar.baixou", idioma=nome_idioma,
+                             tam=limpeza.tamanho_legivel(bytes_d)), style="cyan")
+        voz.parar()          # a voz do TEO nao pode cair no microfone
+        self.sink.line(t("cmd.ditar.ouvindo"), style="cyan")
+        bipar = getattr(self.sink, "bipar", None)
+        if bipar is not None:
+            bipar()          # bip = "pode falar" (quem nao ve a tela precisa ouvir)
+        # CTRL+C/ESC durante a escuta para a gravacao na hora (o mesmo botao que
+        # a pessoa ja usa para parar o modelo).
+        evento_d = getattr(self.agent, "stop_event", None)
+        if evento_d is not None:
+            evento_d.clear()
+        falado = ditar.escutar(idioma_d, parar=evento_d.is_set if evento_d else None)
+        if bipar is not None:
+            bipar()          # bip = "parei de ouvir"
+        if evento_d is not None and evento_d.is_set():
+            # A pessoa mandou parar (ESC/CTRL+C): nao e "nao entendi", e "parei".
+            self.sink.line(t("cmd.ditar.parado"), style="dim")
+            return "continue"
+        if not falado.strip():
+            self.sink.line(t("cmd.ditar.vazio", cmd=i18n.cmd("dictate")),
+                           style="yellow")
+            return "continue"
+        self.sink.line(t("cmd.ditar.entendi", texto=falado), style="cyan")
+        preencher = getattr(self.sink, "preencher", None)
+        if preencher is not None:
+            # Tela fixa/modo classico: o texto entra na linha para conferir.
+            preencher(falado)
+            self.sink.line(t("cmd.ditar.revisar"), style="dim")
+        else:
+            self.sink.line(t("cmd.ditar.revisar_simples"), style="dim")
+        return "continue"
+
     def submit(self, text: str) -> str:
         """Processa uma linha digitada. Devolve 'continue' ou 'exit'."""
         text = text.strip()
@@ -1044,68 +1132,8 @@ class ChatCore:
                                      teclas=tela.teclas_do_terminal(tela.terminal_atual())),
                                    style="yellow")
             elif what == "dictate":
-                # Acessibilidade: escrever falando. O reconhecedor segue o idioma da
-                # TELA (/lingua): trocou o idioma, o modelo do ditado troca junto.
-                from . import ditar
-
-                idioma_d = i18n.get_lang()
-                nome_idioma = i18n.LANG_NAMES.get(idioma_d, idioma_d)
-                if not ditar.tem_motor():
-                    self.sink.line(t("cmd.ditar.sem_motor"), style="yellow")
-                    return "continue"
-                if not ditar.tem_modelo(idioma_d):
-                    quer = str(rest).strip().lower() in ("baixar", "download", "bajar")
-                    opcoes_d = [t("common.approve_once"), t("common.cancel")]
-                    if not quer and hasattr(self.sink, "ask_choice"):
-                        escolha_d = self.sink.ask_choice(
-                            t("cmd.ditar.title"),
-                            t("cmd.ditar.baixar_ask", idioma=nome_idioma,
-                              mb=ditar.tamanho_mb(idioma_d)),
-                            opcoes_d)
-                        quer = escolha_d == opcoes_d[0]
-                    if not quer:
-                        self.sink.line(t("cmd.ditar.baixar_hint", idioma=nome_idioma,
-                                         cmd=i18n.cmd("dictate")), style="dim")
-                        return "continue"
-                    ultimo = {"pct": -10}
-
-                    def _progresso(pct: int) -> None:
-                        # uma linha a cada 20%: barulho na tela nao ajuda ninguem
-                        if pct - ultimo["pct"] >= 20:
-                            ultimo["pct"] = pct
-                            self.sink.line(t("cmd.ditar.baixando", idioma=nome_idioma,
-                                             pct=pct), style="dim")
-
-                    baixou_d, detalhe_d = ditar.baixar_modelo(idioma_d, ao_progresso=_progresso)
-                    if not baixou_d:
-                        motivo_d = ("sem internet" if detalhe_d == "sem_conexao"
-                                    else "o arquivo veio com problema")
-                        self.sink.line(t("cmd.ditar.baixou_falhou", motivo=motivo_d,
-                                         cmd=i18n.cmd("dictate")), style="yellow")
-                        return "continue"
-                    quantos_d, bytes_d = limpeza.varrer(ditar.modelo_dir(idioma_d))
-                    self.sink.line(t("cmd.ditar.baixou", idioma=nome_idioma,
-                                     tam=limpeza.tamanho_legivel(bytes_d)), style="cyan")
-                self.sink.line(t("cmd.ditar.ouvindo"), style="cyan")
-                # CTRL+C/ESC durante a escuta para a gravacao na hora (o mesmo
-                # botao que a pessoa ja usa para parar o modelo).
-                evento_d = getattr(self.agent, "stop_event", None)
-                if evento_d is not None:
-                    evento_d.clear()
-                falado = ditar.escutar(idioma_d,
-                                       parar=evento_d.is_set if evento_d else None)
-                if not falado.strip():
-                    self.sink.line(t("cmd.ditar.vazio", cmd=i18n.cmd("dictate")),
-                                   style="yellow")
-                    return "continue"
-                self.sink.line(t("cmd.ditar.entendi", texto=falado), style="cyan")
-                preencher = getattr(self.sink, "preencher", None)
-                if preencher is not None:
-                    # Tela fixa/modo classico: o texto entra na linha para conferir.
-                    preencher(falado)
-                    self.sink.line(t("cmd.ditar.revisar"), style="dim")
-                else:
-                    self.sink.line(t("cmd.ditar.revisar_simples"), style="dim")
+                return self.ditar(forcar_baixar=str(rest).strip().lower()
+                                  in ("baixar", "download", "bajar"))
             elif what == "setup":
                 return self._run_setup_wizard()
             elif what == "doctor":

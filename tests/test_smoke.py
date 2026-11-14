@@ -3641,6 +3641,57 @@ ok("a ajuda anuncia o /ditar nos tres idiomas",
    all(any(linha[:3] == tri for _hdr, pares in _i18n316.HELP_SECTIONS for linha in pares)
        for tri in (("/ditar", "/dictate", "/dictar"),)))
 
+# -- 0.2.23: tecla de ditado (F2 / espaco com a linha vazia) -------------------
+_tui323 = (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8")
+_core323_txt = (_RAIZ316 / "bgh" / "chat_core.py").read_text(encoding="utf-8")
+ok("a tela fixa tem tecla de ditado: F2 e espaco com a linha vazia",
+   'kb.add("f2")' in _tui323 and 'kb.add(" ")' in _tui323
+   and "_ditar_agora()" in _tui323)
+ok("o espaco continua sendo espaco quando ja existe texto (nao rouba a tecla)",
+   "in_buf.insert_text" in _tui323 and "if in_buf.text or" in _tui323)
+ok("a tecla roda em thread e nao trava a tela (mesmo caminho do ENTER)",
+   "target=_worker, daemon=True" in _tui323)
+ok("o ditado tem bip de inicio e de fim (aviso para quem nao ve a tela)",
+   "def bipar" in _tui323 and "write_raw" in _tui323 and "def bipar" in _core323_txt)
+ok("a barra de baixo mostra 'ouvindo Ns' durante a escuta",
+   "tui.listening" in _tui323 and _i18n316.t("tui.listening") == "ouvindo")
+_ajuda323 = [c for _h, pares in _i18n316.help_table() for c, _d in pares]
+ok("a ajuda ensina a tecla (F2, espaco com a linha vazia, ESC para cortar)",
+   any("F2" == c for c in _ajuda323)
+   and any("espaco com a linha vazia" == c for c in _ajuda323)
+   and any("ESC durante a escuta" == c for c in _ajuda323))
+ok("a voz avisa em voz alta que existe a tecla (F2) ao ligar",
+   "F2" in _i18n316.t("cmd.voz.hello"))
+
+_sink323 = _Sink322()
+_cfg323 = dict(core_cfg)
+_cfg323["lang"] = "pt"
+_core323 = ChatCore(_cfg323, _sink323, llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+_orig_esc323 = _ditar322.escutar
+_orig_mot323 = _ditar322.tem_motor
+_orig_mod323 = _ditar322.tem_modelo
+try:
+    _ditar322.tem_motor = lambda: True
+    _ditar322.tem_modelo = lambda lang=None: True
+
+    def _escutar_com_stop(lang=None, parar=None, **kw):
+        # simula a pessoa apertando ESC no meio da escuta (o stop_event fica ligado)
+        _core323.agent.stop_event.set()
+        return ""
+
+    _ditar322.escutar = _escutar_com_stop
+    _sink323.lines.clear()
+    _core323.submit("/ditar")
+    ok("ESC durante a escuta: 'Parei de ouvir' em vez de 'Nao entendi nada'",
+       any("Parei de ouvir" in l for l in _sink323.lines)
+       and "parar=evento_d.is_set" in _core323_txt)
+finally:
+    _ditar322.escutar = _orig_esc323
+    _ditar322.tem_motor = _orig_mot323
+    _ditar322.tem_modelo = _orig_mod323
+    _limp321.limpar()
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

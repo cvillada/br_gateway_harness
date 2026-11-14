@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.23
+
+Uma TECLA para falar em vez de digitar - o `/ditar` continua existindo.
+
+- F2, na tela fixa, faz exatamente o que o `/ditar` faz: ouve o microfone,
+  transcreve no idioma da tela e poe o texto na linha para conferir antes do
+  ENTER. Com a linha VAZIA, a barra de ESPACO faz o mesmo - e a tecla mais facil
+  de achar no teclado para quem nao enxerga a tela.
+- Dois bips do terminal marcam o comeco e o fim da escuta (nao depende de audio
+  do sistema). O TEO nunca fala por cima do microfone: a voz e calada antes de
+  comecar a ouvir.
+- A barra de baixo mostra "ouvindo Ns" durante a escuta. ESC (ou CTRL+C) corta na
+  hora e a resposta e "Parei de ouvir" - e nao "nao entendi nada", que era o que
+  aparecia antes.
+- Segurar a tecla para falar NAO existe em terminal (nao ha evento de soltar
+  tecla, so repeticao): por isso a parada e automatica, quando a pessoa cala.
+- A ajuda ganhou a secao "Falar em vez de digitar" e, ao ligar a voz (`/voz`), o
+  TEO avisa em voz alta que a tecla existe.
+- Suite local: 491 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+  roda no push, junto do build.
+
 ## 0.2.22
 
 Agora da para ESCREVER FALANDO: `/ditar`, nos tres idiomas, sem internet.

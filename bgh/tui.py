@@ -220,6 +220,8 @@ class TuiSink:
         self.tema_fn: Callable[[], None] | None = None
         # callback que poe o texto ditado (/ditar) na linha de digitar
         self.preencher_fn: Callable[[str], None] | None = None
+        # callback do bip do terminal (aviso sonoro do ditado)
+        self.bipar_fn: Callable[[], None] | None = None
         self.emit = emit
         self.close_line = close_line
         self.state = state
@@ -283,6 +285,12 @@ class TuiSink:
         fn = getattr(self, "preencher_fn", None)
         if fn is not None:
             fn(str(texto))
+
+    def bipar(self) -> None:
+        """Bip do terminal: avisa "pode falar" / "parei de ouvir" sem olhar a tela."""
+        fn = getattr(self, "bipar_fn", None)
+        if fn is not None:
+            fn()
 
     def set_ctx(self, text: str, pct: int | None = None, hot_pct: int | None = None,
                 extra: str = "") -> None:
@@ -492,6 +500,18 @@ def run_tui(cfg: dict) -> int:
         _schedule(_aplica)
 
     sink.preencher_fn = _preencher
+
+    def _bipar() -> None:
+        """BEL do terminal: som curto que nao depende de audio do sistema."""
+        if app is None:
+            return
+        try:
+            app.output.write_raw("\a")
+            app.output.flush()
+        except Exception:  # noqa: BLE001 - terminal sem campainha: segue sem bip
+            pass
+
+    sink.bipar_fn = _bipar
     core = ChatCore(cfg, sink)
 
     # ----- layout: so a parte fixa (o resto e o historico do proprio terminal) --
@@ -711,6 +731,52 @@ def run_tui(cfg: dict) -> int:
     @kb.add("c-c")
     def _ctrl_c(event):
         request_stop_or_exit()
+
+    def _ditar_agora() -> None:
+        """Tecla de ditado: mesma coisa que o /ditar, sem digitar comando.
+
+        Quem nao enxerga nao pode depender de lembrar de um comando: a tecla faz
+        o mesmo caminho (baixa o modelo na primeira vez, ouve, poe o texto na
+        linha). Roda em thread como o ENTER, para a tela nao travar.
+        """
+        if state["busy"] or state.get("approval") is not None:
+            return
+        state["busy"] = True
+        state["stop_hits"] = 0
+        state["busy_since"] = time.time()
+        state["tool"] = t("tui.listening")   # a barra de baixo diz "ouvindo Ns"
+        state["tool_since"] = time.time()
+        state["fase"] = None
+        state["tokens"] = None
+        state["palco_hold"] = 0
+
+        def _worker() -> None:
+            try:
+                core.ditar()
+            except Exception as exc:  # noqa: BLE001 - a tela nunca cai pelo ditado
+                log_error(exc, "ditado pela tecla")
+                emit(t("tui.crash"), style="yellow")
+            finally:
+                state["busy"] = False
+                state["stop_hits"] = 0
+                state["tool"] = None
+                if app is not None:
+                    _schedule(app.invalidate)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    @kb.add("f2")
+    def _f2(event):
+        _ditar_agora()          # F2: falar em vez de digitar (qualquer tamanho)
+
+    @kb.add(" ")
+    def _espaco(event):
+        # A tecla mais facil de achar no teclado. Com a linha VAZIA ela comeca a
+        # ouvir; com texto (ou menu/licenca aberto), e espaco normal.
+        if in_buf.text or state.get("approval") is not None:
+            in_buf.insert_text(" ")
+        else:
+            _ditar_agora()
 
     @kb.add("escape")
     def _esc(event):
