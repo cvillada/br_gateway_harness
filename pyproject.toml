@@ -10,11 +10,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "cvillada" }]
+# Espelha o requirements.txt: o wheel precisa DECLARAR o que usa (o ditado depende
+# de vosk+sounddevice). Os instaladores seguem com --no-deps e usam o requirements.
 dependencies = [
     "openai>=1.40.0",
     "requests>=2.31.0",
     "rich>=13.7.0",
     "prompt_toolkit>=3.0",
+    "vosk>=0.3.45",
+    "sounddevice>=0.4.6",
 ]
 
 [project.scripts]

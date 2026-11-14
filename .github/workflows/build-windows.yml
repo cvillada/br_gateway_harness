@@ -23,6 +23,7 @@ jobs:
           --icon bgh/assets/teo.ico
           --add-data "bgh/skills_default;bgh/skills_default"
           --add-data "bgh/assets;bgh/assets"
+          --collect-all vosk --collect-all sounddevice --hidden-import cffi
           motor_entry.py
       - uses: actions/upload-artifact@v4
         with:
@@ -46,6 +47,7 @@ jobs:
           --name motor-macos
           --add-data "bgh/skills_default:bgh/skills_default"
           --add-data "bgh/assets:bgh/assets"
+          --collect-all vosk --collect-all sounddevice --hidden-import cffi
           motor_entry.py
       - uses: actions/upload-artifact@v4
         with:

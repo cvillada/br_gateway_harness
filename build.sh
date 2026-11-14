@@ -12,6 +12,7 @@ rm -rf build dist *.egg-info
     --name motor \
     --add-data "bgh/skills_default:bgh/skills_default" \
     --add-data "bgh/assets:bgh/assets" \
+    --collect-all vosk --collect-all sounddevice --hidden-import cffi \
     motor_entry.py
 
 echo ""

@@ -3490,9 +3490,12 @@ ok("WAV fora do formato (ou inexistente) nao vira lixo de audio",
 _req322 = (_RAIZ316 / "requirements.txt").read_text(encoding="utf-8")
 ok("vosk e sounddevice vem na instalacao (requirements do TEO)",
    "vosk" in _req322 and "sounddevice" in _req322)
-_spec322 = (_RAIZ316 / "motor.spec").read_text(encoding="utf-8")
-ok("motor.exe/motor-macos levam o vosk e a PortAudio dentro",
-   "vosk" in _spec322 and "sounddevice" in _spec322)
+_build322 = (_RAIZ316 / "build.sh").read_text(encoding="utf-8")
+_ci322 = (_RAIZ316 / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
+ok("motor.exe/motor-macos levam o vosk e a PortAudio dentro (build local e CI)",
+   "--collect-all vosk" in _build322 and "--collect-all sounddevice" in _build322
+   and _ci322.count("--collect-all vosk") == 2
+   and _ci322.count("--collect-all sounddevice") == 2)
 
 
 class _Sink322(RecSink):
