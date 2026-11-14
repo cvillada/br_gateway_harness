@@ -197,9 +197,9 @@ HELP_SECTIONS = [
     ("help.h.stop", [
         ("CTRL+C ou ESC durante a resposta", "CTRL+C or ESC while answering",
          "CTRL+C o ESC durante la respuesta",
-         "para de responder na hora (igual ao Hermes)",
-         "stops answering right away (like Hermes)",
-         "deja de responder al instante (igual que Hermes)"),
+         "para de responder na hora",
+         "stops answering right away",
+         "deja de responder al instante"),
         ("digitar ENTER durante a resposta", "press ENTER while answering",
          "presionar ENTER durante la respuesta",
          "avisa o turno em andamento; o modelo le na proxima rodada",
