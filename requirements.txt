@@ -4,5 +4,5 @@ rich>=13.7.0
 prompt_toolkit>=3.0
 # Ditado (/ditar): reconhecimento de fala LOCAL, sem internet. O modelo de cada
 # idioma (pt/en/es, ~55 MB) e baixado na primeira vez que a pessoa dita.
-vosk>=0.3.45
+vosk>=0.3.44,<0.4
 sounddevice>=0.4.6
