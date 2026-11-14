@@ -1911,17 +1911,48 @@ _fr_estreito28 = _status_text25(dict(_st_busy28), 54)[0][1]
 ok("janela muito estreita: o aviso de parar continua inteiro (o medidor sai)",
    "PARA PARAR" in _fr_estreito28 and len(_fr_estreito28) <= 52)
 
-# --- janela maximizada na abertura -------------------------------------------
+# --- janela maximizada na abertura (0.2.25: um caminho por sistema) ----------
+import bgh.chat_core as _cc28
+import sys as _sys28
+
 _buf_max28 = _io28.StringIO()
 _orig_osname28 = os.name
+_orig_plat28 = _sys28.platform
+_orig_run_max28 = _cc28.subprocess.run
+_cmds_max28: list[list] = []
+
+
+def _run_max28(cmd, **kw):
+    _cmds_max28.append(list(cmd))
+    return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+
 try:
+    _cc28.subprocess.run = _run_max28
     os.name = "posix"
+    _sys28.platform = "linux"
     with _ctxlib26.redirect_stdout(_buf_max28):
         _max28()
+    _seq_linux28 = _buf_max28.getvalue()
+    _buf_max28.seek(0)
+    _buf_max28.truncate(0)
+    _cmds_max28.clear()
+    os.name = "posix"
+    _sys28.platform = "darwin"
+    with _ctxlib26.redirect_stdout(_buf_max28):
+        _max28()
+    _saida_mac28 = _buf_max28.getvalue()
+    _cmds_mac28 = list(_cmds_max28)
 finally:
     os.name = _orig_osname28
-ok("abertura pede janela maximizada (sequencia do xterm no Linux/macOS)",
-   _buf_max28.getvalue() == "\x1b[9;0t")
+    _sys28.platform = _orig_plat28
+    _cc28.subprocess.run = _orig_run_max28
+ok("Linux: abertura pede janela maximizada pela sequencia do xterm",
+   _seq_linux28 == "\x1b[9;0t")
+ok("macOS: maximiza falando com o Terminal/iTerm2 (nao com a sequencia do xterm)",
+   _saida_mac28 == "" and any("osascript" in cmd[0] for cmd in _cmds_mac28)
+   and any("Terminal" in " ".join(cmd) or "iTerm2" in " ".join(cmd)
+           for cmd in _cmds_mac28))
 
 _orig_osname28b = os.name
 os.name = "nt"

@@ -21,7 +21,7 @@ Janela maximizada nos TRES sistemas - e uma tela que nunca fica muda.
   executavel precisa dela para descompactar) e, no Windows, se esta rodando como
   administrador. E o que permite descobrir por que "a tela nao roda" na maquina
   do cliente.
-- Suite local: 510 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+- Suite local: 511 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
   roda no push, junto do build.
 
 ## 0.2.24
