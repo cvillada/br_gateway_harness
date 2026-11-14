@@ -16,9 +16,10 @@ Uma TECLA para falar em vez de digitar - o `/ditar` continua existindo.
   aparecia antes.
 - Segurar a tecla para falar NAO existe em terminal (nao ha evento de soltar
   tecla, so repeticao): por isso a parada e automatica, quando a pessoa cala.
-- A ajuda ganhou a secao "Falar em vez de digitar" e, ao ligar a voz (`/voz`), o
-  TEO avisa em voz alta que a tecla existe.
-- Suite local: 491 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+- A ajuda ganhou a secao "Falar em vez de digitar" e ela aparece LOGO ACIMA de
+  "Comandos:" (a tecla tem que estar a vista antes da lista grande). Ao ligar a
+  voz (`/voz`), o TEO avisa em voz alta que a tecla existe.
+- Suite local: 492 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
   roda no push, junto do build.
 
 ## 0.2.22

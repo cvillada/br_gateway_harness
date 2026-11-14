@@ -2692,11 +2692,11 @@ ok("toda chave usada no codigo existe no catalogo", not _faltando316)
 # Ajuda: tabela pronta no idioma atual, com o comando de cada idioma.
 _ajuda_pt316 = dict(_i18n316.help_table())
 ok("tabela de ajuda em portugues traz os comandos pt",
-   any("/ajuda" == c for c, _d in _i18n316.help_table()[3][1]))
+   any("/ajuda" == c for c, _d in _i18n316.help_table()[4][1]))
 _i18n316.set_lang("en")
 ok("tabela de ajuda em ingles traz /help e /exit",
-   any(c == "/help" for c, _d in _i18n316.help_table()[3][1])
-   and any(c == "/exit" for c, _d in _i18n316.help_table()[3][1]))
+   any(c == "/help" for c, _d in _i18n316.help_table()[4][1])
+   and any(c == "/exit" for c, _d in _i18n316.help_table()[4][1]))
 ok("alias funciona em qualquer idioma (canon)", _i18n316.canon("ayuda") == "help"
    and _i18n316.canon("salir") == "exit" and _i18n316.canon("nov") == "new")
 _i18n316.set_lang("pt")
@@ -3183,7 +3183,7 @@ ok("a ajuda do /voz nao manda usar CTRL+C para calar (CTRL+C vazio SAI do TEO)",
 ok("voz.falando() responde na hora se ha leitura em andamento",
    _voz320.falando() is False)
 ok("a ajuda anuncia o /voz com as tres traducoes",
-   any(c == "/voz" for c, _d in _i18n316.help_table()[3][1])
+   any(c == "/voz" for c, _d in _i18n316.help_table()[4][1])
    and any(linha[:3] == ("/voz", "/voice", "/voz")
            for _hdr, pares in _i18n316.HELP_SECTIONS for linha in pares))
 
@@ -3660,6 +3660,10 @@ ok("a ajuda ensina a tecla (F2, espaco com a linha vazia, ESC para cortar)",
    any("F2" == c for c in _ajuda323)
    and any("espaco com a linha vazia" == c for c in _ajuda323)
    and any("ESC durante a escuta" == c for c in _ajuda323))
+ok("na ajuda a secao 'Falar em vez de digitar' vem ANTES de 'Comandos:'",
+   [h for h, _p in _i18n316.help_table()].index(
+       _i18n316.t("help.h.falar")) < [h for h, _p in _i18n316.help_table()]
+   .index(_i18n316.t("help.h.commands")))
 ok("a voz avisa em voz alta que existe a tecla (F2) ao ligar",
    "F2" in _i18n316.t("cmd.voz.hello"))
 

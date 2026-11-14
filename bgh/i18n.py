@@ -216,6 +216,24 @@ HELP_SECTIONS = [
          "repeats what you typed before (saved history)",
          "repite lo que ya escribiste (historial guardado)"),
     ]),
+    ("help.h.falar", [
+        ("F2", "F2", "F2",
+         "comeca a ouvir o microfone e poe o texto na linha; para sozinho quando "
+         "voce cala (um bip avisa que comecou e outro que parou)",
+         "starts listening to the microphone and puts the text on the line; stops "
+         "by itself when you go quiet (one beep when it starts, another when it stops)",
+         "empieza a escuchar el microfono y pone el texto en la linea; para solo "
+         "cuando callas (un bip avisa que empezo y otro que paro)"),
+        ("espaco com a linha vazia", "space on an empty line",
+         "espacio con la linea vacia",
+         "a mesma coisa, na tecla mais facil de achar no teclado",
+         "the same thing, on the easiest key to find on the keyboard",
+         "lo mismo, en la tecla mas facil de encontrar en el teclado"),
+        ("ESC durante a escuta", "ESC while listening", "ESC mientras escucha",
+         "para de ouvir na hora, sem enviar nada",
+         "stops listening right away, without sending anything",
+         "deja de escuchar al instante, sin enviar nada"),
+    ]),
     ("help.h.commands", [
         ("/ajuda", "/help", "/ayuda",
          "esta lista", "this list", "esta lista"),
@@ -307,24 +325,6 @@ HELP_SECTIONS = [
          "en el idioma de la pantalla y pone el texto en la linea para que lo revises "
          "antes del ENTER"),
         ("/sair", "/exit", "/salir", "encerra", "quits", "cierra"),
-    ]),
-    ("help.h.falar", [
-        ("F2", "F2", "F2",
-         "comeca a ouvir o microfone e poe o texto na linha; para sozinho quando "
-         "voce cala (um bip avisa que comecou e outro que parou)",
-         "starts listening to the microphone and puts the text on the line; stops "
-         "by itself when you go quiet (one beep when it starts, another when it stops)",
-         "empieza a escuchar el microfono y pone el texto en la linea; para solo "
-         "cuando callas (un bip avisa que empezo y otro que paro)"),
-        ("espaco com a linha vazia", "space on an empty line",
-         "espacio con la linea vacia",
-         "a mesma coisa, na tecla mais facil de achar no teclado",
-         "the same thing, on the easiest key to find on the keyboard",
-         "lo mismo, en la tecla mas facil de encontrar en el teclado"),
-        ("ESC durante a escuta", "ESC while listening", "ESC mientras escucha",
-         "para de ouvir na hora, sem enviar nada",
-         "stops listening right away, without sending anything",
-         "deja de escuchar al instante, sin enviar nada"),
     ]),
 ]
 
