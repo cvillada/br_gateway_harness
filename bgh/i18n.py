@@ -67,6 +67,11 @@ ALIASES = {
     "doctor": ("doctor",),
     "update": ("atualizar", "update", "actualizar"),
     "lang": ("lingua", "language", "idioma", "lang"),
+    "voice": ("voz", "voice", "voz"),
+    "clean": ("limpar", "clean", "limpiar"),
+    "background": ("fundo", "background", "fondo"),
+    "font": ("fonte", "font", "fuente"),
+    "dictate": ("ditar", "dictate", "dictar"),
 }
 
 # Como cada comando aparece ESCRITO na ajuda/avisos, por idioma.
@@ -85,6 +90,11 @@ CMD = {
     "doctor": ("/doctor", "/doctor", "/doctor"),
     "update": ("/atualizar", "/update", "/actualizar"),
     "lang": ("/lingua", "/language", "/idioma"),
+    "voice": ("/voz", "/voice", "/voz"),
+    "clean": ("/limpar", "/clean", "/limpiar"),
+    "background": ("/fundo", "/background", "/fondo"),
+    "font": ("/fonte", "/font", "/fuente"),
+    "dictate": ("/ditar", "/dictate", "/dictar"),
 }
 
 
@@ -259,6 +269,40 @@ HELP_SECTIONS = [
          "troca o idioma da tela: Portugues, English ou Espanol",
          "switches the screen language: Portugues, English or Espanol",
          "cambia el idioma de la pantalla: Portugues, English o Espanol"),
+        ("/voz", "/voice", "/voz",
+         "acessibilidade: le as respostas em voz alta com a voz do sistema; "
+         "digitar de novo desliga (ESC cala a voz)",
+         "accessibility: reads the answers out loud with the system voice; "
+         "type it again to turn off (ESC silences the voice)",
+         "accesibilidad: lee las respuestas en voz alta con la voz del sistema; "
+         "escribirlo otra vez apaga (ESC calla la voz)"),
+        ("/limpar", "/clean", "/limpiar",
+         "apaga os rascunhos que o TEO guarda na pasta scratch (scripts e textos "
+         "da voz) e diz quanto espaco foi liberado",
+         "deletes the drafts TEO keeps in the scratch folder (scripts and voice "
+         "texts) and reports how much space was freed",
+         "borra los borradores que el TEO guarda en la carpeta scratch (scripts y "
+         "textos de la voz) y dice cuanto espacio se libero"),
+        ("/fundo", "/background", "/fondo",
+         "cor de fundo da tela: branco, azul, amarelo, verde, vermelho ou preto "
+         "(as letras mudam para continuar legiveis)",
+         "screen background color: white, blue, yellow, green, red or black "
+         "(the letters change to stay readable)",
+         "color de fondo de la pantalla: blanco, azul, amarillo, verde, rojo o "
+         "negro (las letras cambian para seguir legibles)"),
+        ("/fonte", "/font", "/fuente",
+         "tamanho da letra: normal, grande, maior ou enorme",
+         "letter size: normal, large, larger or huge",
+         "tamano de la letra: normal, grande, mayor o enorme"),
+        ("/ditar", "/dictate", "/dictar",
+         "acessibilidade: escreva FALANDO - o TEO ouve o microfone, transcreve no "
+         "idioma da tela e poe o texto na linha para voce conferir antes do ENTER",
+         "accessibility: write by SPEAKING - TEO listens to the microphone, "
+         "transcribes in the screen language and puts the text on the line for you "
+         "to check before ENTER",
+         "accesibilidad: escribe HABLANDO - el TEO escucha el microfono, transcribe "
+         "en el idioma de la pantalla y pone el texto en la linea para que lo revises "
+         "antes del ENTER"),
         ("/sair", "/exit", "/salir", "encerra", "quits", "cierra"),
     ]),
 ]
@@ -297,6 +341,200 @@ CHAT = {
     "ctx.filling": ("Contexto enchendo; sera compactado na proxima rodada pesada.",
                     "Context filling up; it will be compacted on the next heavy round.",
                     "Contexto llenandose; se compactara en la proxima ronda pesada."),
+
+    "cmd.clean.title": ("Limpar rascunhos do TEO", "Clean TEO scratch files",
+                        "Limpiar borradores del TEO"),
+    "cmd.clean.ask": ("A pasta de rascunhos tem {n} arquivo(s) ({size}). Apagar tudo?",
+                      "The scratch folder has {n} file(s) ({size}). Delete everything?",
+                      "La carpeta de borradores tiene {n} archivo(s) ({size}). Borrar todo?"),
+    "cmd.clean.yes": ("Sim, apagar", "Yes, delete", "Si, borrar"),
+    "cmd.clean.no": ("Nao, deixar como esta", "No, leave it", "No, dejarlo"),
+    "cmd.clean.ok": ("Pronto: {n} arquivo(s) apagados, {size} liberados.{nota}",
+                     "Done: {n} file(s) deleted, {size} freed.{nota}",
+                     "Listo: {n} archivo(s) borrados, {size} liberados.{nota}"),
+    "cmd.clean.empty": ("A pasta de rascunhos ja esta vazia.",
+                        "The scratch folder is already empty.",
+                        "La carpeta de borradores ya esta vacia."),
+    "cmd.clean.cancel": ("Nada foi apagado.", "Nothing was deleted.",
+                         "No se borro nada."),
+    "cmd.clean.nota": (" Ali ficam so rascunhos (scripts do run_python e textos da "
+                       "voz): conversa, memoria, skills e configuracao ficam em "
+                       "outro lugar e nao sao tocadas.",
+                       " Only drafts live there (run_python scripts and voice texts): "
+                       "conversation, memory, skills and settings live elsewhere and "
+                       "are not touched.",
+                       " Ahi quedan solo borradores (scripts de run_python y textos de "
+                       "la voz): conversacion, memoria, skills y configuracion estan en "
+                       "otro lugar y no se tocan."),
+
+    "cmd.clean.confirm_hint": ("Para apagar de uma vez: {cmd} sim.",
+                              "To delete in one go: {cmd} yes.",
+                              "Para borrar de una vez: {cmd} si."),
+    "cmd.fundo.ask": ("Qual cor? (Enter = {first})", "Which color? (Enter = {first})",
+                      "Que color? (Enter = {first})"),
+    "cmd.fundo.list": ("Fundo atual: {atual}. Opcoes: {cores}. Use {cmd} <cor>.",
+                       "Current background: {atual}. Options: {cores}. Use {cmd} <color>.",
+                       "Fondo actual: {atual}. Opciones: {cores}. Usa {cmd} <color>."),
+    "cmd.fonte.ask": ("Qual tamanho? (Enter = {first})", "Which size? (Enter = {first})",
+                      "Que tamano? (Enter = {first})"),
+    "cmd.fonte.list": ("Letra atual: {atual}. Opcoes: {niveis}. Use {cmd} <numero>.",
+                       "Current letter: {atual}. Options: {niveis}. Use {cmd} <number>.",
+                       "Letra actual: {atual}. Opciones: {niveis}. Usa {cmd} <numero>."),
+
+    "cmd.fundo.title": ("Cor de fundo da tela", "Screen background color",
+                        "Color de fondo de la pantalla"),
+    "cmd.fundo.now": ("Fundo {cor}. As letras mudaram de cor para continuar legiveis. "
+                      "Para voltar ao padrao: {cmd} padrao.",
+                      "Background {cor}. The letters changed color to stay readable. "
+                      "To go back to normal: {cmd} default.",
+                      "Fondo {cor}. Las letras cambiaron de color para seguir legibles. "
+                      "Para volver al normal: {cmd} padrao."),
+    "cmd.fundo.bad": ("Nao conheco essa cor. {cmd} mostra as opcoes.",
+                      "I do not know that color. {cmd} shows the options.",
+                      "No conozco ese color. {cmd} muestra las opciones."),
+    "cmd.fundo.off": ("O fundo voltou a ser o do seu terminal.",
+                      "The background is the terminal's own again.",
+                      "El fondo volvio a ser el de tu terminal."),
+
+    "cmd.fonte.title": ("Tamanho da letra", "Letter size", "Tamano de la letra"),
+    "cmd.fonte.now_win": ("Letra {nivel} aplicada nesta janela e guardada para as "
+                          "proximas aberturas (1 = normal).",
+                          "Letter {nivel} applied to this window and saved for the next "
+                          "openings (1 = normal).",
+                          "Letra {nivel} aplicada en esta ventana y guardada para las "
+                          "proximas aperturas (1 = normal)."),
+    "cmd.fonte.now_linux": ("Abri uma janela nova do TEO com a letra {nivel}. Pode "
+                            "fechar esta: a conversa continua la.",
+                            "I opened a new TEO window with the letter {nivel}. You may "
+                            "close this one: the conversation goes on there.",
+                            "Abri una ventana nueva del TEO con la letra {nivel}. Puedes "
+                            "cerrar esta: la conversacion sigue alla."),
+    "cmd.fonte.teclas": ("O tamanho da letra e do seu terminal, o TEO nao consegue "
+                         "mudar por dentro. No seu terminal: {teclas}.",
+                         "The letter size belongs to your terminal; TEO cannot change "
+                         "it from inside. In your terminal: {teclas}.",
+                         "El tamano de la letra es de tu terminal; el TEO no puede "
+                         "cambiarlo por dentro. En tu terminal: {teclas}."),
+    "cmd.fonte.bad": ("Escolha 1 (normal), 2 (grande), 3 (maior) ou 4 (enorme). "
+                      "{cmd} mostra as opcoes.",
+                      "Choose 1 (normal), 2 (large), 3 (larger) or 4 (huge). "
+                      "{cmd} shows the options.",
+                      "Elige 1 (normal), 2 (grande), 3 (mayor) o 4 (enorme). "
+                      "{cmd} muestra las opciones."),
+
+    "cmd.ditar.title": ("Escrever falando", "Write by speaking", "Escribir hablando"),
+    "cmd.ditar.ouvindo": ("Pode falar agora: eu paro sozinho quando voce terminar "
+                          "(ate 25 segundos).",
+                          "Speak now: I stop by myself when you finish (up to 25 "
+                          "seconds).",
+                          "Habla ahora: paro solo cuando termines (hasta 25 segundos)."),
+    "cmd.ditar.entendi": ("Eu entendi: {texto}", "I heard: {texto}",
+                          "Entendi: {texto}"),
+    "cmd.ditar.revisar": ("O texto esta na linha de baixo: confira, corrija se quiser "
+                          "e aperte ENTER para enviar.",
+                          "The text is on the line below: check it, fix it if you "
+                          "want and press ENTER to send.",
+                          "El texto esta en la linea de abajo: revisalo, corregilo si "
+                          "quieres y aprieta ENTER para enviar."),
+    "cmd.ditar.revisar_simples": ("Se estiver certo, digite ENTER na proxima linha "
+                                  "para enviar.",
+                                  "If it is right, press ENTER on the next line to send.",
+                                  "Si esta bien, presiona ENTER en la linea siguiente "
+                                  "para enviar."),
+    "cmd.ditar.dirigir": ("Diga o que voce quer e eu escrevo (ex.: 'pergunte ao "
+                          "modelo...').",
+                          "Say what you want and I write it (e.g. 'ask the model...').",
+                          "Di lo que quieres y yo lo escribo (ej.: 'pregunta al modelo...')."),
+    "cmd.ditar.vazio": ("Nao entendi nada. Fale mais perto do microfone, sem pressa, "
+                        "e tente de novo com {cmd}.",
+                        "I did not understand anything. Speak closer to the microphone, "
+                        "slowly, and try again with {cmd}.",
+                        "No entendi nada. Habla mas cerca del microfono, sin apuro, y "
+                        "prueba otra vez con {cmd}."),
+    "cmd.ditar.sem_motor": ("O motor de ditado nao esta instalado nesta maquina "
+                            "(pacote 'vosk'). Rode 'bgh setup' ou "
+                            "'pip install -r requirements.txt' e tente de novo.",
+                            "The dictation engine is not installed on this machine "
+                            "(package 'vosk'). Run 'bgh setup' or "
+                            "'pip install -r requirements.txt' and try again.",
+                            "El motor de dictado no esta instalado en esta maquina "
+                            "(paquete 'vosk'). Corre 'bgh setup' o "
+                            "'pip install -r requirements.txt' y prueba otra vez."),
+    "cmd.ditar.baixar_ask": ("Para ditar em {idioma} eu preciso baixar o modelo do "
+                             "idioma uma vez ({mb} MB). Depois funciona sem internet. "
+                             "Baixar agora?",
+                             "To dictate in {idioma} I need to download the language "
+                             "model once ({mb} MB). After that it works offline. "
+                             "Download now?",
+                             "Para dictar en {idioma} necesito bajar el modelo del "
+                             "idioma una vez ({mb} MB). Despues funciona sin internet. "
+                             "Bajar ahora?"),
+    "cmd.ditar.baixar_hint": ("Para baixar o modelo de {idioma} uma vez: {cmd} baixar.",
+                              "To download the {idioma} model once: {cmd} baixar.",
+                              "Para bajar el modelo de {idioma} una vez: {cmd} baixar."),
+    "cmd.ditar.baixando": ("Baixando o modelo de {idioma}... {pct}%",
+                           "Downloading the {idioma} model... {pct}%",
+                           "Bajando el modelo de {idioma}... {pct}%"),
+    "cmd.ditar.baixou": ("Modelo de {idioma} pronto ({tam}). O som nao sai do seu "
+                         "computador: quem entende a fala e o proprio TEO.",
+                         "{idioma} model ready ({tam}). The sound never leaves your "
+                         "computer: TEO itself understands the speech.",
+                         "Modelo de {idioma} listo ({tam}). El sonido no sale de tu "
+                         "computadora: el propio TEO entiende la voz."),
+    "cmd.ditar.baixou_falhou": ("Nao consegui baixar o modelo ({motivo}). Confira a "
+                                "internet e tente de novo com {cmd}.",
+                                "I could not download the model ({motivo}). Check your "
+                                "internet and try again with {cmd}.",
+                                "No pude bajar el modelo ({motivo}). Revisa internet y "
+                                "prueba otra vez con {cmd}."),
+    "cmd.ditar.confirmar": ("Enviar esse texto ao modelo?", "Send this text to the model?",
+                            "Enviar ese texto al modelo?"),
+    "cmd.ditar.nao": ("Deixei o texto so na tela.", "I left the text on the screen only.",
+                      "Deje el texto solo en la pantalla."),
+
+    "cor.padrao": ("do terminal", "of the terminal", "del terminal"),
+    "cor.branco": ("branco", "white", "blanco"),
+    "cor.amarelo": ("amarelo", "yellow", "amarillo"),
+    "cor.verde": ("verde", "green", "verde"),
+    "cor.azul": ("azul", "blue", "azul"),
+    "cor.vermelho": ("vermelho", "red", "rojo"),
+    "cor.preto": ("preto", "black", "negro"),
+
+    "fonte.normal": ("normal", "normal", "normal"),
+    "fonte.grande": ("grande", "large", "grande"),
+    "fonte.maior": ("maior", "larger", "mayor"),
+    "fonte.enorme": ("enorme", "huge", "enorme"),
+
+    "cmd.voz.on": ("Voz LIGADA: leio cada resposta em voz alta com a voz do sistema "
+                   "({voz}). Para calar a leitura: ESC. Para desligar de vez: {cmd}.",
+                   "Voice ON: I read every answer out loud with the system voice "
+                   "({voz}). To silence a reading: ESC. To turn it off: {cmd}.",
+                   "Voz ACTIVADA: leo cada respuesta en voz alta con la voz del sistema "
+                   "({voz}). Para callar la lectura: ESC. Para apagar: {cmd}."),
+    "cmd.voz.off": ("Voz desligada: as respostas ficam so na tela.",
+                    "Voice off: answers stay on the screen only.",
+                    "Voz apagada: las respuestas quedan solo en la pantalla."),
+    "cmd.voz.status": ("Voz {onoff}. {cmd} liga ou desliga.",
+                       "Voice {onoff}. {cmd} turns it on or off.",
+                       "Voz {onoff}. {cmd} la activa o la apaga."),
+    "cmd.voz.bad": ("Use {cmd} para ligar/desligar a voz (ou {cmd} ligar / desligar).",
+                    "Use {cmd} to turn the voice on/off (or {cmd} on / off).",
+                    "Usa {cmd} para activar/apagar la voz (o {cmd} activar / apagar)."),
+    "cmd.voz.no_backend": ("Nao encontrei a voz do sistema nesta maquina, entao nao "
+                           "consigo ler em voz alta (Linux: spd-say ou espeak-ng; "
+                           "Windows: PowerShell; Mac: say). A conversa continua normal.",
+                           "I could not find the system voice on this machine, so I cannot "
+                           "read out loud (Linux: spd-say or espeak-ng; Windows: "
+                           "PowerShell; Mac: say). The conversation goes on normally.",
+                           "No encontre la voz del sistema en esta maquina, asi que no puedo "
+                           "leer en voz alta (Linux: spd-say o espeak-ng; Windows: "
+                           "PowerShell; Mac: say). La conversacion sigue normal."),
+    "cmd.voz.hello": ("Voz ligada. Eu vou ler as respostas em voz alta.",
+                      "Voice on. I will read the answers out loud.",
+                      "Voz activada. Voy a leer las respuestas en voz alta."),
+    "voz.truncada": ("(resposta longa: a voz le so o comeco; o resto esta na tela)",
+                     "(long answer: the voice reads only the beginning; the rest is on the screen)",
+                     "(respuesta larga: la voz lee solo el comienzo; el resto esta en pantalla)"),
 
     "cmd.unknown": ("Comando desconhecido. {help} mostra a lista.",
                     "Unknown command. {help} shows the list.",
@@ -933,15 +1171,15 @@ TUI = {
     "tui.stop_keys": ("PARA PARAR: CTRL+C ou ESC", "TO STOP: CTRL+C or ESC",
                       "PARA PARAR: CTRL+C o ESC"),
     "tui.footer_long": (
-        "ENTER = falar | CTRL+C com linha vazia = sair | {help} | reler: roda do mouse "
+        "ENTER = enviar | CTRL+C com linha vazia = sair | {help} | reler: roda do mouse "
         "ou barra lateral do seu terminal",
-        "ENTER = talk | CTRL+C on an empty line = quit | {help} | re-read: mouse wheel "
+        "ENTER = send | CTRL+C on an empty line = quit | {help} | re-read: mouse wheel "
         "or your terminal scrollbar",
-        "ENTER = hablar | CTRL+C con linea vacia = salir | {help} | releer: rueda del "
+        "ENTER = enviar | CTRL+C con linea vacia = salir | {help} | releer: rueda del "
         "raton o barra lateral de tu terminal"),
-    "tui.footer_short": ("ENTER = falar | CTRL+C vazio = sair | {help}",
-                         "ENTER = talk | CTRL+C empty = quit | {help}",
-                         "ENTER = hablar | CTRL+C vacio = salir | {help}"),
+    "tui.footer_short": ("ENTER = enviar | CTRL+C vazio = sair | {help}",
+                         "ENTER = send | CTRL+C empty = quit | {help}",
+                         "ENTER = enviar | CTRL+C vacio = salir | {help}"),
     "tui.of": ("de", "of", "de"),
     "tui.msg": ("msg", "msg", "msg"),
     "tui.toks": ("toks", "toks", "toks"),
@@ -1434,6 +1672,24 @@ UPDATER = {
     "upd.no_wheel": ("a release mais recente nao traz o pacote .whl para instalar",
                      "the latest release does not bring the .whl package to install",
                      "la release mas reciente no trae el paquete .whl para instalar"),
+    "upd.deps_ok": ("Dependencias conferidas (nada novo para instalar).",
+                    "Dependencies checked (nothing new to install).",
+                    "Dependencias revisadas (nada nuevo para instalar)."),
+    "upd.deps_fail": ("A versao nova ja esta instalada, mas nao consegui conferir as "
+                      "dependencias ({erro}). Se algum recurso novo faltar, rode "
+                      "'bgh setup'.",
+                      "The new version is installed, but I could not check the "
+                      "dependencies ({erro}). If a new feature is missing, run "
+                      "'bgh setup'.",
+                      "La version nueva ya esta instalada, pero no pude revisar las "
+                      "dependencias ({erro}). Si falta algun recurso nuevo, corre "
+                      "'bgh setup'."),
+    "upd.deps_net": ("sem internet para conferir as dependencias ({tipo})",
+                     "no internet to check the dependencies ({tipo})",
+                     "sin internet para revisar las dependencias ({tipo})"),
+    "upd.deps_status": ("o GitHub respondeu {code} no requirements.txt",
+                        "GitHub answered {code} for requirements.txt",
+                        "GitHub respondio {code} en requirements.txt"),
     "upd.frozen": (
         "esta instalacao roda como arquivo unico (executavel) e nao tem um Python para "
         "receber a atualizacao - use o INSTALAR_TEO.bat novamente",

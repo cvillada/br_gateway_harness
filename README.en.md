@@ -251,6 +251,11 @@ Commands:
 | `/update` | checks for a new version on GitHub; if there is one, asks permission and installs (same version: says everything is fine) |
 | `/mem <text>` | saves a preference of yours in the memory |
 | `/language` | switches the screen language: 1) Portugues  2) English  3) Espanol (saved). Shortcuts: `/lingua`, `/idioma` |
+| `/voz` | accessibility: reads every answer out loud with the system voice (speech-dispatcher/espeak on Linux, System.Speech on Windows, `say` on macOS); type it again to turn off; ESC silences. Shortcut: `/voice` |
+| `/fundo` | screen background color: white, yellow, green, blue, red, black or `default`; the letters change on their own to stay readable (light background = dark letters). Shortcut: `/background` |
+| `/fonte` | letter size: 1 normal, 2 large, 3 larger, 4 huge. On Windows it changes right away; on Linux/macOS it reopens the window with zoom (or teaches your terminal keys). Shortcut: `/font` |
+| `/ditar` | accessibility: write by SPEAKING. TEO listens to the microphone, transcribes in the screen language and puts the text on the line for you to check before ENTER. The language model (pt/en/es, ~55 MB) is downloaded once on first use; after that it works offline and the sound never leaves your computer. Shortcuts: `/ditar`, `/dictar` |
+| `/limpar` | deletes the drafts TEO creates in the `scratch` folder (run_python scripts and voice texts) and reports the space freed; it asks first and never touches conversation, memory or skills. Shortcut: `/clean` |
 | `/new` `/skills` `/help` `/exit` | new conversation, skills, help, quit |
 
 Language: TEO speaks Portuguese (factory default), English and Spanish. The installer

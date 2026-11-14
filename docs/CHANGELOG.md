@@ -1,5 +1,106 @@
 # Changelog
 
+## 0.2.22
+
+Agora da para ESCREVER FALANDO: `/ditar`, nos tres idiomas, sem internet.
+
+- `/ditar` (`/dictate`, `/dictar`): a pessoa fala e o TEO escreve. O texto entra
+  na linha de digitar para conferir (e corrigir) antes do ENTER - nada e enviado
+  so porque foi falado.
+- Reconhecimento LOCAL (vosk/Kaldi, roda na CPU): o som NAO sai do computador e
+  nao precisa de chave nem de conta. Importa quando o publico e crianca e idoso.
+- Os tres idiomas da tela, de fabrica: portugues, ingles e espanhol. O ditado
+  SEGUE o `/lingua`: trocou a lingua da tela, o reconhecedor troca junto, sem
+  reiniciar (e os avisos tambem mudam de idioma).
+- O modelo de cada idioma (~40-55 MB) e baixado UMA vez, na primeira vez que a
+  pessoa dita naquele idioma, com aviso de tamanho e permissao; depois funciona
+  offline. Fica em `~/.bgh/models/vosk/` e NAO e apagado pelo `/limpar` (o
+  `/limpar` mexe so na pasta de rascunhos).
+- Vem na instalacao: `vosk` e `sounddevice` entram no `requirements.txt` (o
+  instalador ja roda `pip install -r`), e o `/atualizar` passou a conferir o
+  `requirements.txt` depois de trocar o wheel - sem isso, quem ja tinha instalado
+  nunca receberia a dependencia nova. Os binarios (`motor.exe`, `motor-macos`)
+  levam o vosk e a PortAudio dentro.
+- Se o pacote nao estiver instalado, o `/ditar` avisa em vez de falhar calado; se
+  o microfone estiver ocupado ou negado, avisa e a conversa continua.
+- O log tecnico do reconhecedor (Kaldi/Vosk) nao vaza mais para a tela: ele some
+  do terminal (era texto de depuracao no meio da conversa).
+- CTRL+C ou ESC durante a escuta corta a gravacao na hora, em vez de esperar o
+  fim da fala ou o teto de 25 segundos.
+- Correcao de usabilidade: quem cala a leitura e o **ESC**, nao o CTRL+C. Na
+  tela fixa o CTRL+C com a linha vazia FECHA o TEO, entao a ajuda que mandava usar
+  CTRL+C para calar a voz mandava a pessoa fechar o programa sem querer. O ESC
+  cala a voz e, quando o que estava tocando era a voz, nao apaga o que ja foi
+  digitado na linha; o CTRL+C continua com o papel dele (parar o modelo / sair).
+- Suite local: 483 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+  roda no push, junto do build.
+
+## 0.2.21
+
+Tres comandos novos: limpar os rascunhos, trocar a cor de fundo e aumentar a letra.
+
+- `/limpar` (`/clean`, `/limpiar`): apaga os arquivos que o TEO cria na pasta
+  `scratch` - os scripts da ferramenta `run_python` e os textos que a voz grava -
+  e diz quantos arquivos e quanto espaco foram liberados. Pergunta antes num menu
+  (1 apagar / 2 deixar), nunca apaga por conta propria e NAO toca em conversa,
+  memoria, skills nem configuracao, que ficam um nivel acima em `~/.bgh`.
+- `/fundo` (`/background`, `/fondo`): cor de fundo da tela - branco, amarelo,
+  verde, azul, vermelho, preto e "padrao" (a cor do seu terminal). A letra muda
+  sozinha para continuar legivel: fundo claro usa letra escura e fundo escuro usa
+  letra clara, inclusive nas cores de aviso/erro e no rodape. O contraste de cada
+  par e MEDIDO pela suite (regra WCAG AA), nao escolhido no olho.
+- A cor e aplicada pelo padrao do proprio terminal (OSC 11 para o fundo, OSC 10
+  para a letra): pinta a janela inteira, inclusive o que ja rolou. A tela do TEO
+  tambem se pinta, entao terminal que nao aceita a sequencia continua legivel.
+  Ao sair, o TEO devolve a cor do terminal - ele nao sequestra a janela.
+- `/fonte` (`/font`, `/fuente`): tamanho da letra em quatro passos (normal,
+  grande, maior, enorme). No Windows o console tem API e a letra muda na hora e
+  fica guardada para as proximas aberturas. No Linux/macOS a letra pertence ao
+  terminal: o TEO reabre uma janela nova com zoom (`gnome-terminal --zoom`,
+  `xterm -fs`, `kitty`, `alacritty`, `xfce4-terminal`) e avisa que a conversa
+  continua la; quando nao reconhece o terminal, ensina as teclas (CTRL e +).
+- A ajuda (`/ajuda`) ganhou os tres comandos nos tres idiomas.
+- Suite local: 457 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+  roda no push, junto do build.
+
+## 0.2.20
+
+A linha de digitar nao some mais pela direita, o ENTER se chama "enviar" e o TEO
+passou a LER as respostas em voz alta (`/voz`) - pensando em quem enxerga pouco.
+
+- Frase longa no `voce>`: quando o texto chegava no canto direito da tela, a
+  linha era empurrada para a esquerda e o comeco da frase desaparecia (a janela
+  de digitar rolava na horizontal em vez de quebrar). Agora o texto desce para a
+  linha de baixo, alinhado embaixo do `voce>`, e a janela cresce ate 8 linhas -
+  sem nunca empurrar a barra de baixo para fora da tela.
+- A correcao tem duas partes que so funcionam juntas: a janela de digitar passa
+  a QUEBRAR a linha (`wrap_lines=True`) e a altura dela passa a contar linhas de
+  TELA (uma frase de 103 colunas ocupa 4 linhas numa janela de 34), nao o numero
+  de ENTERs que a pessoa deu.
+- Barra de baixo: `ENTER = falar` virou `ENTER = enviar` (em ingles `ENTER =
+  send`, em espanhol `ENTER = enviar`) - a tecla manda a mensagem.
+- Ctrl+J e a barra invertida no fim da linha continuam quebrando linha como
+  antes; as setas cima/baixo continuam chamando o que ja foi digitado.
+- Acessibilidade: `/voz` liga e desliga a leitura em voz alta das respostas,
+  usando a voz do PROPRIO sistema - nada de instalar nada. Linux: `spd-say`
+  (speech-dispatcher) e, se ele nao responder, `espeak-ng`; Windows:
+  PowerShell + `System.Speech` (funciona offline; voz pt-BR se o pacote de
+  idioma estiver na maquina); macOS: `say` com a voz pt_BR instalada.
+- A voz le so a RESPOSTA final: pensamento (cinza), trilha das ferramentas,
+  avisos e mensagens de erro continuam calados - quem ouve quer a resposta, nao
+  o rascunho. Antes de falar, o texto perde cerca de codigo, markdown, cores e
+  linhas de separador, e resposta gigante e resumida em voz alta (o resto fica
+  na tela).
+- ESC cala a voz na hora (mesma tecla que para o modelo); mandar uma
+  pergunta nova tambem cala a leitura anterior; sair do TEO cala. No Linux quem
+  fala e o speech-dispatcher, entao o corte usa o comando de cancelar dele
+  (`spd-say -C`) - matar o cliente nao calaria nada.
+- O estado da voz fica gravado no `config.json`, comeca DESLIGADA (quem nao
+  precisa nao ouve nada) e, se a maquina nao tiver voz do sistema, o `/voz`
+  avisa em vez de fingir que ligou.
+- Suite local: 405 testes verdes nesta maquina; o CI (ubuntu, windows, macos)
+  roda no push, junto do build.
+
 ## 0.2.18
 
 O aviso amarelo do "continue" acaba tambem para quem instalou antes.

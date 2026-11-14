@@ -53,6 +53,14 @@ DEFAULTS = {
     # 8192 comporta ~28 mil. DeepSeek V4 aceita ate 384 mil; motor local para no
     # fim natural do texto, entao nao custa nada quando a resposta e curta.
     "max_tokens": 8192,
+    # Acessibilidade (/voz): le cada resposta em voz alta com a voz do SISTEMA
+    # (spd-say/espeak-ng, SAPI do Windows, say do Mac). Desligado por padrao.
+    "voz": False,
+    # Acessibilidade visual (/fundo): cor de fundo da tela. "padrao" = a do
+    # terminal; as outras pintam a janela e escolhem letra de contraste.
+    "cor_fundo": "padrao",
+    # Tamanho da letra (/fonte): 1 normal, 2 grande, 3 maior, 4 enorme.
+    "fonte": 1,
     # Resposta em streaming (aparece digitada ao vivo); cai para modo normal se o servidor nao suportar.
     "stream": True,
     # thinking: auto | off | minimum | low | medium | high | xhigh | max | ultra

@@ -51,7 +51,7 @@ def chat(_args) -> int:
         # Janela ja com nome e maximizada ANTES de a tela desenhar (rodape inteiro).
         from .chat_core import prepare_console
 
-        prepare_console()
+        prepare_console(cfg)
     if use_tui:
         try:
             from .tui import run_tui
@@ -60,18 +60,26 @@ def chat(_args) -> int:
         if use_tui:
             return run_tui(cfg)
 
-    sink = ConsoleSink()
+    from . import tela
+
+    sink = ConsoleSink(cfg)
+    sink.aplicar_tema()            # cor de fundo escolhida (se houver)
     core = ChatCore(cfg, sink)
     core.banner()
     core.check_update_on_start()   # uma vez, em segundo plano (aviso de versao nova)
-    while True:
-        try:
-            user = sink.read_prompt()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if core.submit(user) == "exit":
-            break
+    try:
+        while True:
+            try:
+                user = sink.read_prompt()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            if core.submit(user) == "exit":
+                break
+    finally:
+        # Sair devolve a cor de fundo do terminal (o TEO nao sequestra a janela).
+        if tela.paleta(tela.cor(cfg)).get("bg"):
+            tela.escrever(tela.RESET_FUNDO)
     return 0
 
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from . import i18n
+from . import i18n, limpeza, tela, voz
 from .agent import Agent, STOPPED_NOTE
 from .i18n import t
 from .approvals import Gate
@@ -80,10 +80,14 @@ def maximize_window() -> None:
         pass
 
 
-def prepare_console() -> None:
-    """Nome na janela + tela maximizada: chamado ANTES da primeira tela."""
+def prepare_console(cfg: dict | None = None) -> None:
+    """Nome na janela + tela maximizada (+ letra no Windows): antes da 1a tela."""
     set_window_title("TEO Agent")
     maximize_window()
+    if os.name == "nt":
+        # Tamanho da letra escolhido no /fonte vale ja nesta abertura (Windows tem
+        # API para isso; Linux/macOS dependem do proprio terminal).
+        tela.fonte_windows(tela.nivel(cfg))
 
 
 def ctx_parts(cfg: dict, usage: dict) -> tuple[str, str]:
@@ -201,8 +205,10 @@ def parse_budget(raw: str) -> int | None:
 class ConsoleSink:
     """Affiche classica (rich), usada quando nao ha tela fixa."""
 
-    def __init__(self):
-        self.console = Console()
+    def __init__(self, cfg: dict | None = None):
+        self.cfg = cfg if cfg is not None else {}
+        self.pendente = ""     # texto ditado que vira a proxima linha digitada
+        self.console = Console(style=tela.estilo_rich(tela.cor(self.cfg)) or None)
 
     def line(self, text: str, style: str | None = None) -> None:
         self.console.print(text, style=style or "", markup=False)
@@ -236,7 +242,26 @@ class ConsoleSink:
     def status(self, text: str) -> None:
         pass  # sem barra de status no modo classico
 
+    def aplicar_tema(self) -> None:
+        """Cor de fundo no modo classico: OSC 11 + letra de contraste no rich."""
+        nome = tela.cor(self.cfg)
+        seq = tela.escape_fundo(nome)
+        if not seq and getattr(self, "_cor_pintada", "padrao") != "padrao":
+            seq = tela.RESET_FUNDO      # voltou ao padrao: devolve a cor do terminal
+        self._cor_pintada = nome
+        tela.escrever(seq)
+        self.console = Console(style=tela.estilo_rich(nome) or None)
+
+    def preencher(self, texto: str) -> None:
+        """Modo classico: nao existe linha editavel; o texto vira a proxima entrada."""
+        self.pendente = str(texto)
+
     def read_prompt(self) -> str:
+        if self.pendente:
+            texto, self.pendente = self.pendente, ""
+            # mostra o que vai ser enviado, com o mesmo rotulo da linha de digitar
+            self.console.print(f"{t('sink.prompt')}{texto}", markup=False)
+            return texto
         return self.console.input(f"\n[bold cyan]{t('sink.prompt')}[/bold cyan]")
 
     def ask_line(self, prompt: str, default: str = "", secret: bool = False) -> str:
@@ -730,6 +755,7 @@ class ChatCore:
             what = i18n.canon(parts[0].lower().lstrip("/"))
             rest = parts[1].strip() if len(parts) > 1 else ""
             if what == "exit":
+                voz.parar()        # sair cala a voz antes de fechar a tela
                 return "exit"
             elif what == "help":
                 self.sink.border()   # abre a lista
@@ -819,9 +845,10 @@ class ChatCore:
                     self.llm.cfg["thinking"] = alvo_t
                     self.sink.line(t("cmd.thinking.level", level=alvo_t), style="cyan")
                 elif not rest:
-                    tela = (t("onoff.on") if self.cfg.get("show_thinking", True)
+                    # (nome diferente de "tela": bgh/tela.py e o modulo de cores/fonte)
+                    estado_tela = (t("onoff.on") if self.cfg.get("show_thinking", True)
                             else t("onoff.off"))
-                    self.sink.line(t("cmd.thinking.status", onoff=tela,
+                    self.sink.line(t("cmd.thinking.status", onoff=estado_tela,
                                      level=self.cfg.get("thinking", "auto"),
                                      cmd=i18n.cmd("thinking")))
                 else:
@@ -879,6 +906,206 @@ class ChatCore:
                     )
                     if escolha in opcoes:
                         self._set_lang(i18n.LANGS[opcoes.index(escolha)])
+            elif what == "voice":
+                # Acessibilidade: le a resposta em voz alta com a voz do SISTEMA.
+                # Sem argumento, cada /voz inverte o estado (mais facil de lembrar).
+                alvo_v = rest.lower()
+                if alvo_v in ("liga", "ligar", "on", "enable", "activar", "activa",
+                              "encender", "sim", "yes", "si"):
+                    novo_v = True
+                elif alvo_v in ("desliga", "desligar", "off", "parar", "disable",
+                                "desactivar", "desactiva", "apagar", "nao", "no"):
+                    novo_v = False
+                elif not rest:
+                    novo_v = not bool(self.cfg.get("voz", False))
+                else:
+                    self.sink.line(t("cmd.voz.bad", cmd=i18n.cmd("voice")),
+                                   style="yellow")
+                    return "continue"
+                if novo_v and not voz.disponivel():
+                    # Nao ha como falar nesta maquina: avisa e NAO liga. Ligar sem voz
+                    # deixaria a barra dizendo "voz ligada" com a tela muda.
+                    self.cfg["voz"] = False
+                    save_config(self.cfg)
+                    self.sink.line(t("cmd.voz.no_backend"), style="yellow")
+                    return "continue"
+                self.cfg["voz"] = novo_v
+                save_config(self.cfg)
+                if not novo_v:
+                    voz.parar()
+                    self.sink.line(t("cmd.voz.off"), style="cyan")
+                else:
+                    self.sink.line(t("cmd.voz.on", voz=voz.nome_do_backend(),
+                                     cmd=i18n.cmd("voice")), style="cyan")
+                    voz.falar(t("cmd.voz.hello"))
+            elif what == "clean":
+                # Rascunhos do TEO: scripts do run_python e textos da voz. Nada de
+                # conversa/memoria/skills mora aqui - a frase final diz isso.
+                quantos, tamanho = limpeza.varrer()
+                if not quantos:
+                    self.sink.line(t("cmd.clean.empty"), style="dim")
+                    return "continue"
+                tam_txt = limpeza.tamanho_legivel(tamanho)
+                apagar = str(rest).strip().lower() in ("sim", "yes", "si", "s", "sì")
+                if not apagar:
+                    if hasattr(self.sink, "ask_choice"):
+                        escolha = self.sink.ask_choice(
+                            t("cmd.clean.title"),
+                            t("cmd.clean.ask", n=quantos, size=tam_txt),
+                            [t("cmd.clean.yes"), t("cmd.clean.no")],
+                        )
+                        apagar = escolha == t("cmd.clean.yes")
+                    else:
+                        # Sem menu: nunca apagar sozinho. Ensina o jeito certo.
+                        self.sink.line(t("cmd.clean.ask", n=quantos, size=tam_txt))
+                        self.sink.line(t("cmd.clean.confirm_hint",
+                                         cmd=i18n.cmd("clean")), style="dim")
+                        return "continue"
+                if not apagar:
+                    self.sink.line(t("cmd.clean.cancel"), style="dim")
+                    return "continue"
+                apagados, liberado = limpeza.limpar()
+                self.sink.line(t("cmd.clean.ok", n=apagados,
+                                 size=limpeza.tamanho_legivel(liberado),
+                                 nota=t("cmd.clean.nota")), style="cyan")
+            elif what == "background":
+                alvo_f = tela.nome_do_texto(rest) if rest else None
+                if rest and not alvo_f:
+                    self.sink.line(t("cmd.fundo.bad", cmd=i18n.cmd("background")),
+                                   style="yellow")
+                    return "continue"
+                if not rest:
+                    opcoes_f = [t("cor." + nome) for nome in tela.NOMES]
+                    if hasattr(self.sink, "ask_choice"):
+                        escolha_f = self.sink.ask_choice(
+                            t("cmd.fundo.title"),
+                            t("cmd.fundo.ask", first=opcoes_f[0]), opcoes_f)
+                        if escolha_f in opcoes_f:
+                            alvo_f = tela.NOMES[opcoes_f.index(escolha_f)]
+                    if not alvo_f:
+                        # Sem menu: mostra o atual e as opcoes numa linha so.
+                        self.sink.line(t("cmd.fundo.list",
+                                         atual=t("cor." + tela.cor(self.cfg)),
+                                         cores=", ".join(t("cor." + n) for n in tela.NOMES),
+                                         cmd=i18n.cmd("background")))
+                        return "continue"
+                if not alvo_f:
+                    return "continue"
+                self.cfg["cor_fundo"] = alvo_f
+                save_config(self.cfg)
+                aplicar = getattr(self.sink, "aplicar_tema", None)
+                if aplicar:
+                    aplicar()          # pinta a tela AGORA, sem precisar reabrir
+                if alvo_f == "padrao":
+                    self.sink.line(t("cmd.fundo.off"), style="cyan")
+                else:
+                    self.sink.line(t("cmd.fundo.now", cor=t("cor." + alvo_f),
+                                     cmd=i18n.cmd("background")), style="cyan")
+            elif what == "font":
+                novo_n = tela.nivel_do_texto(rest) if rest else None
+                if rest and novo_n is None:
+                    self.sink.line(t("cmd.fonte.bad", cmd=i18n.cmd("font")),
+                                   style="yellow")
+                    return "continue"
+                if not rest:
+                    opcoes_n = [t("fonte." + tela.NIVEIS[n]) for n in sorted(tela.NIVEIS)]
+                    if hasattr(self.sink, "ask_choice"):
+                        escolha_n = self.sink.ask_choice(
+                            t("cmd.fonte.title"),
+                            t("cmd.fonte.ask", first=opcoes_n[0]), opcoes_n)
+                        if escolha_n in opcoes_n:
+                            novo_n = sorted(tela.NIVEIS)[opcoes_n.index(escolha_n)]
+                    if novo_n is None:
+                        self.sink.line(t("cmd.fonte.list",
+                                         atual=t("fonte." + tela.NIVEIS[tela.nivel(self.cfg)]),
+                                         niveis=", ".join(
+                                             f"{n} {t('fonte.' + tela.NIVEIS[n])}"
+                                             for n in sorted(tela.NIVEIS)),
+                                         cmd=i18n.cmd("font")))
+                        return "continue"
+                if novo_n is None:
+                    return "continue"
+                self.cfg["fonte"] = novo_n
+                save_config(self.cfg)
+                nome_n = t("fonte." + tela.NIVEIS[novo_n])
+                if os.name == "nt":
+                    # Windows: a altura da letra muda de verdade, na hora.
+                    if tela.fonte_windows(novo_n):
+                        self.sink.line(t("cmd.fonte.now_win", nivel=nome_n), style="cyan")
+                    else:
+                        self.sink.line(t("cmd.fonte.teclas",
+                                         teclas=tela.teclas_do_terminal("")), style="yellow")
+                elif tela.reabrir(novo_n):
+                    # Linux/macOS: janela nova do terminal com zoom; esta fecha em seguida.
+                    self.sink.line(t("cmd.fonte.now_linux", nivel=nome_n), style="cyan")
+                    return "exit"
+                else:
+                    self.sink.line(t("cmd.fonte.teclas",
+                                     teclas=tela.teclas_do_terminal(tela.terminal_atual())),
+                                   style="yellow")
+            elif what == "dictate":
+                # Acessibilidade: escrever falando. O reconhecedor segue o idioma da
+                # TELA (/lingua): trocou o idioma, o modelo do ditado troca junto.
+                from . import ditar
+
+                idioma_d = i18n.get_lang()
+                nome_idioma = i18n.LANG_NAMES.get(idioma_d, idioma_d)
+                if not ditar.tem_motor():
+                    self.sink.line(t("cmd.ditar.sem_motor"), style="yellow")
+                    return "continue"
+                if not ditar.tem_modelo(idioma_d):
+                    quer = str(rest).strip().lower() in ("baixar", "download", "bajar")
+                    opcoes_d = [t("common.approve_once"), t("common.cancel")]
+                    if not quer and hasattr(self.sink, "ask_choice"):
+                        escolha_d = self.sink.ask_choice(
+                            t("cmd.ditar.title"),
+                            t("cmd.ditar.baixar_ask", idioma=nome_idioma,
+                              mb=ditar.tamanho_mb(idioma_d)),
+                            opcoes_d)
+                        quer = escolha_d == opcoes_d[0]
+                    if not quer:
+                        self.sink.line(t("cmd.ditar.baixar_hint", idioma=nome_idioma,
+                                         cmd=i18n.cmd("dictate")), style="dim")
+                        return "continue"
+                    ultimo = {"pct": -10}
+
+                    def _progresso(pct: int) -> None:
+                        # uma linha a cada 20%: barulho na tela nao ajuda ninguem
+                        if pct - ultimo["pct"] >= 20:
+                            ultimo["pct"] = pct
+                            self.sink.line(t("cmd.ditar.baixando", idioma=nome_idioma,
+                                             pct=pct), style="dim")
+
+                    baixou_d, detalhe_d = ditar.baixar_modelo(idioma_d, ao_progresso=_progresso)
+                    if not baixou_d:
+                        motivo_d = ("sem internet" if detalhe_d == "sem_conexao"
+                                    else "o arquivo veio com problema")
+                        self.sink.line(t("cmd.ditar.baixou_falhou", motivo=motivo_d,
+                                         cmd=i18n.cmd("dictate")), style="yellow")
+                        return "continue"
+                    quantos_d, bytes_d = limpeza.varrer(ditar.modelo_dir(idioma_d))
+                    self.sink.line(t("cmd.ditar.baixou", idioma=nome_idioma,
+                                     tam=limpeza.tamanho_legivel(bytes_d)), style="cyan")
+                self.sink.line(t("cmd.ditar.ouvindo"), style="cyan")
+                # CTRL+C/ESC durante a escuta para a gravacao na hora (o mesmo
+                # botao que a pessoa ja usa para parar o modelo).
+                evento_d = getattr(self.agent, "stop_event", None)
+                if evento_d is not None:
+                    evento_d.clear()
+                falado = ditar.escutar(idioma_d,
+                                       parar=evento_d.is_set if evento_d else None)
+                if not falado.strip():
+                    self.sink.line(t("cmd.ditar.vazio", cmd=i18n.cmd("dictate")),
+                                   style="yellow")
+                    return "continue"
+                self.sink.line(t("cmd.ditar.entendi", texto=falado), style="cyan")
+                preencher = getattr(self.sink, "preencher", None)
+                if preencher is not None:
+                    # Tela fixa/modo classico: o texto entra na linha para conferir.
+                    preencher(falado)
+                    self.sink.line(t("cmd.ditar.revisar"), style="dim")
+                else:
+                    self.sink.line(t("cmd.ditar.revisar_simples"), style="dim")
             elif what == "setup":
                 return self._run_setup_wizard()
             elif what == "doctor":
@@ -887,7 +1114,8 @@ class ChatCore:
                 doctor_report(lambda texto: self.sink.line(str(texto)))
             elif what == "update":
                 from . import __version__
-                from .updater import apply_update, fetch_latest, python_bin, update_needed
+                from .updater import (apply_update, fetch_latest, garantir_dependencias,
+                                      python_bin, update_needed)
 
                 info, err_upd = fetch_latest()
                 if info is None or err_upd:
@@ -920,6 +1148,13 @@ class ChatCore:
                 if ok_upd:
                     self.sink.line(t("cmd.update.done", version=info["version"],
                                      exit=i18n.cmd("exit")), style="cyan")
+                    # O wheel vai com --no-deps: sem esta passada, uma dependencia
+                    # NOVA (ex.: vosk do ditado) nunca chegaria a quem atualiza.
+                    ok_dep, msg_dep = garantir_dependencias()
+                    if ok_dep:
+                        self.sink.line(t("upd.deps_ok"), style="dim")
+                    else:
+                        self.sink.line(t("upd.deps_fail", erro=msg_dep), style="yellow")
                 else:
                     self.sink.line(t("cmd.update.failed", err=msg_upd), style="red")
                     self.sink.line(t("cmd.update.fallback"), style="yellow")
@@ -945,6 +1180,8 @@ class ChatCore:
         self.pending_attach = None
         imagem = self.pending_image
         self.pending_image = None
+        # Pergunta nova cala a leitura da resposta anterior (a pessoa quer a nova).
+        voz.parar()
         # Continuacao estilo Hermes: mensagens digitadas durante o turno que chegaram
         # tarde viram o proximo turno automaticamente (nada se perde).
         fila_turnos: list[str] = [user_text]
@@ -959,7 +1196,8 @@ class ChatCore:
                 answer = self.agent.run_turn(turno, imagem=imagem)
                 imagem = None
             except KeyboardInterrupt:
-                # CTRL+C no modo classico tambem para o turno.
+                # CTRL+C no modo classico tambem para o turno (e cala a voz).
+                voz.parar()
                 self.agent.stop_event.set()
                 answer = STOPPED_NOTE
             except LLMRateLimitError as exc:
@@ -1012,6 +1250,10 @@ class ChatCore:
                   and str(getattr(self.llm, "last_finish", "") or "") == "length"):
                 # Resposta cortada no meio pelo teto de saida: avisa e ensina a seguir.
                 self.sink.line(t("turn.cut"), style="yellow")
+            if (self.cfg.get("voz") and answer.strip() and answer != STOPPED_NOTE):
+                # Acessibilidade: a resposta inteira em voz alta (o raciocinio e as
+                # ferramentas ficam de fora: quem ouve nao quer o rascunho).
+                voz.falar(answer)
             if answer == STOPPED_NOTE:
                 # Turno parado nao emenda as mensagens guardadas: quem mandou parar
                 # decide se quer continuar. Elas sao devolvidas como aviso.

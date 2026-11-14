@@ -27,6 +27,7 @@ import shutil
 import textwrap
 import threading
 import time
+from collections.abc import Callable
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.run_in_terminal import run_in_terminal
@@ -38,14 +39,29 @@ from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style
+from prompt_toolkit.utils import get_cwidth
 
-from . import i18n, palco
+from . import i18n, palco, tela, voz
 from .chat_core import (LINE, ChatCore, build_approval_options, help_lines, log_error,
                         parse_approval_choice)
 from .config import INPUT_HISTORY_FILE
 from .i18n import t
 
 FRAMES = "|/-\\"  # bonequinho de espera do "rodando..." na barra de baixo
+
+
+def linhas_de_tela(texto: str, largura: int) -> int:
+    """Quantas linhas DE TELA o texto ocupa numa janela de 'largura' colunas.
+
+    Uma frase longa nao tem '\n' nenhum, mas ocupa varias linhas de tela. Quem
+    dimensiona a janela de digitar pela contagem de '\n' deixa o texto sem
+    lugar para a continuacao e ele e empurrado para a esquerda ate sumir.
+    """
+    livre = max(10, int(largura))
+    total = 0
+    for linha in str(texto or "").split("\n"):
+        total += max(1, -(-get_cwidth(linha) // livre))
+    return total
 
 
 def quer_continuar(texto: str) -> bool:
@@ -187,23 +203,10 @@ def flush_plan(rows: list, open_tail: bool, printed: int, wrap_width: int) -> tu
     return safe, rows[printed:safe]
 
 
-STYLE = Style.from_dict(
-    {
-        "th": "#808080",       # pensamento do modelo: cinza escuro
-        "an": "#ffffff",       # resposta: branco claro
-        "tool": "#5f87af",     # eventos de ferramenta: azul suave
-        "voce": "#5fd7ff",     # eco da fala do usuario: azul-claro
-        "rule": "dim",
-        "input": "bold",
-        "footer": "bg:#333333 #ffffff",
-        "footer.hot": "bg:#333333 #ffcc00 bold",
-        "palco": "#ffffff",                        # trilha: branca (destacada)
-        "palco.sel": "#000000 bg:#5fd7ff bold",    # etapa atual: como item de menu selecionado
-        "palco.on": "#5fd7ff bold",                # marcador embaixo da etapa: azul
-        "palco.tk": "#87d7ff",                     # contagem de tokens por etapa
-        "palco.dim": "#d7d7d7",                    # linha de detalhes (mais clara)
-    }
-)
+# Cores da tela viva em bgh/tela.py: o /fundo escolhe a paleta e a letra de
+# contraste (fundo claro -> letra escura). Aqui fica so a paleta PADRAO, usada
+# quando a pessoa nao escolheu cor nenhuma.
+STYLE = Style.from_dict(tela.estilo_prompt("padrao"))
 
 
 class TuiSink:
@@ -213,6 +216,10 @@ class TuiSink:
     menu_arquivos = True
 
     def __init__(self, emit, close_line, state, width_fn=None):
+        # callback que repinta a tela quando o /fundo muda
+        self.tema_fn: Callable[[], None] | None = None
+        # callback que poe o texto ditado (/ditar) na linha de digitar
+        self.preencher_fn: Callable[[str], None] | None = None
         self.emit = emit
         self.close_line = close_line
         self.state = state
@@ -264,6 +271,18 @@ class TuiSink:
 
     def status(self, text: str) -> None:
         pass  # a barra de baixo monta o status sozinha a partir do estado
+
+    def aplicar_tema(self) -> None:
+        """Repinta a tela com a cor escolhida no /fundo (callback de run_tui)."""
+        fn = getattr(self, "tema_fn", None)
+        if fn is not None:
+            fn()
+
+    def preencher(self, texto: str) -> None:
+        """Texto ditado entra na linha de digitar: a pessoa confere antes do ENTER."""
+        fn = getattr(self, "preencher_fn", None)
+        if fn is not None:
+            fn(str(texto))
 
     def set_ctx(self, text: str, pct: int | None = None, hot_pct: int | None = None,
                 extra: str = "") -> None:
@@ -392,11 +411,23 @@ def run_tui(cfg: dict) -> int:
         open_tail = bool(board.entries and board.entries[-1][2])
         n_new, to_print = flush_plan(rows, open_tail, printed["n"], max(10, cols - 2))
         printed["n"] = n_new
+        tem_fundo = bool(tela.paleta(tela.cor(cfg)).get("bg"))
         for segs in to_print:
             frags = []
+            usado = 0
             for style, piece in segs:
-                cls = f"class:{style}" if style in ("th", "an", "tool", "voce") else (style or "")
+                if style in ("th", "an", "tool", "voce"):
+                    cls = f"class:{style}"
+                else:
+                    cls = tela.classe(style, tem_fundo)
                 frags.append((cls, piece))
+                usado += get_cwidth(piece)
+            if tem_fundo:
+                # completa a linha com a cor de fundo ate a borda: sem isso a
+                # resposta seria uma faixa clara no meio de uma tela escura.
+                sobra = " " * max(0, cols - usado)
+                if sobra:
+                    frags.append(("class:bg", sobra))
             frags.append(("", "\n"))  # print_text NAO acrescenta a quebra sozinho
             run_in_terminal(lambda f=frags: app.print_text(f))
 
@@ -424,22 +455,78 @@ def run_tui(cfg: dict) -> int:
         _schedule(_close_line)
 
     sink = TuiSink(emit, close_line, state, width_fn=lambda: _term_size()[0])
+
+    pintado = {"cor": tela.cor(cfg)}
+
+    def _aplicar_tema() -> None:
+        """Pinta o fundo AGORA e troca a paleta (letra de contraste junto)."""
+        if app is None:
+            return
+        nome = tela.cor(cfg)
+        seq = tela.escape_fundo(nome)
+        if not seq and pintado["cor"] != "padrao":
+            seq = tela.RESET_FUNDO     # /fundo padrao: devolve a cor do terminal AGORA
+        pintado["cor"] = nome
+        try:
+            app.output.write_raw(seq)
+            app.output.flush()
+        except Exception as exc:  # noqa: BLE001 - cor e enfeite, nunca necessidade
+            log_error(exc, "cor de fundo da tela")
+        app.style = Style.from_dict(tela.estilo_prompt(nome))
+        app.invalidate()
+
+    sink.tema_fn = _aplicar_tema    # o /fundo chama por aqui (ver chat_core)
+
+    def _preencher(texto: str) -> None:
+        """Poe o texto ditado na linha de digitar, com o cursor no fim."""
+        def _aplica() -> None:
+            try:
+                atual = in_buf.text
+                in_buf.text = (atual + " " + texto).strip() if atual.strip() else texto
+                in_buf.cursor_position = len(in_buf.text)
+            except Exception as exc:  # noqa: BLE001 - linha nunca derruba o app
+                log_error(exc, "texto ditado na linha")
+            if app is not None:
+                app.invalidate()
+
+        _schedule(_aplica)
+
+    sink.preencher_fn = _preencher
     core = ChatCore(cfg, sink)
 
     # ----- layout: so a parte fixa (o resto e o historico do proprio terminal) --
     rule_top = Window(height=1, char="-", style="class:rule")
+
     def _altura_entrada():
-        # cresce com as linhas digitadas (ate 8) e volta a 1 depois de enviar
+        """Altura da janela de digitar em linhas DE TELA (nao em '\\n').
+
+        Linha comprida quebra em varias linhas de tela: se a janela ficasse com
+        a contagem de linhas logicas (1), o prompt_toolkit nao teria onde
+        desenhar a continuacao e empurrava o texto para a esquerda, comendo o
+        comeco da frase (reclamacao real: "a linha desaparece no canto direito").
+        Cresce ate 8 linhas e nunca empurra a barra de baixo para fora da tela.
+        """
         try:
-            return max(1, min(8, in_buf.document.line_count))
+            cols, rows = _term_size()
+            visuais = linhas_de_tela(in_buf.text, cols - get_cwidth(t("sink.prompt")))
+            try:                       # palco aberto come 5 linhas da tela
+                ocupado = 5 if _palco_largo_visivel() else 0
+            except Exception:          # noqa: BLE001 - primeira pintura
+                ocupado = 0
+            return max(1, min(8, visuais, rows - 4 - ocupado))
         except Exception:  # noqa: BLE001 - desenho nunca derruba a tela
             return 1
 
-    input_win = Window(BufferControl(in_buf), height=_altura_entrada, style="class:input")
+    # wrap_lines=True: a linha de digitar QUEBRA embaixo em vez de rolar para a
+    # esquerda. Precisa vir junto com a altura acima - so um dos dois nao basta
+    # (com altura 1 o texto quebrado aparece cortado; sem a quebra ele sai da tela).
+    input_win = Window(BufferControl(in_buf), height=_altura_entrada,
+                       style="class:input", wrap_lines=True)
+
     # Rotulo da linha de digitar desenhado A CADA pintura: o /lingua troca
     # 'voce>' por 'you>'/'tu>' na mesma tela, sem reiniciar.
     prompt_win = Window(FormattedTextControl(lambda: [("", t("sink.prompt"))]),
-                        dont_extend_width=True, height=1)
+                        dont_extend_width=True, height=1, style="class:input")
     input_row = VSplit([prompt_win, input_win])
     rule_bottom = Window(height=1, char="-", style="class:rule")
 
@@ -502,7 +589,8 @@ def run_tui(cfg: dict) -> int:
         holder["ev"].set()
 
     def request_stop_or_exit() -> None:
-        """CTRL+C/ESC: nega licenca > para resposta em andamento > fecha o TEO."""
+        """CTRL+C/ESC: cala a voz > nega licenca > para a resposta > fecha o TEO."""
+        voz.parar()      # a voz nunca continua falando depois do pedido de parar
         holder = state.get("approval")
         if holder is not None:
             resolve_approval(holder.get("deny_code", "d"))
@@ -626,11 +714,15 @@ def run_tui(cfg: dict) -> int:
 
     @kb.add("escape")
     def _esc(event):
-        # ESC para/licenca/limpa linha, mas NUNCA fecha o app sozinho (crianca
-        # apertando ESC por engano nao perde a conversa; fechar e so CTRL+C).
+        # ESC cala a VOZ e para/licenca/limpa linha, mas NUNCA fecha o app sozinho
+        # (crianca apertando ESC por engano nao perde a conversa; fechar e CTRL+C).
+        # Decisao de projeto: CTRL+C com a linha vazia SAI, entao nao serve para calar -
+        # a tecla de calar e o ESC (o texto digitado fica, so a voz para).
+        calava = voz.falando()
+        voz.parar()
         if state.get("approval") is not None or state["busy"]:
             request_stop_or_exit()
-        elif in_buf.text:
+        elif in_buf.text and not calava:
             in_buf.reset()
 
     @kb.add("c-d")
@@ -646,6 +738,16 @@ def run_tui(cfg: dict) -> int:
     def _hist_down(event):
         in_buf.history_forward()   # volta para a mais nova / rascunho atual
 
+    def _pinta_fundo() -> None:
+        """Manda a cor de fundo para o terminal (OSC 11); ignorada se nao aceitar."""
+        if app is None:
+            return
+        try:
+            app.output.write_raw(tela.escape_fundo(tela.cor(cfg)))
+            app.output.flush()
+        except Exception as exc:  # noqa: BLE001 - cor e enfeite, nunca necessidade
+            log_error(exc, "cor de fundo da abertura")
+
     def _start_ui() -> None:
         """Relogio do bonequinho + carga do historico das setas + boas-vindas.
 
@@ -660,6 +762,7 @@ def run_tui(cfg: dict) -> int:
                     state["spin"] = (state["spin"] + 1) % 4
                     app.invalidate()
 
+        _pinta_fundo()      # cor escolhida ANTES de a primeira tela desenhar
         app.create_background_task(spin())
         in_buf.load_history_if_not_yet_loaded()
         core.banner()      # boas-vindas + ajuda ja no historico do terminal
@@ -670,7 +773,7 @@ def run_tui(cfg: dict) -> int:
         layout=layout,
         key_bindings=kb,
         full_screen=False,  # historico natural do terminal (rodinha/barra dele)
-        style=STYLE,
+        style=Style.from_dict(tela.estilo_prompt(tela.cor(cfg))),
     )
     layout.focus(input_win)
 
@@ -681,6 +784,11 @@ def run_tui(cfg: dict) -> int:
         # traceback na cara do usuario. Agora fecha limpo, como o /sair.
         pass
     finally:
+        # Sair da tela cala a voz: nada de resposta falando num terminal ja fechado.
+        voz.parar()
+        # Devolve a cor de fundo do terminal (o TEO nao sequestra a janela).
+        if tela.paleta(tela.cor(cfg)).get("bg"):
+            tela.escrever(tela.RESET_FUNDO)
         # Se a pessoa fechou o app com uma pergunta/licenca pendente, devolve o
         # padrao dela (negar no menu, valor padrao no assistente) e libera o worker.
         holder = state.get("approval")

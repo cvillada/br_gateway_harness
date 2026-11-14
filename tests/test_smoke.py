@@ -1419,12 +1419,21 @@ def _payload_novo26(tag):
 
 
 _orig_get26 = _upd26.requests.get
+_orig_mod26 = _upd26.requests          # modulo inteiro: e isso que volta no finally
 _orig_run26 = _upd26.subprocess.run
 _cmds_upd26: list[list] = []
+def _get_upd26(*a, **k):
+    """Release para a API e requirements para o raw (o /atualizar usa os dois)."""
+    url = str(a[0] if a else k.get("url") or "")
+    if "requirements.txt" in url:
+        return types.SimpleNamespace(status_code=200, text="vosk>=0.3.45\n",
+                                     json=lambda: {})
+    return _RespFake26(_payload_novo26("v9.9.9"))
+
+
 try:
     # Cenario A: existe versao nova -> pede licenca (RecSink responde opcao 1) e roda o pip certo.
-    _upd26.requests = types.SimpleNamespace(
-        get=lambda *a, **k: _RespFake26(_payload_novo26("v9.9.9")))
+    _upd26.requests = types.SimpleNamespace(get=_get_upd26)
     _upd26.subprocess.run = lambda cmd, **k: (
         _cmds_upd26.append(cmd),
         types.SimpleNamespace(returncode=0, stdout="", stderr=""))[1]
@@ -1435,9 +1444,15 @@ try:
        any("ATUALIZAR O TEO" in l for l in _sink_upd26.lines)
        and any("Baixando e instalando a versao v9.9.9" in l for l in _sink_upd26.lines))
     ok("instala com a receita oficial (pip --no-deps --force-reinstall no wheel da release)",
-       len(_cmds_upd26) == 1 and "--force-reinstall" in _cmds_upd26[0]
+       _cmds_upd26 and "--force-reinstall" in _cmds_upd26[0]
        and "--ignore-installed" in _cmds_upd26[0]
        and "--no-deps" in _cmds_upd26[0] and _cmds_upd26[0][-1].endswith(".whl"))
+    # Wheel vai com --no-deps: a passada do requirements e o que faz uma
+    # dependencia NOVA (ex.: vosk do ditado) chegar em quem atualiza.
+    ok("depois do wheel o TEO confere o requirements.txt (dependencia nova chega)",
+       len(_cmds_upd26) == 2 and "-r" in _cmds_upd26[1]
+       and "--no-deps" not in _cmds_upd26[1])
+    _n_cmds_a26 = len(_cmds_upd26)
     ok("sucesso manda fechar e reabrir para o codigo novo valer",
        any("Atualizado para v9.9.9" in l and "abra o TEO de novo" in l for l in _sink_upd26.lines))
 
@@ -1450,7 +1465,7 @@ try:
     ok("mesma versao: avisa 'ja esta atualizado' e nao oferece instalacao",
        any("ja esta atualizado" in l for l in _sink_upd_b26.lines)
        and not any("ATUALIZAR O TEO" in l for l in _sink_upd_b26.lines)
-       and len(_cmds_upd26) == 1)  # nenhum pip novo foi rodado
+       and len(_cmds_upd26) == _n_cmds_a26)  # nenhum pip novo foi rodado
 
     # Cenario C: usuario recusa -> nada muda.
     _upd26.requests = types.SimpleNamespace(
@@ -1460,7 +1475,8 @@ try:
     _core_upd_c26 = ChatCore(dict(core_cfg), _sink_upd_c26, llm=_ListLLM26())
     _core_upd_c26.submit("/atualizar")
     ok("licenca negada: cancela sem tocar em nada",
-       any("cancelada" in l for l in _sink_upd_c26.lines) and len(_cmds_upd26) == 1)
+       any("cancelada" in l for l in _sink_upd_c26.lines)
+       and len(_cmds_upd26) == _n_cmds_a26)
 
     # Cenario D: GitHub inacessivel -> frase amigavel, nunca traceback.
     def _boom26(*a, **k):
@@ -1474,7 +1490,7 @@ try:
        any("Nao consegui verificar" in l for l in _sink_upd_d26.lines)
        and not any("Traceback" in l for l in _sink_upd_d26.lines))
 finally:
-    _upd26.requests = _orig_get26
+    _upd26.requests = _orig_mod26
     _upd26.subprocess.run = _orig_run26
 ok("ajuda anuncia o /atualizar",
    any(c.startswith("/atualizar") for c in _cmds26))
@@ -1628,10 +1644,10 @@ try:
 finally:
     _shutil26.get_terminal_size = _orig_gts26
 ok("janela estreita: o medidor encolhe, as teclas ficam inteiras e nada e cortado no meio",
-   len(_fr80_26) <= 78 and _fr80_26.endswith("/ajuda") and "ENTER = falar" in _fr80_26
+   len(_fr80_26) <= 78 and _fr80_26.endswith("/ajuda") and "ENTER = enviar" in _fr80_26
    and "ctx 3%" in _fr80_26 and "1.048.576" not in _fr80_26)
 ok("janela larga: medidor + teto + explicacao cabem juntos numa linha",
-   "1.048.576 tokens" in _fr140_26 and "ENTER = falar" in _fr140_26
+   "1.048.576 tokens" in _fr140_26 and "ENTER = enviar" in _fr140_26
    and "\n" not in _fr140_26)
 
 from bgh.tools.skills import BUNDLED_SKILLS_DIR as _BUNDLED26
@@ -1881,7 +1897,7 @@ _st_grande28 = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0,
 _fr_idle28 = _status_text25(dict(_st_grande28), 100)[0][1]
 ok("parado, janela de 100: medidor + teclas cabem INTEIROS (nada cortado no meio)",
    len(_fr_idle28) <= 98 and _fr_idle28.endswith("/ajuda")
-   and "ENTER = falar" in _fr_idle28 and "29%" in _fr_idle28)
+   and "ENTER = enviar" in _fr_idle28 and "29%" in _fr_idle28)
 
 _st_busy28 = {**_st_grande28, "busy": True, "busy_since": _time28.time() - 12,
               "tool": "run_python", "tool_since": _time28.time() - 3}
@@ -3023,6 +3039,604 @@ try:
        .get(_cfgmod318.MAX_TOKENS_MIGRADA) is True)
 finally:
     _cfgmod318.CONFIG_PATH = _orig_path318
+
+# -- 0.2.19: a linha de digitar QUEBRA embaixo em vez de sair pela esquerda ---
+from bgh.tui import linhas_de_tela as _linhas319
+
+ok("linha comprida conta linhas DE TELA (uma frase de 103 colunas em 34 = 4 linhas)",
+   _linhas319("a" * 103, 34) == 4 and _linhas319("curta", 34) == 1)
+ok("Ctrl+J continua valendo: cada linha logica tem pelo menos uma linha de tela",
+   _linhas319("uma\nduas\n", 34) == 3 and _linhas319("", 34) == 1)
+ok("acento e emoji contam colunas de verdade (nao somem da conta)",
+   _linhas319("a" * 67 + "\u00e9", 34) == 2)
+_tui319 = (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8")
+ok("a janela de digitar liga a quebra de linha (wrap_lines=True)",
+   "wrap_lines=True" in _tui319)
+ok("a altura da janela de digitar vem das linhas de tela, nao do numero de '\\n'",
+   "linhas_de_tela(in_buf.text" in _tui319
+   and "in_buf.document.line_count" not in _tui319)
+ok("a altura nunca empurra a barra de baixo para fora da tela (teto pelo tamanho da janela)",
+   "rows - 4 - ocupado" in _tui319)
+ok("a barra de baixo fala 'enviar' (o ENTER manda a mensagem)",
+   "ENTER = enviar" in (_RAIZ316 / "bgh" / "i18n.py").read_text(encoding="utf-8"))
+
+# -- 0.2.20: /voz - le as respostas em voz alta com a voz do SISTEMA -----------
+from bgh import voz as _voz320
+
+ok("texto falado perde cerca de codigo, markdown, ANSI e linha de separador",
+   _voz320.limpar_para_fala(
+       "**Resposta**\n```\ncodigo que nao se fala\n```\n=====\n- item um\n- item dois\n"
+       "\x1b[31mvermelho\x1b[0m | celula")
+   == "Resposta item um item dois vermelho celula")
+ok("texto que nao tem nada falavel devolve vazio (nao fala silencio)",
+   _voz320.limpar_para_fala("  \n\n```x```\n----\n") == "")
+_fala_longa320 = _voz320.limpar_para_fala("palavra " * 500)
+ok("resposta gigante e cortada perto do teto e avisa que leu so o comeco",
+   len(_fala_longa320) < _voz320.MAX_CHARS + 200 and "resposta longa" in _fala_longa320)
+
+_orig_which320 = _voz320.shutil.which
+
+
+def _which_fake320(programa):
+    return {"powershell": "C:\\Windows\\powershell.exe", "say": "/usr/bin/say",
+            "spd-say": "/usr/bin/spd-say", "espeak-ng": "/usr/bin/espeak-ng"}.get(programa)
+
+
+_voz320.shutil.which = _which_fake320
+try:
+    ok("Windows fala pelo PowerShell/System.Speech (nada a instalar)",
+       _voz320._escolhe_backend("Windows") == "powershell")
+    ok("macOS fala pelo say", _voz320._escolhe_backend("Darwin") == "say")
+    ok("Linux fala pelo spd-say (speech-dispatcher)", _voz320._escolhe_backend("Linux") == "spd-say")
+finally:
+    _voz320.shutil.which = _orig_which320
+_orig_which_vazio320 = _voz320.shutil.which
+_voz320.shutil.which = lambda programa: None
+try:
+    ok("maquina sem nenhuma voz do sistema e reconhecida (avisa, nao quebra)",
+       _voz320._escolhe_backend("Linux") == ""
+       and _voz320._escolhe_backend("Windows") == "")
+finally:
+    _voz320.shutil.which = _orig_which_vazio320
+
+_argv_spd320 = _voz320._argv("bom dia", "pt", "spd-say", None)
+ok("spd-say recebe idioma, ritmo, -w (esperar a fala) e o texto por ultimo",
+   _argv_spd320[:2] == ["spd-say", "-l"] and "pt-BR" in _argv_spd320
+   and "-w" in _argv_spd320 and _argv_spd320[-1] == "bom dia")
+ok("espeak-ng recebe a voz pt-br",
+   _voz320._argv("bom dia", "pt", "espeak-ng", None)[:4]
+   == ["espeak-ng", "-v", "pt-br", "-s"])
+ok("idioma da tela escolhe a voz: ingles en-US e espanhol es-ES",
+   "en-US" in _voz320._argv("hi", "en", "spd-say", None)
+   and "es-ES" in _voz320._argv("hola", "es", "spd-say", None)
+   and "es" in _voz320._argv("hola", "es", "espeak-ng", None))
+_argv_ps320 = _voz320._argv("texto com acento", "pt", "powershell", None)
+ok("PowerShell usa System.Speech e le o texto de ARQUIVO (acento e aspas sobrevivem)",
+   "System.Speech" in _argv_ps320[3] and "$env:TEO_FALA" in _argv_ps320[3]
+   and "texto com acento" not in " ".join(_argv_ps320))
+_argv_say320 = _voz320._argv("texto", "pt", "say", "/tmp/fala.txt")
+ok("say do macOS le o arquivo (sem aspas quebradas) e aceita voz do idioma",
+   _argv_say320[0] == "say" and _argv_say320[-2:] == ["-f", "/tmp/fala.txt"])
+
+# Arquivo temporario de verdade, em UTF-8, dentro de BGH_HOME/scratch.
+_tmp320 = _voz320._arquivo_temporario("acao, coracao e nao") or ""
+_ok_tmp320 = bool(_tmp320) and Path(_tmp320).is_file()
+_conteudo320 = Path(_tmp320).read_text(encoding="utf-8") if _ok_tmp320 else ""
+_voz320._apaga(_tmp320)
+ok("fala que vai por arquivo e gravada em UTF-8 e o arquivo e apagado depois",
+   _ok_tmp320 and _conteudo320 == "acao, coracao e nao" and not Path(_tmp320).exists())
+
+# ---- comando /voz e leitura da resposta, com a fala DUBLADA (nada toca no CI) --
+_falado320 = []
+_orig_falar320 = _voz320.falar
+_orig_parar320 = _voz320.parar
+_orig_disp320 = _voz320.disponivel
+_voz320.falar = lambda texto, lang=None: _falado320.append(str(texto)) or True
+_voz320.parar = lambda: _falado320.append("<parar>")
+_voz320.disponivel = lambda: True
+try:
+    _cfg320 = dict(core_cfg)
+    _cfg320["voz"] = False
+    _sink320 = RecSink()
+    _core320 = ChatCore(_cfg320, _sink320, llm=FakeLLM([
+        {"role": "assistant", "content": "A fabrica esta estavel, sem alarme."}]))
+    _core320.submit("/voz")
+    ok("/voz liga a voz, grava no config e confirma em voz alta",
+       _core320.cfg["voz"] is True
+       and json.loads(Path(os.environ["BGH_HOME"], "config.json").read_text())
+       .get("voz") is True
+       and _falado320 and "Voz ligada" in _falado320[0])
+    _falado320.clear()
+    _core320.submit("como esta a fabrica?")
+    ok("com a voz ligada a resposta do modelo e lida em voz alta",
+       any("A fabrica esta estavel" in f for f in _falado320))
+    _falado320.clear()
+    _core320.submit("/voz")
+    ok("/voz de novo desliga, cala a leitura e fica gravado",
+       _core320.cfg["voz"] is False
+       and "<parar>" in _falado320
+       and json.loads(Path(os.environ["BGH_HOME"], "config.json").read_text())
+       .get("voz") is False)
+    _falado320.clear()
+    _core320.submit("e agora?")
+    ok("voz desligada: nada e falado (so o <parar> do inicio do turno)",
+       all(f == "<parar>" for f in _falado320))
+    _voz320.disponivel = lambda: False
+    _falado320.clear()
+    _core320.submit("/voz")
+    ok("sem voz no sistema o /voz avisa em vez de fingir que ligou",
+       _core320.cfg["voz"] is False
+       and any("encontrei a voz do sistema" in l.lower() for l in _sink320.lines))
+finally:
+    _voz320.falar = _orig_falar320
+    _voz320.parar = _orig_parar320
+    _voz320.disponivel = _orig_disp320
+
+from bgh.config import DEFAULTS as _DEF320
+ok("voz vem desligada de fabrica", _DEF320.get("voz") is False)
+_tui320 = (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8")
+ok("ESC da tela fixa cala a voz (mesma tecla que para o modelo)",
+   "voz.parar()" in _tui320 and "voz.falando()" in _tui320)
+ok("a ajuda do /voz nao manda usar CTRL+C para calar (CTRL+C vazio SAI do TEO)",
+   _i18n316.t("cmd.voz.on").startswith("Voz LIGADA")
+   and "ESC" in _i18n316.t("cmd.voz.on") and "CTRL+C" not in _i18n316.t("cmd.voz.on"))
+ok("voz.falando() responde na hora se ha leitura em andamento",
+   _voz320.falando() is False)
+ok("a ajuda anuncia o /voz com as tres traducoes",
+   any(c == "/voz" for c, _d in _i18n316.help_table()[3][1])
+   and any(linha[:3] == ("/voz", "/voice", "/voz")
+           for _hdr, pares in _i18n316.HELP_SECTIONS for linha in pares))
+
+# -- 0.2.21: /limpar, /fundo e /fonte (acessibilidade visual) -----------------
+from bgh import limpeza as _limp321, tela as _tela321
+from bgh.config import SCRATCH_DIR as _SCR321
+
+ok("tamanho legivel fala a mesma lingua da tela (bytes, KB, MB)",
+   _limp321.tamanho_legivel(0) == "0 bytes" and _limp321.tamanho_legivel(900) == "900 bytes"
+   and _limp321.tamanho_legivel(2048) == "2,0 KB"
+   and _limp321.tamanho_legivel(3 * 1024 * 1024) == "3,0 MB")
+
+_SCR321.mkdir(parents=True, exist_ok=True)
+_limp321.limpar()        # suite roda run_python: garante a pasta vazia antes de contar
+(_SCR321 / "run_1.py").write_text("a" * 100, encoding="utf-8")
+(_SCR321 / "fala_1.txt").write_text("b" * 40, encoding="utf-8")
+(_SCR321 / "sub").mkdir(exist_ok=True)
+(_SCR321 / "sub" / "dentro.tmp").write_text("c" * 10, encoding="utf-8")
+ok("varrer conta arquivos e bytes de dentro do scratch (inclusive subpasta)",
+   _limp321.varrer() == (3, 150))
+ok("limpar apaga os rascunhos, informa os bytes e mantem a pasta scratch",
+   _limp321.limpar() == (3, 150) and _SCR321.is_dir()
+   and not any(p.is_file() for p in _SCR321.rglob("*")))
+ok("scratch vazio varre zero (o comando avisa em vez de apagar nada)",
+   _limp321.varrer() == (0, 0) and _limp321.limpar() == (0, 0))
+
+# ---- cores: contraste medido, nao "no olho"
+for _nome321 in _tela321.NOMES:
+    _p321 = _tela321.paleta(_nome321)
+    if not _p321.get("bg"):
+        continue
+    ok(f"fundo {_nome321}: letra da resposta passa no contraste AA (>= 4,5)",
+       _tela321.contraste(_p321["bg"], _p321["fg"]) >= 4.5)
+    ok(f"fundo {_nome321}: letra fraca, destaque, aviso e erro continuam legiveis",
+       min(_tela321.contraste(_p321["bg"], _p321[k])
+           for k in ("dim", "accent", "warn", "err", "user")) >= 4.5)
+    ok(f"fundo {_nome321}: letra do rodape legivel",
+       _tela321.contraste(_p321["footer_bg"], _p321["footer_fg"]) >= 4.5)
+    ok(f"fundo {_nome321}: fundo claro pede letra escura (e o contrario tambem)",
+       (_tela321._luminancia(_p321["bg"]) > 0.5)
+       == (_tela321._luminancia(_p321["fg"]) < 0.5))
+ok("cor desconhecida no config cai no padrao (nunca tela sem cor)",
+   _tela321.cor({"cor_fundo": "roxo"}) == "padrao"
+   and _tela321.cor({}) == "padrao" and _tela321.cor({"cor_fundo": "branco"}) == "branco")
+ok("fundo padrao nao mexe no terminal (nenhuma sequencia)",
+   _tela321.escape_fundo("padrao") == "")
+ok("fundo escolhido pinta janela E letra (OSC 11 + OSC 10)",
+   "\x1b]11;#ffffff" in _tela321.escape_fundo("branco")
+   and "\x1b]10;#101010" in _tela321.escape_fundo("branco"))
+ok("sair devolve letra e fundo do terminal",
+   "\x1b]111" in _tela321.RESET_FUNDO and "\x1b]110" in _tela321.RESET_FUNDO)
+ok("estilo da tela fixa herda a letra de contraste do fundo escolhido",
+   "bg:#ffffff" in _tela321.estilo_prompt("branco")["an"]
+   and "#101010" in _tela321.estilo_prompt("branco")["an"]
+   and "bg:" not in _tela321.estilo_prompt("padrao")["an"])
+ok("texto sem estilo e cor fixa (#808080) ganham letra legivel quando ha fundo",
+   _tela321.classe(None, True) == "class:an"
+   and _tela321.classe("#808080 italic", True) == "class:th"
+   and _tela321.classe("yellow", True) == "class:warn"
+   and _tela321.classe("dim", True) == "class:th"
+   and _tela321.classe("yellow", False) == "yellow")
+
+# ---- comandos digitados em qualquer idioma
+ok("nome da cor e do tamanho entram nos tres idiomas",
+   all(_tela321.nome_do_texto(x) == "branco" for x in ("branco", "white", "blanco"))
+   and _tela321.nome_do_texto("preto") == "preto"
+   and _tela321.nome_do_texto("roxo") is None
+   and _tela321.nivel_do_texto("maior") == 3
+   and _tela321.nivel_do_texto("4") == 4
+   and _tela321.nivel_do_texto("huge") == 4
+   and _tela321.nivel_do_texto("nove") is None)
+
+# ---- /fonte: comando que reabre a janela com letra maior
+_zoom321 = _tela321.comando_zoom("gnome-terminal", 2) or []
+_zoom_xterm321 = _tela321.comando_zoom("xterm", 4) or []
+ok("gnome-terminal reabre com zoom e roda o TEO por dentro",
+   _zoom321[0] == "gnome-terminal" and "--zoom=1.3" in _zoom321
+   and _zoom321[-2:] == ["-m", "bgh"])
+ok("xterm usa tamanho em pixels e terminal desconhecido nao inventa comando",
+   _zoom_xterm321[:3] == ["xterm", "-fs", "30"]
+   and _tela321.comando_zoom("terminal-que-nao-existe", 2) is None)
+ok("teclas de aumentar a letra sao ensinadas por terminal (sem terminal: texto generico)",
+   "CTRL" in _tela321.teclas_do_terminal("gnome-terminal")
+   and "CTRL" in _tela321.teclas_do_terminal(""))
+
+# ---- os tres comandos pela mao do ChatCore
+class _Sink321(RecSink):
+    def __init__(self):
+        super().__init__()
+        self.temas = 0
+        self.escolha: str | None = None
+
+    def ask_choice(self, title, label, options):
+        return self.escolha if self.escolha in options else options[0]
+
+    def aplicar_tema(self):
+        self.temas += 1
+
+
+_sink321 = _Sink321()
+_cfg321 = dict(core_cfg)
+_cfg321.update({"cor_fundo": "padrao", "fonte": 1})
+_core321 = ChatCore(_cfg321, _sink321, llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+
+(_SCR321 / "run_2.py").write_text("x" * 60, encoding="utf-8")
+_sink321.escolha = _i18n316.t("cmd.clean.no")
+_core321.submit("/limpar")
+ok("/limpar pergunta antes: dizer 'nao' no menu nao apaga nada",
+   (_SCR321 / "run_2.py").is_file()
+   and any("Nada foi apagado" in l for l in _sink321.lines[-2:]))
+
+# Tela sem menu numerado (API/script): nunca apaga sozinha, ensina o jeito.
+class _Fino321:
+    """Sink minimo SEM ask_choice (o caso de uso por script/API)."""
+
+    def __init__(self):
+        self.lines = []
+
+    def line(self, texto, style=None):
+        self.lines.append(str(texto))
+
+    def parts(self, segs):
+        self.lines.append("".join(s for _st, s in segs))
+
+    def sep(self, title=None):
+        pass
+
+    def border(self):
+        pass
+
+    def thinking(self, texto):
+        pass
+
+    def answer(self, texto):
+        pass
+
+    def tool_event(self, nome, preview):
+        pass
+
+    def status(self, texto):
+        pass
+
+    def ask_approval(self, label, detail, allow_always):
+        return "d"
+
+
+_sink_fino321 = _Fino321()
+_core_fino321 = ChatCore(dict(_cfg321), _sink_fino321, llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+_core_fino321.submit("/limpar")
+ok("/limpar sem menu numerado nao apaga sozinho (mostra o que faria e o comando)",
+   (_SCR321 / "run_2.py").is_file()
+   and any("Para apagar de uma vez" in l for l in _sink_fino321.lines))
+
+_sink321.escolha = _i18n316.t("cmd.clean.yes")
+_core321.submit("/limpar")
+ok("/limpar com 'sim' apaga, informa o espaco e diz o que NAO foi tocado",
+   not (_SCR321 / "run_2.py").exists()
+   and any("apagados" in l and "rascunhos" in l for l in _sink321.lines[-2:]))
+_core321.submit("/limpar")
+ok("/limpar com a pasta vazia avisa em vez de apagar nada",
+   any("ja esta vazia" in l for l in _sink321.lines[-2:]))
+
+_core321.submit("/fundo branco")
+ok("/fundo branco grava a cor, repinta a tela na hora e avisa",
+   _core321.cfg["cor_fundo"] == "branco" and _sink321.temas == 1
+   and json.loads(Path(os.environ["BGH_HOME"], "config.json").read_text())
+   .get("cor_fundo") == "branco"
+   and any("Fundo branco" in l for l in _sink321.lines[-2:]))
+_core321.submit("/fundo rosa")
+ok("/fundo com cor desconhecida nao muda nada e aponta o comando certo",
+   _core321.cfg["cor_fundo"] == "branco"
+   and any("/fundo mostra as opcoes" in l for l in _sink321.lines[-2:]))
+_sink321.escolha = _i18n316.t("cor.verde")
+_core321.submit("/fundo")
+ok("/fundo sozinho abre o menu numerado e aplica a escolha",
+   _core321.cfg["cor_fundo"] == "verde" and _sink321.temas == 2)
+_core321.submit("/fundo padrao")
+ok("/fundo padrao volta a cor do terminal",
+   _core321.cfg["cor_fundo"] == "padrao"
+   and any("voltou a ser o do seu terminal" in l for l in _sink321.lines[-2:]))
+
+_orig_reabrir321 = _tela321.reabrir
+_tela321.reabrir = lambda nivel: False
+try:
+    _core321.submit("/fonte 3")
+finally:
+    _tela321.reabrir = _orig_reabrir321
+ok("/fonte grava o tamanho e, sem terminal conhecido, ensina as teclas",
+   _core321.cfg["fonte"] == 3
+   and json.loads(Path(os.environ["BGH_HOME"], "config.json").read_text())
+   .get("fonte") == 3
+   and any("CTRL" in l for l in _sink321.lines[-2:]))
+_core321.submit("/fonte nove")
+ok("/fonte com valor invalido nao muda nada e mostra as quatro opcoes",
+   _core321.cfg["fonte"] == 3
+   and any("1 (normal)" in l for l in _sink321.lines[-2:]))
+
+from bgh.config import DEFAULTS as _DEF321
+ok("cor de fundo e tamanho da letra comecam no padrao de fabrica",
+   _DEF321.get("cor_fundo") == "padrao" and _DEF321.get("fonte") == 1)
+ok("a ajuda anuncia /limpar, /fundo e /fonte nos tres idiomas",
+   all(any(linha[:3] == tri for _hdr, pares in _i18n316.HELP_SECTIONS for linha in pares)
+       for tri in (("/limpar", "/clean", "/limpiar"),
+                   ("/fundo", "/background", "/fondo"),
+                   ("/fonte", "/font", "/fuente"))))
+_tui321 = (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8")
+ok("a tela fixa pinta o fundo na abertura, no /fundo e devolve ao sair",
+   "tela.escape_fundo" in _tui321 and "tela.RESET_FUNDO" in _tui321
+   and "class:bg" in _tui321)
+
+# Modo classico: /fundo padrao devolve a cor do terminal NA HORA (nao so ao sair).
+_escrito321 = []
+_orig_escrever321 = _tela321.escrever
+_tela321.escrever = lambda texto, saida=None: _escrito321.append(texto)
+try:
+    _cfg_cl321 = {"cor_fundo": "padrao"}
+    from bgh.chat_core import ConsoleSink as _ConsoleSink321
+
+    _sink_cl321 = _ConsoleSink321(_cfg_cl321)
+    _sink_cl321.aplicar_tema()          # abertura no padrao: nada a pintar
+    _cfg_cl321["cor_fundo"] = "azul"
+    _sink_cl321.aplicar_tema()          # escolheu azul
+    _cfg_cl321["cor_fundo"] = "padrao"
+    _sink_cl321.aplicar_tema()          # voltou ao padrao
+finally:
+    _tela321.escrever = _orig_escrever321
+ok("modo classico: pintar, trocar e VOLTAR ao padrao (OSC 11 -> OSC 110/111)",
+   _escrito321[0] == "" and "\x1b]11;#10457f" in _escrito321[1]
+   and _escrito321[2] == _tela321.RESET_FUNDO)
+
+# -- requirements na atualizacao: dependencia nova chega a quem ja instalou ----
+_orig_mod_ru322 = _upd26.requests
+_orig_run_ru322 = _upd26.subprocess.run
+_req_cmds322: list[list] = []
+
+
+class _RespReq322:
+    def __init__(self, texto, codigo=200):
+        self.text = texto
+        self.status_code = codigo
+
+
+try:
+    _upd26.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespReq322("vosk>=0.3.45\nsounddevice>=0.4.6\n"))
+    _upd26.subprocess.run = lambda cmd, **k: (
+        _req_cmds322.append(cmd),
+        types.SimpleNamespace(returncode=0, stdout="", stderr=""))[1]
+    _ok_req322, _msg_req322 = _upd26.garantir_dependencias()
+    _arq_req322 = Path(os.environ["BGH_HOME"], "scratch", "requirements_update.txt")
+    ok("dependencias da atualizacao: baixa o requirements do projeto e roda pip -r",
+       _ok_req322 and _msg_req322 == "" and _req_cmds322
+       and "-r" in _req_cmds322[0] and "--no-deps" not in _req_cmds322[0]
+       and _arq_req322.is_file() and "vosk" in _arq_req322.read_text(encoding="utf-8"))
+    _upd26.requests = types.SimpleNamespace(
+        get=lambda *a, **k: _RespReq322("", codigo=503))
+    _ok_req322b, _msg_req322b = _upd26.garantir_dependencias()
+    ok("GitHub fora do ar no requirements: avisa e NAO derruba a atualizacao",
+       _ok_req322b is False and "503" in str(_msg_req322b))
+    _upd26.requests = types.SimpleNamespace(get=lambda *a, **k: _RespReq322("   "))
+    ok("requirements vazio nao vira instalacao de nada",
+       _upd26.garantir_dependencias()[0] is False)
+
+    def _boom_req322(*a, **k):
+        raise ConnectionError("off")
+
+    _upd26.requests = types.SimpleNamespace(get=_boom_req322)
+    ok("sem internet na conferencia: motivo claro, nada de traceback",
+       _upd26.garantir_dependencias()[0] is False
+       and "ConnectionError" in _upd26.garantir_dependencias()[1])
+finally:
+    _upd26.requests = _orig_mod_ru322
+    _upd26.subprocess.run = _orig_run_ru322
+
+# -- 0.2.22: /ditar - escrever falando, nos tres idiomas, seguindo o /lingua -----
+from bgh import ditar as _ditar322
+
+ok("o ditado entende os MESMOS tres idiomas da tela",
+   set(_ditar322.idiomas()) == set(_i18n316.LANGS)
+   and _ditar322.idiomas() == ("pt", "en", "es"))
+ok("cada idioma tem modelo e endereco oficiais diferentes",
+   len({_ditar322.modelo_do_idioma(l)[0] for l in _ditar322.idiomas()}) == 3
+   and all(_ditar322.modelo_do_idioma(l)[1].endswith(".zip")
+           for l in _ditar322.idiomas())
+   and _ditar322.modelo_do_idioma("pt")[0] == "vosk-model-small-pt-0.3")
+ok("idioma que o TEO nao tem cai no portugues (nunca fica sem ditar)",
+   _ditar322.modelo_do_idioma("fr")[0] == "vosk-model-small-pt-0.3"
+   and _ditar322.modelo_do_idioma(None)[0] == "vosk-model-small-pt-0.3")
+ok("modelo fica dentro do BGH_HOME do usuario, um por idioma",
+   _ditar322.modelo_dir("pt").parent == _ditar322.MODELOS_DIR
+   and _ditar322.modelo_dir("en") != _ditar322.modelo_dir("es")
+   and str(_ditar322.MODELOS_DIR).startswith(os.environ["BGH_HOME"]))
+ok("sem modelo baixado o TEO sabe que ainda nao pode ditar",
+   _ditar322.tem_modelo("pt") is False)
+ok("aviso de download diz o tamanho aproximado de cada idioma",
+   all(30 <= _ditar322.tamanho_mb(l) <= 60 for l in _ditar322.idiomas()))
+ok("WAV fora do formato (ou inexistente) nao vira lixo de audio",
+   _ditar322.wav_para_pcm("/nao/existe.wav") == b""
+   and _ditar322.escutar("pt", fonte=b"") == "")
+
+# "deixar na instalacao": as dependencias do ditado entram com o TEO
+_req322 = (_RAIZ316 / "requirements.txt").read_text(encoding="utf-8")
+ok("vosk e sounddevice vem na instalacao (requirements do TEO)",
+   "vosk" in _req322 and "sounddevice" in _req322)
+_spec322 = (_RAIZ316 / "motor.spec").read_text(encoding="utf-8")
+ok("motor.exe/motor-macos levam o vosk e a PortAudio dentro",
+   "vosk" in _spec322 and "sounddevice" in _spec322)
+
+
+class _Sink322(RecSink):
+    """Tela com linha de digitar (o texto ditado entra nela) e menu numerado."""
+
+    def __init__(self):
+        super().__init__()
+        self.ditado: str | None = None
+        self.escolha = None
+
+    def ask_choice(self, title, label, options):
+        return self.escolha if self.escolha in options else options[0]
+
+    def preencher(self, texto):
+        self.ditado = str(texto)
+
+
+_falado322: dict = {}
+_orig = {"motor": _ditar322.tem_motor, "modelo": _ditar322.tem_modelo,
+         "escutar": _ditar322.escutar, "baixar": _ditar322.baixar_modelo}
+_ditar322.tem_motor = lambda: True
+_ditar322.tem_modelo = lambda lang=None: False
+try:
+    # 1) motor ausente
+    _ditar322.tem_motor = lambda: False
+    _sink322 = _Sink322()
+    _cfg322 = dict(core_cfg)
+    _cfg322["lang"] = "pt"
+    _core322 = ChatCore(_cfg322, _sink322, llm=FakeLLM([
+        {"role": "assistant", "content": "ok"}]))
+    _core322.submit("/ditar")
+    ok("sem o motor instalado o /ditar avisa e ensina como instalar",
+       any("motor de ditado nao esta instalado" in l for l in _sink322.lines))
+    _ditar322.tem_motor = lambda: True
+
+    # 2) modelo ausente, tela sem menu: nunca baixa sozinho
+    from bgh.chat_core import ConsoleSink as _CS322
+
+    _sink_fino322 = _Fino321()
+    _core_fino322 = ChatCore(dict(_cfg322), _sink_fino322, llm=FakeLLM([
+        {"role": "assistant", "content": "ok"}]))
+    _core_fino322.submit("/ditar")
+    ok("modelo ausente sem menu numerado: ensina o /ditar baixar (nao baixa sozinho)",
+       any("ditar baixar" in l for l in _sink_fino322.lines))
+
+    # 3) download pedido explicitamente e SEM internet
+    _ditar322.baixar_modelo = lambda lang=None, ao_progresso=None: (False, "sem_conexao")
+    _sink322.lines.clear()
+    _core322.submit("/ditar baixar")
+    ok("download sem internet avisa o motivo e nao finge que deu certo",
+       any("Nao consegui baixar o modelo (sem internet)" in l for l in _sink322.lines))
+
+    # 4) download ok (menu) + ditado: o texto entra na LINHA para conferir
+    _pasta322 = _ditar322.modelo_dir("pt")
+    _pasta322.mkdir(parents=True, exist_ok=True)
+    (_pasta322 / "am").mkdir(exist_ok=True)
+    (_pasta322 / "am" / "final.mdl").write_bytes(b"x")
+
+    def _baixar_ok322(lang=None, ao_progresso=None):
+        if ao_progresso:
+            for pct in (0, 40, 80, 100):
+                ao_progresso(pct)
+        return (True, str(_ditar322.modelo_dir(lang)))
+
+    _ditar322.baixar_modelo = _baixar_ok322
+    _ditar322.tem_modelo = lambda lang=None: True
+    _ditar322.escutar = lambda lang=None, **kw: ("comprar leite e pao"
+                                                 if (lang or "")[:2] == "pt"
+                                                 else "texto em " + str(lang))
+    _sink322.lines.clear()
+    _core322.submit("/ditar")
+    ok("com o modelo pronto: avisa que vai ouvir, transcreve e poe o texto na linha",
+       _sink322.ditado == "comprar leite e pao"
+       and any("Pode falar agora" in l for l in _sink322.lines)
+       and any("Eu entendi: comprar leite e pao" in l for l in _sink322.lines)
+       and any("aperte ENTER para enviar" in l for l in _sink322.lines))
+
+    # 5) o idioma do ditado SEGUE o /lingua
+    _core322.submit("/lingua en")
+    _sink322.lines.clear()
+    _core322.submit("/ditar")
+    ok("/lingua em ingles: o ditado passa a ouvir em ingles (mesmo idioma da tela)",
+       _sink322.ditado == "texto em en"
+       and any("Speak now" in l for l in _sink322.lines))
+    _core322.submit("/lingua es")
+    _sink322.lines.clear()
+    _core322.submit("/ditar")
+    ok("/lingua em espanhol: idem, sem reiniciar o TEO",
+       _sink322.ditado == "texto em es"
+       and any("Habla ahora" in l for l in _sink322.lines))
+    _core322.submit("/lingua pt")
+
+    # 6) nao entendeu nada
+    _ditar322.escutar = lambda lang=None, **kw: ""
+    _sink322.ditado = None
+    _sink322.lines.clear()
+    _core322.submit("/ditar")
+    ok("quando nao entende nada, pede para falar de novo em vez de enviar vazio",
+       _sink322.ditado is None
+       and any("Nao entendi nada" in l for l in _sink322.lines))
+finally:
+    _ditar322.tem_motor = _orig["motor"]
+    _ditar322.tem_modelo = _orig["modelo"]
+    _ditar322.escutar = _orig["escutar"]
+    _ditar322.baixar_modelo = _orig["baixar"]
+    _limp321.limpar()      # o modelo falso da suite nao fica para tras
+
+# CTRL+C/ESC durante a escuta: para na hora, sem esperar os 25 segundos
+class _SD322:
+    class RawInputStream:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n):
+            return (b"\x00" * (n * 2), False)
+
+
+_orig_sd322 = sys.modules.get("sounddevice")
+sys.modules["sounddevice"] = _SD322
+try:
+    _t0_322 = _time28.time()
+    _pcm322 = _ditar322._ler_microfone(25, None, parar=lambda: True)
+    _gasto322 = _time28.time() - _t0_322
+finally:
+    if _orig_sd322 is None:
+        sys.modules.pop("sounddevice", None)
+    else:
+        sys.modules["sounddevice"] = _orig_sd322
+ok("CTRL+C/ESC durante o ditado corta a escuta na hora (nao espera o teto)",
+   _pcm322 == b"" and _gasto322 < 3)
+ok("o /ditar liga o corte ao mesmo botao que para o modelo (stop_event)",
+   "stop_event" in (_RAIZ316 / "bgh" / "chat_core.py").read_text(encoding="utf-8")
+   and "parar=evento_d.is_set" in (_RAIZ316 / "bgh" / "chat_core.py")
+   .read_text(encoding="utf-8"))
+
+ok("a ajuda anuncia o /ditar nos tres idiomas",
+   all(any(linha[:3] == tri for _hdr, pares in _i18n316.HELP_SECTIONS for linha in pares)
+       for tri in (("/ditar", "/dictate", "/dictar"),)))
 
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e

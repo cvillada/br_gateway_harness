@@ -15,6 +15,7 @@ import sys
 
 REPO = "cvillada/br_gateway_harness"
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
+REQ_URL = f"https://raw.githubusercontent.com/{REPO}/main/requirements.txt"
 
 import requests  # modulo do projeto; testes trocam este atributo por um fake
 
@@ -92,6 +93,50 @@ def python_bin() -> str:
         found = shutil.which("python3") or shutil.which("python")
         return found or ""
     return sys.executable
+
+
+def garantir_dependencias(timeout_s: int = 900) -> tuple[bool, str]:
+    """Instala o requirements.txt do projeto DEPOIS de trocar o wheel.
+
+    Por que existe: o wheel do TEO vai com `--no-deps` (receita dos instaladores),
+    entao uma dependencia NOVA (ex.: vosk/sounddevice do ditado) nunca chegava a
+    quem atualizava pelo /atualizar - so a quem instalava do zero.
+    Falhar aqui NAO desfaz a atualizacao: o TEO ja esta na versao nova e a
+    conversa continua; o que pode faltar e o recurso que precisa do pacote.
+    """
+    py = python_bin()
+    if not py:
+        return (False, t("upd.frozen"))
+    try:
+        resp = requests.get(REQ_URL, timeout=20)
+    except Exception as exc:  # noqa: BLE001 - rede fora e caso comum
+        return (False, t("upd.deps_net", tipo=type(exc).__name__))
+    codigo = int(getattr(resp, "status_code", 0) or 0)
+    if codigo != 200:
+        return (False, t("upd.deps_status", code=codigo))
+    texto = str(getattr(resp, "text", "") or "")
+    if not texto.strip():        # resposta vazia nao vira requirements vazio
+        return (False, t("upd.deps_status", code=codigo))
+    try:
+        from .config import SCRATCH_DIR
+
+        SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
+        arquivo = SCRATCH_DIR / "requirements_update.txt"
+        arquivo.write_text(texto, encoding="utf-8")
+    except OSError as exc:
+        return (False, t("upd.oserr", erro=exc))
+    cmd = [py, "-m", "pip", "install", "-r", str(arquivo)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return (False, t("upd.timeout"))
+    except OSError as exc:
+        return (False, t("upd.oserr", erro=exc))
+    if proc.returncode == 0:
+        return (True, "")
+    tail = ((proc.stderr or proc.stdout or "").strip().splitlines()
+            or [t("upd.no_detail")])[-1]
+    return (False, t("upd.pip_fail", code=proc.returncode, tail=tail[:160]))
 
 
 def apply_update(wheel_url: str, timeout_s: int = 900) -> tuple[bool, str]:
