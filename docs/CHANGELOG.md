@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.29
+
+Da para ver, de longe, que o TEO esta trabalhando - e a barra "/" virou a
+porta de entrada dos comandos na tela do navegador.
+
+- Aviso de "trabalhando" bem mais visivel na tela do navegador: acima do campo
+  de escrever aparece uma faixa com rodinha girando, a frase "O TEO esta
+  trabalhando", um contador de segundos (vira "1:12" depois do primeiro minuto)
+  e uma barra correndo. O campo de escrever fica com a borda da cor do TEO e o
+  botao fica vermelho escrito "Parar". A frase pequena do rodape continua, mas
+  agora so lembra que o recado escrito durante o turno chega no meio do
+  caminho (antes ela repetia "o TEO esta trabalhando" duas vezes na tela).
+- Digitar so "/" no campo de mensagem abre a lista de opcoes do TEO, igual ao
+  "/" do terminal (que la abre a pasta). Apertar ENTER com a barra sozinha ja
+  abre a lista; nada e enviado ao modelo.
+- Na lista de opcoes, os comandos que apareciam sem a barra ("ditar, voz, fonte,
+  palco") agora aparecem como "/ditar, /voz, /fonte, /palco".
+- Voz: a instalacao padrao continua nascendo com a voz DESLIGADA (o padrao mora
+  em `bgh/config.py`). Quem ligou a voz no /voz mantem a escolha gravada no
+  config.json - inclusive depois de atualizar.
+- Suite local: 511 testes do nucleo + 109 da tela do navegador verdes.
+
 ## 0.2.28
 
 Fechar com CTRL+C nao mostra mais traceback - e a tela do navegador passou a ser

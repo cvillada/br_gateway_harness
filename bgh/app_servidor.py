@@ -95,6 +95,7 @@ ASSET_ROTAS = {
 # Chaves de bgh/i18n.py que o JavaScript usa (o catalogo inteiro nao vai junto).
 CHAVES_APP = (
     "app.enviar", "app.parar", "app.placeholder", "app.dica", "app.trabalhando",
+    "app.trabalhando_curto",
     "app.ligando", "app.caiu", "app.pensamento", "app.ferramentas", "app.contexto",
     "app.licenca_titulo", "app.licenca_dica", "app.sem_resposta", "app.encerrando",
     "app.erro", "app.modo_rede", "app.vazio", "app.voce", "app.passo",

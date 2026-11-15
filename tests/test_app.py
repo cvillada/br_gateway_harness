@@ -456,5 +456,64 @@ finally:
     app3.esperar_fim(5)
 ok("sem CTRL+C o app ainda fecha normal", app3.fechado is True)
 
+# ---------- 12. aviso de "TEO trabalhando" bem visivel ----------------------
+# Antes so a frase pequena do rodape mudava: quem olhava a conversa nao sabia
+# distinguir "pensando" de "travado". Agora existe uma faixa ACIMA da linha de
+# digitar, com rodinha, texto, contador de segundos e barra em movimento.
+_raiz12 = Path(__file__).resolve().parents[1]
+_html12 = (_raiz12 / "bgh" / "assets" / "app.html").read_text(encoding="utf-8")
+_css12 = (_raiz12 / "bgh" / "assets" / "app.css").read_text(encoding="utf-8")
+_js12 = (_raiz12 / "bgh" / "assets" / "app.js").read_text(encoding="utf-8")
+ok("a faixa de 'TEO trabalhando' existe acima da linha de digitar",
+   'id="trabalhando"' in _html12
+   and _html12.index('id="trabalhando"') < _html12.index('class="linha-digitar"'))
+ok("a faixa tem rodinha, texto e contador de segundos",
+   'class="rodinha"' in _html12 and 'id="trabalhando-texto"' in _html12
+   and 'id="trabalhando-tempo"' in _html12)
+ok("a faixa nasce escondida e e anunciada por leitor de tela",
+   'id="trabalhando" class="trabalhando" role="status" aria-live="polite" hidden' in _html12)
+ok("o CSS anima rodinha e barra, sem nada piscando",
+   "@keyframes girar" in _css12 and "@keyframes correr" in _css12
+   and "infinite" in _css12)
+ok("a faixa aparece e some junto com o estado ocupado",
+   'faixa.hidden = !ocupado' in _js12
+   and 'document.body.classList.toggle("ocupado", ocupado)' in _js12)
+ok("o contador do turno mostra segundos e minutos",
+   "function comecarRelogio" in _js12 and "Math.floor(segundos / 60)" in _js12)
+ok("a frase da faixa vem do i18n (tres idiomas)",
+   dados["strings"].get("app.trabalhando_curto") == t("app.trabalhando_curto")
+   and t("app.trabalhando_curto").strip() != "")
+ok("a dica do turno nao repete a frase da faixa (aviso, nao eco)",
+   not t("app.trabalhando").startswith(t("app.trabalhando_curto")))
+
+# ---------- 13. a barra sozinha abre a lista de opcoes ----------------------
+# No terminal o "/" abre o menu da pasta. No navegador nao existe pasta: a barra
+# sozinha abre a lista de comandos da tela (mesmo cartao do botao Opcoes).
+ok("digitar so a barra abre a lista de opcoes da tela",
+   'if (texto === "/")' in _js12
+   and _js12.index('if (texto === "/")') < _js12.index('if (!silencioso) { bolha('))
+ok("a dica do rodape continua ensinando o comando de ajuda",
+   t("app.dica", cmd="/ajuda").startswith("ENTER envia"))
+ok("na ajuda, os comandos do terminal aparecem com a barra",
+   "/ditar, /voz, /fonte, /palco" in _cmds)
+
+# ---------- 14. instalacao nova nasce com a voz DESLIGADA -------------------
+# Pedido do dono: instalacao padrao sem voz. O padrao mora em DEFAULTS e vale
+# para quem instala hoje; quem ja ligou no /voz mantem a escolha gravada.
+from bgh import config as _cfg14
+from bgh.config import DEFAULTS as _DEF14
+
+ok("voz desligada de fabrica (DEFAULTS)", _DEF14.get("voz") is False)
+_path14 = _cfg14.CONFIG_PATH
+_dir14 = Path(tempfile.mkdtemp(prefix="bgh_voz_"))
+try:
+    _cfg14.CONFIG_PATH = _dir14 / "config.json"
+    _cfg14.CONFIG_PATH.write_text(
+        json.dumps({"model": "m", "base_url": "http://127.0.0.1:1/v1"}), encoding="utf-8")
+    _novo14 = _cfg14.load_config()
+    ok("config recem-criado nao liga a voz sozinho", _novo14.get("voz") is False)
+finally:
+    _cfg14.CONFIG_PATH = _path14
+
 print()
 print(f"TODOS OS TESTES DA TELA PASSARAM ({PASS} verificacoes)")

@@ -1884,11 +1884,15 @@ APP = {
                  "{cmd} to list the options.",
                  "ENTER envia. Para escribir mas de una linea, usa SHIFT+ENTER. "
                  "{cmd} para listar las opciones."),
-    "app.trabalhando": ("O TEO esta trabalhando. Se escrever agora, o recado chega "
-                        "no meio do caminho.",
-                        "TEO is working. If you write now, the note arrives on the way.",
-                        "El TEO esta trabajando. Si escribes ahora, el aviso llega "
-                        "en el camino."),
+    # Aviso da dica (rodape) durante o turno: so a parte do RECADO, porque a
+    # faixa acima da linha de digitar ja diz que o TEO esta trabalhando. Antes
+    # as duas frases repetiam "O TEO esta trabalhando" uma embaixo da outra.
+    "app.trabalhando": ("Se escrever agora, o recado chega no meio do caminho.",
+                        "If you write now, the note arrives on the way.",
+                        "Si escribes ahora, el aviso llega en el camino."),
+    # Frase curta da faixa que fica ACIMA da linha de digitar (rodinha + barra).
+    "app.trabalhando_curto": ("O TEO esta trabalhando", "TEO is working",
+                              "El TEO esta trabajando"),
     "app.ligando": ("Ligando no TEO...", "Connecting to TEO...", "Conectando al TEO..."),
     "app.caiu": ("A ligacao caiu. Tentando de novo sozinho...",
                  "The connection dropped. Retrying by itself...",
@@ -2071,8 +2075,8 @@ APP = {
     "app.help.atualizar": ("confere versao nova e instala (pedindo sua licenca)",
                            "checks for a new version and installs it (asking permission)",
                            "revisa si hay version nueva e instala (pidiendo permiso)"),
-    "app.cmd.so_terminal": ("ditar, voz, fonte, palco", "dictate, voice, font, stage",
-                            "dictar, voz, fuente, escenario"),
+    "app.cmd.so_terminal": ("/ditar, /voz, /fonte, /palco", "/dictate, /voice, /font, /stage",
+                            "/dictar, /voz, /fuente, /escenario"),
     "app.help.so_terminal": ("esses quatro so funcionam na tela do terminal",
                              "those four only work on the terminal screen",
                              "esos cuatro solo funcionan en la pantalla del terminal"),

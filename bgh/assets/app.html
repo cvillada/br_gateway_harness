@@ -50,6 +50,18 @@
 </main>
 
 <footer class="rodape">
+  <!-- Aviso de "TEO trabalhando": fica ACIMA da linha de digitar, sempre no
+       mesmo lugar, com rodinha, texto e barra em movimento. A frase da dica
+       (rodape) continua sendo o aviso de que o recado chega no meio do turno;
+       esta faixa e o sinal de que o TEO esta VIVO e ocupado. -->
+  <div id="trabalhando" class="trabalhando" role="status" aria-live="polite" hidden>
+    <div class="trabalhando-linha">
+      <span class="rodinha" aria-hidden="true"></span>
+      <span id="trabalhando-texto" class="trabalhando-texto"></span>
+      <span id="trabalhando-tempo" class="trabalhando-tempo" aria-hidden="true"></span>
+    </div>
+    <div class="trilho-trabalho" aria-hidden="true"><span class="trilho-luz"></span></div>
+  </div>
   <div class="linha-digitar">
     <label class="oculto" for="texto" id="rotulo-texto"></label>
     <textarea id="texto" rows="1" autocomplete="off" spellcheck="true"></textarea>

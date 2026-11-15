@@ -13,6 +13,8 @@ var canais = {};
 var fluxo = null;
 var encerrado = false;
 var dicaTexto = "";
+var relogio = null;      // contador de segundos do turno em andamento
+var segundos = 0;
 var ajudaCaixa = null;   // o menu fica num cartao unico (nunca tres copias)
 var ajudaItens = [];     // pares [comando, explicacao] vindos de /api/inicio
 var idiomaAtual = "";    // muda pelo /lingua: a tela se reescreve no sinal de vida
@@ -405,6 +407,14 @@ function enviar(silencioso) {
   var caixa = $("texto");
   var texto = caixa.value.trim();
   if (!texto) { return; }
+  // Barra sozinha abre a lista de opcoes do TEO (no terminal o "/" abre a pasta;
+  // aqui nao existe pasta, entao abre a lista de comandos da tela).
+  if (texto === "/") {
+    caixa.value = "";
+    ajustarAltura();
+    if (!ocupado) { ajuda(); }
+    return;
+  }
   // /ajuda digitado a mao abre a MESMA ajuda da tela (nao o manual do terminal).
   if (/^\/(ajuda|help|ayuda)\b/i.test(texto)) {
     caixa.value = "";
@@ -482,6 +492,46 @@ function aplicarOcupado() {
   $("ajuda").disabled = ocupado;
   $("terminal").disabled = ocupado;
   $("dica").textContent = ocupado ? t("app.trabalhando") : dicaTexto;
+  // Marca no corpo da pagina: o CSS pinta o campo e a dica durante o turno.
+  document.body.classList.toggle("ocupado", ocupado);
+  // Faixa visivel acima da linha de digitar: rodinha girando, texto e a barra
+  // correndo dizem "esta vivo e ocupado" sem precisar ler a frase pequena.
+  var faixa = $("trabalhando");
+  if (faixa) {
+    faixa.hidden = !ocupado;
+    var rotulo = $("trabalhando-texto");
+    if (rotulo) { rotulo.textContent = ocupado ? t("app.trabalhando_curto") : ""; }
+  }
+  if (ocupado) { comecarRelogio(); } else { pararRelogio(); }
+}
+
+/* Contador do turno: "7 s", "1:12". E o sinal mais honesto de que o TEO nao
+ * travou - o numero sobe enquanto ele trabalha. */
+function comecarRelogio() {
+  if (relogio) { return; }
+  segundos = 0;
+  mostrarTempo();
+  relogio = setInterval(function () {
+    segundos += 1;
+    mostrarTempo();
+  }, 1000);
+}
+
+function pararRelogio() {
+  if (relogio) { clearInterval(relogio); relogio = null; }
+  segundos = 0;
+  mostrarTempo();
+}
+
+function mostrarTempo() {
+  var el = $("trabalhando-tempo");
+  if (!el) { return; }
+  if (segundos <= 0) { el.textContent = ""; return; }
+  var minutos = Math.floor(segundos / 60);
+  var resto = segundos % 60;
+  el.textContent = minutos
+    ? minutos + ":" + (resto < 10 ? "0" : "") + resto
+    : segundos + " s";
 }
 
 /* ---------------- sinal de vida ---------------- */
@@ -598,6 +648,11 @@ function fecharPergunta(id) {
 function encerrar(motivo) {
   encerrado = true;
   if (fluxo) { fluxo.close(); }
+  ocupado = false;
+  pararRelogio();          // cala o contador do turno
+  var faixaTrabalho = $("trabalhando");
+  if (faixaTrabalho) { faixaTrabalho.hidden = true; }
+  document.body.classList.remove("ocupado");
   $("veu").hidden = true;
   $("fim-titulo").textContent = (motivo === "terminal")
     ? t("app.abrindo_terminal") : t("app.encerrando");

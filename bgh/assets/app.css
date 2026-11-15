@@ -462,6 +462,76 @@ hr.borda {
   margin: 0 auto;
 }
 
+/* ---------- aviso de "TEO trabalhando" ---------- */
+/* Fica onde os olhos ja estao (acima do campo de digitar) e se mexe de forma
+   continua: rodinha girando, barra correndo e contador de segundos. Nada
+   piscando (regra do publico desta tela); quem pediu menos animacao no sistema
+   recebe a faixa parada, mas visivel. */
+.trabalhando {
+  max-width: 52rem;
+  margin: 0 auto .65rem;
+}
+
+.trabalhando-linha {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  font-size: .9rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.rodinha {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 3px solid var(--trilho);
+  border-top-color: var(--accent);
+  animation: girar .9s linear infinite;
+  flex: none;
+}
+
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+
+.trabalhando-texto { overflow-wrap: anywhere; }
+
+.trabalhando-tempo {
+  margin-left: auto;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: var(--dim);
+}
+
+.trilho-trabalho {
+  margin-top: .4rem;
+  height: .42rem;
+  border-radius: 99px;
+  background: var(--trilho);
+  overflow: hidden;
+}
+
+.trilho-luz {
+  display: block;
+  width: 34%;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--verde));
+  animation: correr 1.4s ease-in-out infinite;
+}
+
+@keyframes correr {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+/* Durante o turno o campo e a dica ficam com a cor do TEO trabalhando: da para
+   saber o estado de longe, sem ler. */
+body.ocupado textarea { border-color: var(--accent); }
+body.ocupado .dica { color: var(--accent); font-weight: 700; }
+
 textarea {
   flex: 1;
   font: inherit;
