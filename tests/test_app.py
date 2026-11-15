@@ -228,22 +228,39 @@ ok("a ajuda do app nao cita tecla de terminal",
        for _cmd, desc in dados.get("ajuda") or []))
 
 # ---------- 5. SSE: replay do que ja aconteceu -------------------------------
+# A conexao e feita com socket cru, de proposito: o http.client guarda parte do
+# corpo num buffer proprio e, no macOS, os bytes que ja chegaram junto com o
+# cabecalho se perdiam (o teste lia zero eventos). Aqui tudo o que chega e lido.
 import select
 
-conn = http.client.HTTPConnection("127.0.0.1", app.porta, timeout=10)
-conn.putrequest("GET", "/api/eventos?desde=0")
-conn.putheader("Cookie", f"teo_app={TOKEN}")
-conn.endheaders()
-_sock = conn.sock                       # guardar antes: getresponse troca o dono
-resp = conn.getresponse()
-ok("SSE responde 200", resp.status == 200)
-ok("SSE e event-stream", "text/event-stream" in resp.headers.get("Content-Type", ""))
-
+_sock = socket.create_connection(("127.0.0.1", app.porta), timeout=10)
+_sock.sendall(
+    (f"GET /api/eventos?desde=0 HTTP/1.1\r\n"
+     f"Host: 127.0.0.1:{app.porta}\r\n"
+     f"Cookie: teo_app={TOKEN}\r\n"
+     f"\r\n").encode("ascii")
+)
 _resto = ""
 
 
+def _ler_cabecalho() -> str:
+    global _resto
+    while "\r\n\r\n" not in _resto:
+        dados = _sock.recv(65536)
+        if not dados:
+            raise AssertionError("o stream fechou antes do cabecalho")
+        _resto += dados.decode("utf-8", "replace")
+    cabecalho, _, _resto = _resto.partition("\r\n\r\n")
+    return cabecalho
+
+
+_cab = _ler_cabecalho()
+ok("SSE responde 200", _cab.splitlines()[0].endswith("200 OK"))
+ok("SSE e event-stream", "text/event-stream" in _cab)
+
+
 def ler_eventos(quantos=6, limite=4.0):
-    """Le o SSE sem deixar o socket virar 'timed out' (select antes de ler)."""
+    """Le o SSE do socket cru (select antes de cada recv; nunca trava)."""
     global _resto
     eventos = []
     fim = time.time() + limite
@@ -348,7 +365,7 @@ eventos = ler_ate("encerrando")
 ok("o evento 'encerrando' saiu antes de fechar",
    any(e.get("tipo") == "encerrando" for e in eventos))
 try:
-    conn.close()
+    _sock.close()
 except OSError:
     pass
 app.esperar_fim(5)
