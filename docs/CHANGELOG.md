@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.28
+
+Fechar com CTRL+C nao mostra mais traceback - e a tela do navegador passou a ser
+testada nos tres sistemas.
+
+- Bug real no macOS: apertar CTRL+C mais de uma vez durante o fechamento
+  interrompia o proprio encerramento e o TEO terminava com um traceback na tela.
+  Motivo: `except Exception` NAO pega KeyboardInterrupt (ele herda de
+  BaseException). Agora todo ponto de espera do encerramento e a prova de CTRL+C,
+  inclusive o shutdown do servidor e a espera final.
+- Teste de regressao que simula exatamente o caso (espera interrompida no meio do
+  encerramento).
+- A suite da tela do navegador entrou no CI: ubuntu, windows e macOS, cada um com
+  Python 3.11 e 3.12 (seis combinacoes). No macOS ela pegou outro defeito: o
+  http.client guardava parte do corpo do SSE e o teste lia zero eventos - a
+  leitura passou a ser por socket cru.
+- Release com binarios dos tres sistemas: motor (Linux), motor.exe (Windows) e
+  motor-macos.
+- Suite local: 511 testes do nucleo + 96 da tela do navegador verdes nesta
+  maquina.
+
 ## 0.2.27
 
 Ajuda da tela completa e memoria da conversa sempre visivel.

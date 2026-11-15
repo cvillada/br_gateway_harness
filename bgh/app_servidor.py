@@ -515,7 +515,12 @@ class App:
                 break
 
     def encerrar(self, motivo: str = "") -> None:
-        """Fecha com a tela sabendo: o evento chega antes de a porta cair."""
+        """Fecha com a tela sabendo: o evento chega antes de a porta cair.
+
+        CTRL+C apertado de novo DURANTE o encerramento nao pode virar traceback:
+        o dono do projeto viu exatamente isso no macOS (tres ^C seguidos). Tudo
+        que espera aqui dentro e a prova de KeyboardInterrupt.
+        """
         if self.fechado:
             return
         self.fechado = True
@@ -525,23 +530,36 @@ class App:
         except Exception:  # noqa: BLE001
             pass
         if self.core is not None:
-            self.core.stop()
-        self._negar_pendentes(t("app.sem_resposta"))
-        time.sleep(1.2)   # a resposta do SSE sai antes da porta fechar
+            try:
+                self.core.stop()
+            except KeyboardInterrupt:
+                pass
+        try:
+            self._negar_pendentes(t("app.sem_resposta"))
+        except KeyboardInterrupt:
+            pass
+        try:
+            time.sleep(1.2)   # a resposta do SSE sai antes da porta fechar
+        except KeyboardInterrupt:
+            pass
         servidor = self.servidor
         if servidor is not None:
             try:
                 servidor.shutdown()      # para de aceitar conexao
-            except Exception:  # noqa: BLE001 - ja desligado
+            except (Exception, KeyboardInterrupt):  # noqa: BLE001 - ja desligado
                 pass
             try:
                 servidor.server_close()  # fecha o socket: a porta deixa de existir
-            except OSError:
+            except (OSError, KeyboardInterrupt):
                 pass
         self._fim.set()
 
     def esperar_fim(self, timeout: float = 6.0) -> None:
-        self._fim.wait(timeout)
+        try:
+            self._fim.wait(timeout)
+        except KeyboardInterrupt:
+            # CTRL+C enquanto esperava o servidor desligar: o app ja esta fechado.
+            pass
 
     def _vigia(self) -> None:
         """Duas mortes por inatividade: pergunta sem ninguem e servidor sem gente."""
@@ -967,7 +985,7 @@ def run_app(cfg: dict, rede: bool | None = None, porta: int = 0, abrir: bool = T
         if app.servidor is not None:
             try:
                 app.servidor.server_close()
-            except OSError:
+            except (OSError, KeyboardInterrupt):
                 pass
     print(t("app.encerrando"))
     if app.motivo == "terminal":

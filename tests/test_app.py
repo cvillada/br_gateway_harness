@@ -431,5 +431,30 @@ try:
 finally:
     _srv.AUSENTE_NEGA_S = _antes
 
+# ---------- 11. CTRL+C durante o encerramento nao vira traceback ------------
+# Regressao do macOS: tres ^C seguidos interrompiam o sleep do encerramento e o
+# TEO terminava com um traceback na cara do usuario.
+app3 = App(CFG, token="tok3")
+app3.core = None
+app3.subir_servidor(porta=0)
+time.sleep(0.1)
+_sono = _srv.time.sleep
+
+
+def _sono_interrompido(_segundos):
+    raise KeyboardInterrupt
+
+
+_srv.time.sleep = _sono_interrompido     # type: ignore[assignment]
+try:
+    app3.encerrar("ctrl+c")
+    ok("encerrar sobrevive a CTRL+C no meio da espera", True)
+except KeyboardInterrupt:
+    ok("encerrar sobrevive a CTRL+C no meio da espera", False)
+finally:
+    _srv.time.sleep = _sono                    # type: ignore[assignment]
+    app3.esperar_fim(5)
+ok("sem CTRL+C o app ainda fecha normal", app3.fechado is True)
+
 print()
 print(f"TODOS OS TESTES DA TELA PASSARAM ({PASS} verificacoes)")
