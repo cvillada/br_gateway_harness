@@ -33,3 +33,11 @@ jobs:
           PYTHONIOENCODING: utf-8
           PYTHONUTF8: "1"
         run: python tests/test_smoke.py
+      - name: Rodar a suite da tela do navegador
+        # A tela do navegador usa so a biblioteca padrao (http.server, threading,
+        # secrets), mas socket e loopback mudam de comportamento entre sistemas:
+        # este passo e o que prova o app nos tres, sem modelo e sem internet.
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: "1"
+        run: python tests/test_app.py
