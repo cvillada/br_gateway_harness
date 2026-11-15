@@ -336,3 +336,24 @@ def reabrir(nivel_escolhido: int) -> bool:
         return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------------------
+# Trocar de tela sem sair do programa
+# ---------------------------------------------------------------------------
+# O comando e do TERMINAL, nao do cerebro: quem intercepta e o laco da tela
+# (cli.chat) e a tela fixa (tui.py), antes de entregar a linha ao chat_core.
+# Assim o nucleo continua sem saber que existe mais de uma tela.
+TROCA_APP = 77      # codigo de saida: "terminei aqui, abra a tela do navegador"
+TROCA_CHAT = 78     # codigo de saida: "fechei o app, abra o terminal"
+
+COMANDOS_TROCA_APP = ("tela", "app", "navegador", "webapp")
+
+
+def eh_troca_para_app(texto: str) -> bool:
+    """True se a linha digitada pede a tela do navegador (/tela, /app...)."""
+    bruto = (texto or "").strip().lower()
+    if not bruto.startswith("/"):
+        return False
+    nome = bruto[1:].split()[0] if bruto[1:].split() else ""
+    return nome in COMANDOS_TROCA_APP

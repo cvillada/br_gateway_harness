@@ -2707,7 +2707,8 @@ _total_blocos316 = sum(len(b) for b in (_i18n316.COMMON, _i18n316.HELP_HEADERS,
                                         _i18n316.CHAT, _i18n316.AGENT, _i18n316.GATE,
                                         _i18n316.TUI, _i18n316.PALCO, _i18n316.LLM,
                                         _i18n316.SETUP, _i18n316.CLI, _i18n316.TOOLS,
-                                        _i18n316.UPDATER, _i18n316.FILES, _i18n316.MEMORY))
+                                        _i18n316.UPDATER, _i18n316.FILES, _i18n316.MEMORY,
+                                        _i18n316.APP))
 ok("catalogo sem chave repetida entre blocos",
    _total_blocos316 == len(_i18n316.TEXTS))
 

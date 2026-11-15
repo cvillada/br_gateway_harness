@@ -278,6 +278,35 @@ antiga), rode `scripts/consertar_icone_mac.sh`: conserta sem reinstalar.
   recusar o tamanho, ele compacta e tenta de novo em vez de parar. O ponto de
   compactacao e ajustavel: `context_compress_pct` no `~/.bgh/config.json`.
 
+## Tela do navegador (o mesmo TEO, com botoes)
+
+Quem abre o TEO - pelo icone da area de trabalho ou digitando `bgh` - escolhe como
+quer usar:
+
+      Como voce quer usar o TEO?
+        1. Na tela do navegador (bonita, com botao)
+        2. No terminal (como sempre)
+        3. Configuracoes
+        4. Sair
+
+- A opcao 1 abre a MESMA conversa numa tela do navegador, em `127.0.0.1` numa
+  porta livre: letra grande, botao Enviar, rascunho do modelo recolhido, painel
+  "O que o TEO esta fazendo" e medidor de contexto. Nada para instalar, nada de
+  internet: o navegador que a pessoa ja tem.
+- Licenca: os quatro caminhos viram botoes grandes. Se ninguem responder (aba
+  fechada, computador suspenso), o TEO NAO faz - falha fechada, igual ao Enter
+  sozinho do terminal.
+- Trocar de tela sem sair: `/tela` (ou `/app`, `/navegador`) no terminal abre o
+  navegador; o botao **Terminal** na tela do navegador traz de volta.
+- A opcao 3 (Configuracoes) mexe no que antes so existia em arquivo: abrir para a
+  rede (com aviso e confirmacao digitada), idioma e modelo. Fica gravado no
+  `~/.bgh/config.json`; `bgh app --local` ignora a rede so naquela execucao.
+- O nucleo e o mesmo: memoria, conversa, ferramentas e licencas. So a tampa muda.
+- Para acesso de fora de casa use tunel SSH ou Tailscale - nao abra porta no
+  roteador.
+- Atalhos: `bgh app` (vai direto ao navegador), `bgh chat` (vai direto ao
+  terminal).
+
 ## Seguranca (modelo Hermes, menu simples para o usuario)
 
 - Comando seguro: executa sem perguntar.

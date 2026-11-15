@@ -675,6 +675,13 @@ def run_tui(cfg: dict) -> int:
             return
         if not text.strip():
             return
+        # /tela: fecha a tela fixa e o cli abre o navegador (o nucleo nem ve a linha).
+        # Fica depois do bloco de "busy": com turno rodando, comando nao entra.
+        if tela.eh_troca_para_app(text):
+            state["trocar"] = "app"
+            if app is not None:
+                _schedule(app.exit)
+            return
         state["busy"] = True
         state["stop_hits"] = 0
         state["busy_since"] = time.time()   # a barra de baixo conta os segundos da espera
@@ -861,6 +868,8 @@ def run_tui(cfg: dict) -> int:
         if holder is not None:
             holder["choice"] = holder.get("deny_code", "d")
             holder["ev"].set()
+    if state.get("trocar") == "app":
+        return tela.TROCA_APP
     return 0
 
 

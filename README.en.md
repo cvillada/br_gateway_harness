@@ -287,6 +287,35 @@ without reinstalling.
   again instead of stopping. The compaction point is adjustable:
   `context_compress_pct` in `~/.bgh/config.json`.
 
+## Browser screen (the same TEO, with buttons)
+
+Whoever opens TEO - from the desktop icon or typing `bgh` - chooses how to use it:
+
+      How do you want to use TEO?
+        1. On the browser screen (pretty, with buttons)
+        2. In the terminal (as always)
+        3. Settings
+        4. Quit
+
+- Option 1 opens the SAME conversation on a browser screen at `127.0.0.1` on a
+  free port: big letters, a Send button, the model draft collapsed, a "What TEO
+  is doing" panel and the context meter. Nothing to install, no internet: the
+  browser the person already has.
+- Permission: the four paths become big buttons. If nobody answers (tab closed,
+  computer asleep), TEO does NOT do it - fail closed, like the lone Enter in the
+  terminal.
+- Switch screens without leaving: `/tela` (or `/app`, `/navegador`) in the
+  terminal opens the browser; the **Terminal** button on the browser screen takes
+  you back.
+- Option 3 (Settings) changes what used to live only in the file: open to the
+  network (warning plus typed confirmation), language and model. It is saved in
+  `~/.bgh/config.json`; `bgh app --local` ignores the network for that run only.
+- Same core: memory, conversation, tools and permissions. Only the shell changes.
+- For access from outside the house use an SSH tunnel or Tailscale - do not open
+  a port on the router.
+- Shortcuts: `bgh app` (straight to the browser), `bgh chat` (straight to the
+  terminal).
+
 ## Security (Hermes model, simple menu for the user)
 
 - Safe command: runs without asking.

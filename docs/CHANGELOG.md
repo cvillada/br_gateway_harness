@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.26
+
+Uma tela para quem nao vive no terminal: o TEO no navegador.
+
+- `bgh app` (ou a opcao 1 do menu) abre a mesma conversa numa tela do navegador:
+  letra grande, botao Enviar, rascunho do modelo recolhido, painel do que o TEO
+  esta fazendo e medidor de contexto. Nada para instalar e nada de internet.
+- O nucleo NAO mudou: a tela nova e uma tampa que implementa os mesmos metodos
+  que a tela do terminal (chat_core.py, agent.py, tools/ e approvals.py sem uma
+  linha alterada). Ha teste que compara as assinaturas metodo a metodo.
+- Licenca no navegador: os quatro caminhos viram botoes grandes e o foco nasce em
+  "Nao". Se ninguem responder (aba fechada, computador suspenso) o TEO NAO faz.
+- Menu de entrada nos tres sistemas: 1 navegador, 2 terminal, 3 configuracoes,
+  4 sair (Enter = 1). Sem terminal interativo o menu nao aparece: vai direto ao
+  terminal, para nao travar automacao. `bgh chat` e `bgh app` pulam o menu.
+- Configuracoes no menu: abrir para a rede (aviso de tres linhas + SIM digitado),
+  idioma e modelo - gravados no config.json. `--local` e `--rede` forcam so
+  aquela execucao.
+- Trocar de tela sem sair: `/tela` (`/app`, `/navegador`) no terminal e o botao
+  Terminal no navegador. O comando e interceptado na tela, nao no nucleo.
+- Ajuda propria da tela: 12 linhas com o que existe no navegador, sem falar de
+  Ctrl+J, Alt+Enter ou "voce>". O /ajuda do terminal continua completo.
+- Seguranca: escuta so em 127.0.0.1, token sorteado por execucao, cookie HttpOnly
+  + SameSite, Host e Origin conferidos (DNS rebinding e CSRF) e CSP fechada. Para
+  fora de casa, tunel SSH ou Tailscale - nao port forwarding.
+- Suite local: 511 testes do nucleo + 92 da tela do navegador verdes nesta
+  maquina; o CI (ubuntu, windows, macos) roda no push, junto do build.
+
 ## 0.2.25
 
 Janela maximizada nos TRES sistemas - e uma tela que nunca fica muda.

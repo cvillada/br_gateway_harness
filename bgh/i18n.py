@@ -330,6 +330,10 @@ HELP_SECTIONS = [
          "quem fez o TEO, por que esse nome e os agradecimentos",
          "who made TEO, why that name and the thanks",
          "quien hizo el TEO, por que ese nombre y los agradecimientos"),
+        ("/tela", "/screen", "/pantalla",
+         "abre a tela do navegador (no navegador, o botao Terminal traz de volta)",
+         "opens the browser screen (inside it, the Terminal button comes back)",
+         "abre la pantalla del navegador (dentro de ella, el boton Terminal vuelve)"),
         ("/sair", "/exit", "/salir", "encerra", "quits", "cierra"),
     ]),
 ]
@@ -1863,9 +1867,229 @@ MEMORY = {
                        "ERROR: accion invalida (usa add, search o list)"),
 }
 
+# ---------------------------------------------------------------------------
+# Tela do navegador (bgh/app_servidor.py + bgh/assets/app.html)
+# Mesmo principio: toda frase que a PESSOA le sai daqui, inclusive os botoes.
+# O /api/inicio do app entrega so as chaves desta secao para o JavaScript.
+# ---------------------------------------------------------------------------
+APP = {
+    "app.enviar": ("Enviar", "Send", "Enviar"),
+    "app.parar": ("Parar", "Stop", "Parar"),
+    "app.placeholder": ("Escreva aqui o que voce quer que o TEO faca",
+                        "Write here what you want TEO to do",
+                        "Escribe aqui lo que quieres que el TEO haga"),
+    "app.dica": ("ENTER envia. Para escrever mais de uma linha, use SHIFT+ENTER. "
+                 "{cmd} para listar as opcoes.",
+                 "ENTER sends. To write more than one line, use SHIFT+ENTER. "
+                 "{cmd} to list the options.",
+                 "ENTER envia. Para escribir mas de una linea, usa SHIFT+ENTER. "
+                 "{cmd} para listar las opciones."),
+    "app.trabalhando": ("O TEO esta trabalhando. Se escrever agora, o recado chega "
+                        "no meio do caminho.",
+                        "TEO is working. If you write now, the note arrives on the way.",
+                        "El TEO esta trabajando. Si escribes ahora, el aviso llega "
+                        "en el camino."),
+    "app.ligando": ("Ligando no TEO...", "Connecting to TEO...", "Conectando al TEO..."),
+    "app.caiu": ("A ligacao caiu. Tentando de novo sozinho...",
+                 "The connection dropped. Retrying by itself...",
+                 "La conexion se corto. Reintentando solo..."),
+    "app.pensamento": ("Rascunho do TEO (nao e a resposta)",
+                       "TEO draft (not the answer)", "Borrador del TEO (no es la respuesta)"),
+    "app.ferramentas": ("O que o TEO esta fazendo",
+                        "What TEO is doing", "Lo que el TEO esta haciendo"),
+    "app.contexto": ("Memoria da conversa", "Conversation memory", "Memoria de la conversacion"),
+    "app.licenca_titulo": ("O TEO precisa da sua licenca",
+                           "TEO needs your permission", "El TEO necesita tu permiso"),
+    "app.licenca_dica": ("Escolha uma opcao. Se ninguem escolher, o TEO NAO faz.",
+                         "Choose one option. If nobody chooses, TEO does NOT do it.",
+                         "Elige una opcion. Si nadie elige, el TEO NO lo hace."),
+    "app.sem_resposta": ("Ninguem respondeu a licenca; por seguranca, o TEO nao fez.",
+                         "Nobody answered the permission; for safety, TEO did not do it.",
+                         "Nadie respondio al permiso; por seguridad, el TEO no lo hizo."),
+    "app.encerrando": ("O TEO foi encerrado. Pode fechar esta aba.",
+                       "TEO is closed. You can close this tab.",
+                       "El TEO se cerro. Puedes cerrar esta pestana."),
+    "app.erro": ("Deu um problema: {erro}", "Something went wrong: {erro}",
+                 "Hubo un problema: {erro}"),
+    "app.modo_rede": ("MODO REDE: quem estiver na mesma rede pode abrir esta tela. "
+                      "Feche quando terminar.",
+                      "NETWORK MODE: anyone on this network can open this screen. "
+                      "Close it when you finish.",
+                      "MODO REDE: quien este en la misma red puede abrir esta pantalla. "
+                      "Cierra cuando termines."),
+    "app.vazio": ("Nada ainda. Escreva a primeira coisa que voce quer fazer.",
+                  "Nothing yet. Write the first thing you want to do.",
+                  "Nada todavia. Escribe la primera cosa que quieres hacer."),
+    "app.voce": ("Voce", "You", "Tu"),
+    "app.passo": ("passo {n}", "step {n}", "paso {n}"),
+    "app.escreva_aqui": ("Escreva aqui e aperte ENTER",
+                         "Write here and press ENTER", "Escribe aqui y pulsa ENTER"),
+    "app.fechar": ("Fechar", "Close", "Cerrar"),
+    "app.modelo": ("modelo", "model", "modelo"),
+    "app.ver_rascunho": ("ver o rascunho", "show the draft", "ver el borrador"),
+    "app.nada_feito": ("(nada ainda)", "(nothing yet)", "(nada todavia)"),
+    "app.esconder": ("esconder", "hide", "ocultar"),
+    "app.ajuda": ("Ajuda", "Help", "Ayuda"),
+    "app.terminal": ("Terminal", "Terminal", "Terminal"),
+    "app.terminal.aviso": ("Fechar esta tela e continuar no terminal?",
+                           "Close this screen and continue in the terminal?",
+                           "Cerrar esta pantalla y seguir en el terminal?"),
+    "app.abrindo_terminal": ("Abrindo o TEO no terminal... pode fechar esta aba.",
+                             "Opening TEO in the terminal... you can close this tab.",
+                             "Abriendo el TEO en el terminal... puedes cerrar esta pestana."),
+    "cli.menu.titulo": ("Como voce quer usar o TEO?", "How do you want to use TEO?",
+                        "Como quieres usar el TEO?"),
+    "cli.menu.app": ("Na tela do navegador (bonita, com botao)",
+                     "On the browser screen (pretty, with buttons)",
+                     "En la pantalla del navegador (bonita, con boton)"),
+    "cli.menu.chat": ("No terminal (como sempre)", "In the terminal (as always)",
+                      "En el terminal (como siempre)"),
+    "cli.menu.config": ("Configuracoes", "Settings", "Configuracion"),
+    "cli.menu.sair": ("Sair", "Quit", "Salir"),
+    "cli.menu.prompt": ("Numero (Enter = 1): ", "Number (Enter = 1): ",
+                        "Numero (Enter = 1): "),
+    "cli.menu.bad": ("Nao entendi. Digite 1, 2, 3 ou 4.",
+                     "I did not get it. Type 1, 2, 3 or 4.",
+                     "No entendi. Escribe 1, 2, 3 o 4."),
+    "cfg.titulo": ("Configuracoes do TEO", "TEO settings", "Configuracion del TEO"),
+    "cfg.rede": ("Abrir para a rede", "Open to the network", "Abrir a la red"),
+    "cfg.rede.on": ("SIM - quem estiver na mesma rede pode abrir a tela",
+                    "YES - anyone on the same network can open the screen",
+                    "SI - quien este en la misma red puede abrir la pantalla"),
+    "cfg.rede.off": ("NAO - so nesta maquina", "NO - this computer only",
+                     "NO - solo en esta maquina"),
+    "cfg.idioma": ("Idioma", "Language", "Idioma"),
+    "cfg.modelo": ("Modelo", "Model", "Modelo"),
+    "cfg.voltar": ("Voltar", "Back", "Volver"),
+    "cfg.prompt": ("Numero (Enter = 4): ", "Number (Enter = 4): ",
+                   "Numero (Enter = 4): "),
+    "cfg.rede.aviso": (
+        "ATENCAO: com a rede ligada, o TEO (que executa comandos NESTA maquina)\n"
+        "pode ser aberto por qualquer pessoa que estiver na mesma rede e souber o\n"
+        "endereco. Use so enquanto precisar e desligue depois.",
+        "WARNING: with the network on, TEO (which runs commands on THIS machine)\n"
+        "can be opened by anyone on the same network who knows the address.\n"
+        "Use it only while you need it and turn it off afterwards.",
+        "ATENCION: con la red activada, el TEO (que ejecuta comandos en ESTA maquina)\n"
+        "puede abrirlo cualquiera que este en la misma red y sepa la direccion.\n"
+        "Usalo solo mientras lo necesites y apagalo despues."),
+    "cfg.rede.prompt": ("Digite SIM para abrir para a rede: ",
+                        "Type YES to open to the network: ",
+                        "Escribe SI para abrir a la red: "),
+    "cfg.rede.ligou": ("Pronto: o TEO agora abre para a rede.",
+                       "Done: TEO now opens to the network.",
+                       "Listo: el TEO ahora abre a la red."),
+    "cfg.rede.desligou": ("Pronto: o TEO volta a abrir so nesta maquina.",
+                          "Done: TEO is back to this computer only.",
+                          "Listo: el TEO vuelve a abrir solo en esta maquina."),
+    "cfg.rede.cancelou": ("Cancelado: continua so nesta maquina.",
+                          "Cancelled: it stays on this computer only.",
+                          "Cancelado: sigue solo en esta maquina."),
+    "cfg.lingua.prompt": ("Numero do idioma (Enter = {first}): ",
+                          "Language number (Enter = {first}): ",
+                          "Numero del idioma (Enter = {first}): "),
+    "cfg.lingua.ok": ("Idioma gravado: {nome}.", "Language saved: {nome}.",
+                      "Idioma guardado: {nome}."),
+    "cfg.modelo.prompt": ("Nome do modelo (Enter = manter {atual}): ",
+                          "Model name (Enter = keep {atual}): ",
+                          "Nombre del modelo (Enter = mantener {atual}): "),
+    "cfg.modelo.ok": ("Modelo gravado: {modelo}.", "Model saved: {modelo}.",
+                      "Modelo guardado: {modelo}."),
+    "app.opcoes": ("Opcoes do TEO", "TEO options", "Opciones del TEO"),
+    # Ajuda PROPRIA da tela do navegador: so o que existe aqui. O manual completo
+    # (com teclas do terminal) continua no /ajuda do modo terminal.
+    "app.cmd.escrever": ("Escrever", "Writing", "Escribir"),
+    "app.help.escrever": ("ENTER envia. SHIFT+ENTER escreve em outra linha.",
+                          "ENTER sends. SHIFT+ENTER writes on another line.",
+                          "ENTER envia. SHIFT+ENTER escribe en otra linea."),
+    "app.cmd.anexar": ("@arquivo", "@file", "@archivo"),
+    "app.help.anexar": ("anexa um arquivo ou uma FOTO (png, jpg) para o TEO olhar",
+                        "attaches a file or a PHOTO (png, jpg) for TEO to look at",
+                        "adjunta un archivo o una FOTO (png, jpg) para que el TEO mire"),
+    "app.cmd.parar": ("Parar", "Stop", "Parar"),
+    "app.help.parar": ("durante a resposta o botao Enviar vira Parar; ele para na hora",
+                       "while answering, the Send button becomes Stop; it stops right away",
+                       "mientras responde, el boton Enviar pasa a Parar; para al instante"),
+    "app.cmd.novo": ("/nov", "/new", "/nuevo"),
+    "app.help.novo": ("conversa nova; a memoria e as skills continuam",
+                      "new conversation; memory and skills stay",
+                      "conversacion nueva; memoria y skills siguen"),
+    "app.cmd.modelo": ("/modelo", "/model", "/modelo"),
+    "app.help.modelo": ("lista e troca o modelo do servidor (fica salvo)",
+                        "lists and switches the server model (saved)",
+                        "lista y cambia el modelo del servidor (guardado)"),
+    "app.cmd.lingua": ("/lingua", "/language", "/idioma"),
+    "app.help.lingua": ("troca o idioma da tela", "switches the screen language",
+                        "cambia el idioma de la pantalla"),
+    "app.cmd.fundo": ("/fundo", "/background", "/fondo"),
+    "app.help.fundo": ("cor de fundo da tela (as letras mudam para continuar legiveis)",
+                       "screen background colour (letters change to stay readable)",
+                       "color de fondo de la pantalla (las letras cambian para seguir legibles)"),
+    "app.cmd.limpar": ("/limpar", "/clean", "/limpiar"),
+    "app.help.limpar": ("apaga os rascunhos que o TEO guarda neste computador",
+                        "erases the scratch files TEO keeps on this computer",
+                        "borra los borradores que el TEO guarda en esta computadora"),
+    "app.cmd.sobre": ("/sobre", "/about", "/acerca"),
+    "app.help.sobre": ("quem fez o TEO, por que esse nome e os agradecimentos",
+                       "who made TEO, why that name and the thanks",
+                       "quien hizo el TEO, por que ese nombre y los agradecimientos"),
+    "app.cmd.ditar": ("/ditar", "/dictate", "/dictar"),
+    "app.help.ditar": ("falar em vez de digitar: por enquanto so no terminal",
+                       "speaking instead of typing: for now only in the terminal",
+                       "hablar en vez de escribir: por ahora solo en el terminal"),
+    "app.cmd.terminal": ("Terminal", "Terminal", "Terminal"),
+    "app.help.terminal": ("botao no topo: continua no terminal onde voce abriu",
+                          "top button: continues in the terminal you opened it from",
+                          "boton arriba: sigue en el terminal donde lo abriste"),
+    "app.cmd.sair": ("Fechar", "Close", "Cerrar"),
+    "app.help.sair": ("botao no topo: encerra o TEO (a conversa fica guardada)",
+                      "top button: closes TEO (the conversation is saved)",
+                      "boton arriba: cierra el TEO (la conversacion queda guardada)"),
+    "app.fechar_menu": ("fechar", "close", "cerrar"),
+    "app.sair_ok": ("Fechar o TEO? A conversa fica guardada: quando voce abrir de "
+                    "novo, ele continua do mesmo ponto.",
+                    "Close TEO? The conversation is saved: when you open it again it "
+                    "continues from the same point.",
+                    "Cerrar el TEO? La conversacion queda guardada: cuando lo abras de "
+                    "nuevo, sigue desde el mismo punto."),
+    "app.sair_confirmar": ("O TEO ainda esta trabalhando. Sair agora mesmo?",
+                           "TEO is still working. Leave right now?",
+                           "El TEO todavia esta trabajando. Salir ahora mismo?"),
+    "cli.help.app": ("tela do TEO no navegador (mesmo agente, mesma memoria)",
+                     "TEO screen in the browser (same agent, same memory)",
+                     "pantalla del TEO en el navegador (mismo agente, misma memoria)"),
+    "cli.app.rede": ("abrir para a rede local (pede confirmacao e avisa na tela)",
+                     "open to the local network (asks for confirmation and warns on screen)",
+                     "abrir a la red local (pide confirmacion y avisa en pantalla)"),
+    "cli.app.local": ("so nesta maquina, mesmo que o config diga rede",
+                      "this computer only, even if the config says network",
+                      "solo en esta maquina, aunque el config diga red"),
+    "cli.app.porta": ("porta fixa (padrao: uma porta livre escolhida agora)",
+                      "fixed port (default: a free port picked now)",
+                      "puerto fijo (por defecto: un puerto libre elegido ahora)"),
+    "cli.app.no_browser": ("nao abrir o navegador sozinho (o endereco aparece na tela)",
+                           "do not open the browser by itself (the address shows up)",
+                           "no abrir el navegador solo (la direccion aparece)"),
+    "cli.app.menu": ("Como voce quer usar o TEO?\n  1. Na tela do navegador (bonita, com botao)\n"
+                     "  2. No terminal (como sempre)\n"
+                     "Numero (Enter = 1): ",
+                     "How do you want to use TEO?\n  1. On the browser screen (pretty, with buttons)\n"
+                     "  2. In the terminal (as always)\n"
+                     "Number (Enter = 1): ",
+                     "Como quieres usar el TEO?\n  1. En la pantalla del navegador (bonita, con boton)\n"
+                     "  2. En el terminal (como siempre)\n"
+                     "Numero (Enter = 1): "),
+    "app.sessao": ("Esta janela do TEO nao esta liberada. Abra o endereco que "
+                   "apareceu no terminal (aquele com o codigo depois de ?t=).",
+                   "This TEO window is not unlocked. Open the address shown in the "
+                   "terminal (the one with the code after ?t=).",
+                   "Esta ventana del TEO no esta liberada. Abre la direccion que "
+                   "aparecio en el terminal (aquella con el codigo despues de ?t=)."),
+}
+
 TEXTS: dict[str, tuple[str, str, str]] = {}
 for _bloco in (COMMON, HELP_HEADERS, CHAT, AGENT, GATE, TUI, PALCO, LLM, SETUP, CLI, TOOLS,
-               UPDATER, FILES, MEMORY):
+               UPDATER, FILES, MEMORY, APP):
     TEXTS.update(_bloco)
 
 

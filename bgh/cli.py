@@ -86,6 +86,11 @@ def chat(_args) -> int:
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
+            # /tela sai do terminal e abre a tela do navegador (interceptado aqui,
+            # antes do nucleo: o chat_core nao conhece a outra tela).
+            if tela.eh_troca_para_app(user):
+                print()
+                return tela.TROCA_APP
             if core.submit(user) == "exit":
                 break
     finally:
@@ -93,6 +98,43 @@ def chat(_args) -> int:
         if tela.paleta(tela.cor(cfg)).get("bg"):
             tela.escrever(tela.RESET_FUNDO)
     return 0
+
+
+def app(args) -> int:
+    """bgh app: a mesma conversa, na tela do navegador (o agente e o mesmo).
+
+    Nao chama prepare_console nem a tela fixa: aqui nao existe terminal para
+    pintar - quem desenha e o navegador.
+    """
+    from .app_servidor import run_app
+    from .config import ConfigError, load_config, saved_lang
+
+    i18n.set_lang(saved_lang())
+    try:
+        cfg = load_config()
+    except ConfigError as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        if not sys.stdin.isatty():
+            console.print(t("cli.noninteractive"))
+            return 1
+        console.print(t("cli.first_run"))
+        from .setup_wizard import run as run_setup
+
+        if run_setup() != 0:
+            return 1
+        try:
+            cfg = load_config()
+        except ConfigError as exc2:
+            console.print(f"[red]{exc2}[/red]")
+            return 1
+    # --rede liga para esta execucao; --local fecha (mesmo que o config diga sim);
+    # sem nenhum dos dois vale o que a pessoa escolheu no menu de Configuracoes.
+    rede_flag = bool(getattr(args, "rede", False))
+    local_flag = bool(getattr(args, "local", False))
+    rede = True if rede_flag else (False if local_flag else None)
+    return run_app(cfg, rede=rede,
+                   porta=int(getattr(args, "porta", 0) or 0),
+                   abrir=not getattr(args, "no_browser", False))
 
 
 def approvals(args) -> int:
@@ -229,6 +271,176 @@ def setup(args) -> int:
                lang=getattr(args, "lang", None))
 
 
+def _opcao_do_menu(resposta: str) -> str:
+    """Numero (ou nome) digitado no menu -> 'app'|'chat'|'config'|'sair'.
+
+    '' significa "nao entendi" (o menu repete em vez de escolher por conta).
+    """
+    r = (resposta or "").strip().lower()
+    if r in ("", "1", "a", "app", "navegador", "tela", "webapp"):
+        return "app"
+    if r in ("2", "c", "chat", "terminal", "tui"):
+        return "chat"
+    if r in ("3", "config", "configuracoes", "ajustes", "settings"):
+        return "config"
+    if r in ("4", "s", "sair", "exit", "0"):
+        return "sair"
+    return ""
+
+
+def escolher_tela() -> str:
+    """Pergunta de entrada: app, terminal, configuracoes ou sair.
+
+    Publico do TEO e crianca e idoso: quem abre o programa ganha um menu em vez
+    de precisar saber um subcomando. Enter sozinho vai para a tela bonita.
+
+    Sem terminal interativo (script, pipe, cron, teste) NAO pergunta nada: vai
+    direto para o terminal, como sempre foi. Menu nunca pode travar automacao.
+    """
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return "chat"
+    for _ in range(3):
+        print("")
+        print(f"  {t('cli.menu.titulo')}")
+        print("")
+        print(f"    1. {t('cli.menu.app')}")
+        print(f"    2. {t('cli.menu.chat')}")
+        print(f"    3. {t('cli.menu.config')}")
+        print(f"    4. {t('cli.menu.sair')}")
+        print("")
+        try:
+            resposta = input(f"  {t('cli.menu.prompt')}")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return "chat"
+        opcao = _opcao_do_menu(resposta)
+        if opcao:
+            return opcao
+        print(f"  {t('cli.menu.bad')}")
+    return "chat"
+
+
+def _alternar_rede(cfg: dict, ligado: bool) -> None:
+    """Liga/desliga o 'abrir para a rede'. Desligar nunca pergunta: fechar e seguro."""
+    from .config import save_config
+
+    if ligado:
+        cfg["rede"] = False
+        save_config(cfg)
+        print(f"  {t('cfg.rede.desligou')}")
+        return
+    print("")
+    for linha in t("cfg.rede.aviso").splitlines():
+        print(f"  {linha}")
+    print("")
+    try:
+        resposta = input(f"  {t('cfg.rede.prompt')}").strip().upper()
+    except (EOFError, KeyboardInterrupt):
+        resposta = ""
+    if resposta in ("SIM", "S", "SI", "YES", "Y"):
+        cfg["rede"] = True
+        save_config(cfg)
+        print(f"  {t('cfg.rede.ligou')}")
+    else:
+        print(f"  {t('cfg.rede.cancelou')}")
+
+
+def _trocar_idioma(cfg: dict) -> None:
+    from .config import save_config
+
+    opcoes = i18n.lang_options()
+    for i, nome in enumerate(opcoes, start=1):
+        print(f"    {i}. {nome}")
+    try:
+        resposta = input(f"  {t('cfg.lingua.prompt', first=opcoes[0])}").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+    codigo = i18n.lang_from_answer(resposta)
+    if not codigo:
+        return
+    cfg["lang"] = codigo
+    save_config(cfg)
+    i18n.set_lang(codigo)
+    print(f"  {t('cfg.lingua.ok', nome=i18n.LANG_NAMES[codigo])}")
+
+
+def _trocar_modelo(cfg: dict) -> None:
+    from .config import save_config
+
+    atual = cfg.get("model", "")
+    try:
+        novo = input(f"  {t('cfg.modelo.prompt', atual=atual)}").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if not novo or novo == atual:
+        return
+    cfg["model"] = novo
+    save_config(cfg)
+    print(f"  {t('cfg.modelo.ok', modelo=novo)}")
+
+
+def menu_config() -> None:
+    """Configuracoes que a pessoa alcanca sem decorar comando nem editar arquivo."""
+    from .config import ConfigError, load_config
+
+    while True:
+        try:
+            cfg = load_config()
+        except ConfigError as exc:
+            console.print(f"[yellow]{exc}[/yellow]", markup=False)
+            return
+        i18n.set_lang(cfg.get("lang"))
+        ligado = bool(cfg.get("rede", False))
+        print("")
+        print(f"  {t('cfg.titulo')}")
+        print("")
+        valor = t("cfg.rede.on") if ligado else t("cfg.rede.off")
+        print(f"    1. {t('cfg.rede')}: {valor}")
+        print(f"    2. {t('cfg.idioma')}: {i18n.LANG_NAMES[i18n.get_lang()]}")
+        print(f"    3. {t('cfg.modelo')}: {cfg.get('model', '')}")
+        print(f"    4. {t('cfg.voltar')}")
+        print("")
+        try:
+            escolha = input(f"  {t('cfg.prompt')}").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if escolha in ("", "4", "v", "voltar", "back", "sair"):
+            return
+        if escolha == "1":
+            _alternar_rede(cfg, ligado)
+        elif escolha == "2":
+            _trocar_idioma(cfg)
+        elif escolha == "3":
+            _trocar_modelo(cfg)
+        else:
+            print(f"  {t('cli.menu.bad')}")
+
+
+def _rodar_tela(qual: str, args) -> int:
+    """Roda a tela escolhida e troca de tela quando ela pedir (ida e volta).
+
+    Quem pede a troca devolve um codigo de saida (ver bgh/tela.py); aqui ele vira
+    a outra tela. Assim /tela no terminal e o botao Terminal no navegador
+    funcionam sem o nucleo saber que existe mais de uma tela.
+    """
+    from . import tela
+
+    while True:
+        codigo = app(args) if qual == "app" else chat(args)
+        if codigo == tela.TROCA_APP:
+            qual = "app"
+            continue
+        if codigo == tela.TROCA_CHAT:
+            # Sem terminal de verdade (rodou em segundo plano, cron, pipe) nao ha
+            # onde desenhar o TUI: encerra em vez de despejar o banner num log.
+            if not (sys.stdin.isatty() and sys.stdout.isatty()):
+                return 0
+            qual = "chat"
+            continue
+        return codigo
+
+
 def main(argv=None) -> int:
     from .config import saved_lang
 
@@ -249,10 +461,28 @@ def main(argv=None) -> int:
     appr_p.add_argument("action", nargs="?", default="list", choices=["list", "clear", "remove"])
     appr_p.add_argument("index", nargs="?", type=int, default=0)
     appr_p.set_defaults(func=approvals)
+    app_p = sub.add_parser("app", help=t("cli.help.app"))
+    app_p.add_argument("--rede", action="store_true", help=t("cli.app.rede"))
+    app_p.add_argument("--local", action="store_true", help=t("cli.app.local"))
+    app_p.add_argument("--porta", type=int, default=0, help=t("cli.app.porta"))
+    app_p.add_argument("--no-browser", dest="no_browser", action="store_true",
+                       help=t("cli.app.no_browser"))
+    app_p.set_defaults(func=app)
 
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
-        return chat(args)
+        # Sem subcomando: o menu de entrada decide (e as Configuracoes voltam pro menu).
+        escolha = escolher_tela()
+        if escolha == "config":
+            menu_config()
+            escolha = escolher_tela()
+        if escolha == "sair":
+            return 0
+        return _rodar_tela(escolha, args)
+    if args.func is app:
+        return _rodar_tela("app", args)
+    if args.func is chat:
+        return _rodar_tela("chat", args)
     return args.func(args)
 
 

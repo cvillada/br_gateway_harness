@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>TEO</title>
+<link rel="icon" href="/teo.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body data-tema="claro">
+
+<div id="faixa-rede" class="faixa-rede" hidden></div>
+
+<header class="topo">
+  <div class="marca">
+    <img class="gato" src="/teo.svg" alt="" width="64" height="64">
+    <div class="marca-texto">
+      <h1 id="titulo">TEO</h1>
+      <p id="sub" class="sub"></p>
+    </div>
+  </div>
+  <div class="acoes-topo">
+    <span id="passo" class="passo" hidden></span>
+    <button id="ajuda" class="botao-fantasma" type="button"></button>
+    <button id="terminal" class="botao-fantasma" type="button"></button>
+    <button id="sair" class="botao-fantasma" type="button"></button>
+  </div>
+</header>
+
+<main class="tela">
+  <section id="conversa" class="conversa" aria-live="polite" aria-relevant="additions text">
+    <p id="vazio" class="vazio"></p>
+  </section>
+
+  <aside class="painel" aria-labelledby="painel-titulo">
+    <h2 class="painel-titulo" id="painel-titulo"></h2>
+    <ol id="ferramentas" class="ferramentas"></ol>
+    <div class="ctx">
+      <div class="ctx-topo">
+        <span id="ctx-titulo"></span>
+        <span id="ctx-pct" class="ctx-pct"></span>
+      </div>
+      <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+        <div id="ctx-barra" class="barra-cheia"></div>
+      </div>
+      <p id="ctx-texto" class="ctx-texto"></p>
+    </div>
+  </aside>
+</main>
+
+<footer class="rodape">
+  <div class="linha-digitar">
+    <label class="oculto" for="texto" id="rotulo-texto"></label>
+    <textarea id="texto" rows="1" autocomplete="off" spellcheck="true"></textarea>
+    <button id="enviar" class="botao-enviar" type="button"></button>
+  </div>
+  <p id="dica" class="dica"></p>
+</footer>
+
+<div id="veu" class="veu" hidden>
+  <div class="cartao-modal" role="dialog" aria-modal="true" aria-labelledby="m-titulo">
+    <h2 id="m-titulo" class="m-titulo"></h2>
+    <p id="m-dica" class="m-dica"></p>
+    <p id="m-label" class="m-label"></p>
+    <pre id="m-detalhe" class="m-detalhe"></pre>
+    <div id="m-opcoes" class="m-opcoes"></div>
+    <div id="m-campo" class="m-campo" hidden>
+      <input id="m-texto" class="m-texto" type="text" autocomplete="off">
+      <button id="m-ok" class="botao-enviar" type="button"></button>
+    </div>
+  </div>
+</div>
+
+<div id="veu-fim" class="veu" hidden>
+  <div class="cartao-modal" role="dialog" aria-modal="true" aria-labelledby="fim-titulo">
+    <img class="gato gato-fim" src="/teo.svg" alt="" width="88" height="88">
+    <h2 id="fim-titulo" class="m-titulo"></h2>
+    <p id="fim-texto" class="m-label"></p>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

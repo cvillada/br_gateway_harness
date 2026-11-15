@@ -287,6 +287,36 @@ arregla sin reinstalar.
   parar. El punto de compactacion es ajustable: `context_compress_pct` en
   `~/.bgh/config.json`.
 
+## Pantalla del navegador (el mismo TEO, con botones)
+
+Quien abre el TEO - por el icono del escritorio o escribiendo `bgh` - elige como
+usarlo:
+
+      Como quieres usar el TEO?
+        1. En la pantalla del navegador (bonita, con boton)
+        2. En el terminal (como siempre)
+        3. Configuracion
+        4. Salir
+
+- La opcion 1 abre la MISMA conversacion en una pantalla del navegador, en
+  `127.0.0.1` en un puerto libre: letra grande, boton Enviar, borrador del modelo
+  recogido, panel "Lo que el TEO esta haciendo" y medidor de contexto. Nada para
+  instalar, sin internet: el navegador que la persona ya tiene.
+- Permiso: los cuatro caminos se vuelven botones grandes. Si nadie responde
+  (pestana cerrada, computadora suspendida), el TEO NO lo hace - falla cerrado,
+  igual que el Enter solo del terminal.
+- Cambiar de pantalla sin salir: `/tela` (o `/app`, `/navegador`) en el terminal
+  abre el navegador; el boton **Terminal** en la pantalla del navegador vuelve.
+- La opcion 3 (Configuracion) cambia lo que antes solo existia en el archivo:
+  abrir a la red (con aviso y confirmacion escrita), idioma y modelo. Se guarda en
+  `~/.bgh/config.json`; `bgh app --local` ignora la red solo en esa ejecucion.
+- El nucleo es el mismo: memoria, conversacion, herramientas y permisos. Solo
+  cambia la tapa.
+- Para acceso desde fuera de casa usa tunel SSH o Tailscale - no abras puerto en
+  el router.
+- Atajos: `bgh app` (va directo al navegador), `bgh chat` (va directo al
+  terminal).
+
 ## Seguridad (modelo Hermes, menu simple para el usuario)
 
 - Comando seguro: corre sin preguntar.
