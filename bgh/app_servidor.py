@@ -106,17 +106,49 @@ CHAVES_APP = (
 )
 
 
-# Ajuda da tela do navegador: so o que existe AQUI. O manual do terminal fala de
-# teclas (Ctrl+J, Alt+Enter, "voce>") que no navegador nao existem, entao o app
-# tem a propria lista - curta, na ordem de uso. O /ajuda do modo terminal
-# continua mostrando o manual completo para quem quer o detalhe.
-HELP_APP = ("escrever", "anexar", "parar", "novo", "modelo", "lingua", "fundo",
-            "limpar", "sobre", "ditar", "terminal", "sair")
+# Ajuda da tela do navegador: so o que existe AQUI, em secoes curtas. O manual
+# do terminal fala de teclas (Ctrl+J, Alt+Enter, "voce>") que no navegador nao
+# existem; o /ajuda do modo terminal continua mostrando o manual completo.
+HELP_APP = (
+    ("sec", "dia"),
+    ("item", "escrever"),
+    ("item", "anexar"),
+    ("item", "parar"),
+    ("item", "novo"),
+    ("sec", "ajustes"),
+    ("item", "modelo"),
+    ("item", "provedor"),
+    ("item", "configurar"),
+    ("item", "lingua"),
+    ("item", "fundo"),
+    ("item", "ctx"),
+    ("item", "pensamento"),
+    ("sec", "quando"),
+    ("item", "skills"),
+    ("item", "doctor"),
+    ("item", "atualizar"),
+    ("item", "limpar"),
+    ("item", "sobre"),
+    ("sec", "tela"),
+    ("item", "terminal"),
+    ("item", "sair"),
+    ("sec", "terminal"),
+    ("item", "so_terminal"),
+)
 
 
 def ajuda_do_app() -> list[list[str]]:
-    """Pares [o que aparece na coluna, explicacao] ja no idioma da tela."""
-    return [[t("app.cmd." + chave), t("app.help." + chave)] for chave in HELP_APP]
+    """Linhas [coluna 1, coluna 2] ja no idioma da tela.
+
+    Secao vem com a segunda coluna vazia: a tela desenha como cabecalho.
+    """
+    saida: list[list[str]] = []
+    for tipo, chave in HELP_APP:
+        if tipo == "sec":
+            saida.append([t("app.help.secao." + chave), ""])
+        else:
+            saida.append([t("app.cmd." + chave), t("app.help." + chave)])
+    return saida
 
 
 # ---------------------------------------------------------------------------

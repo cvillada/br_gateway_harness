@@ -445,9 +445,13 @@ function ajuda() {
   }
   var caixa = cartaoAjuda();
   (ajudaItens || []).forEach(function (par) {
-    // Os pedacos de uma linha sao [texto, estilo]: comando e explicacao viram
-    // dois pedacos sem cor fixa (a coluna 1 ja sai em mono pelo CSS).
-    caixa.corpo.appendChild(linhaDePartes([[par[0], ""], [par[1], ""]]));
+    // Os pedacos de uma linha sao [texto, estilo]. Item = comando + explicacao;
+    // secao vem sem explicacao e o CSS desenha como cabecalho.
+    if (par[1]) {
+      caixa.corpo.appendChild(linhaDePartes([[par[0], ""], [par[1], ""]]));
+    } else {
+      caixa.corpo.appendChild(linhaDePartes([[par[0], ""]]));
+    }
   });
   acrescentar(caixa.raiz);
   caixa.raiz.scrollIntoView({ block: "nearest", behavior: "smooth" });

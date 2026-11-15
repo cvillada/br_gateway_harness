@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.27
+
+Ajuda da tela completa e memoria da conversa sempre visivel.
+
+- A ajuda do navegador agora cobre tudo o que existe ali, em secoes: "do dia a
+  dia", "ajustes", "quando precisar", "tela" e "so no terminal". Entraram
+  /provedor, /configurar, /ctx, /pensamento, /skills, /doctor e /atualizar.
+- "So no terminal" e uma linha honesta: ditar, voz, fonte e palco nao funcionam
+  no navegador - o manual completo continua no /ajuda do terminal.
+- O painel lateral nao rola mais inteiro: so a lista "o que o TEO esta fazendo"
+  tem rolagem propria, e o medidor de memoria da conversa fica fixo no pe do
+  painel, visivel o tempo todo (mesmo com 20 ferramentas na lista).
+- Tela estreita (celular): os tres botoes do topo ficavam por cima do titulo TEO;
+  agora descem para uma linha propria, com um terco da largura cada.
+- Suite local: 511 testes do nucleo + 94 da tela do navegador verdes nesta
+  maquina; o CI (ubuntu, windows, macos) roda no push, junto do build.
+
 ## 0.2.26
 
 Uma tela para quem nao vive no terminal: o TEO no navegador.

@@ -216,7 +216,13 @@ ok("/api/inicio = 200", status == 200)
 ok("strings vem do i18n", dados["strings"]["app.enviar"] == t("app.enviar"))
 ok("nao expoe chave de API no estado", not any("key" in k for k in dados))
 ok("modo rede desligado por padrao", dados["rede"] is False)
-ok("a ajuda propria do app vem pronta (12 linhas)", len(dados.get("ajuda") or []) == 12)
+ok("a ajuda propria do app vem pronta", len(dados.get("ajuda") or []) >= 20)
+_cmds = [cmd for cmd, _desc in dados.get("ajuda") or []]
+ok("a ajuda lista os comandos importantes que existem no app",
+   all(x in _cmds for x in ("/provedor", "/configurar", "/modelo", "/doctor",
+                            "/lingua", "/ctx", "/skills", "/atualizar")))
+ok("a ajuda tem secoes (linha sem explicacao)",
+   any(not desc for _cmd, desc in dados.get("ajuda") or []))
 ok("a ajuda do app nao cita tecla de terminal",
    all("Ctrl+J" not in desc and "Alt+Enter" not in desc
        for _cmd, desc in dados.get("ajuda") or []))
