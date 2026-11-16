@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.33
+
+O TEO nao toma mais a tela inteira ao abrir.
+
+- A janela deixou de abrir maximizada por padrao (reclamacao de cliente: quem usa
+  o TEO ao lado de outro programa perdia a tela toda). Agora abre do tamanho que
+  o terminal abriu.
+- Quem gosta da janela cheia: menu de Configuracoes (`bgh` -> 3) -> opcao
+  "Janela maximizada" (4), que fica gravada; ou `bgh chat --maximizar`, que vale
+  so naquela execucao.
+- Em janela estreita a barra de baixo ja se protege sozinha: o medidor de
+  contexto sai primeiro e o aviso "rodando / CTRL+C para parar" e as teclas ficam
+  inteiros (regra antiga, coberta pela suite).
+- Windows: o empurrao do cursor para a ultima linha continua, entao quem liga a
+  janela cheia tambem fica posicionado certo.
+
 ## 0.2.32
 
 A tela do terminal se posiciona no fim da janela no Windows - e o espaco do

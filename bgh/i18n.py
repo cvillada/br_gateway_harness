@@ -602,6 +602,10 @@ CHAT = {
     "cmd.unknown": ("Comando desconhecido. {help} mostra a lista.",
                     "Unknown command. {help} shows the list.",
                     "Comando desconocido. {help} muestra la lista."),
+    "cfg.janela": ("Janela maximizada", "Maximized window", "Ventana maximizada"),
+    "cli.chat.maximizar": ("abre a janela do terminal maximizada nesta execucao",
+                           "opens the terminal window maximized for this run",
+                           "abre la ventana del terminal maximizada en esta ejecucion"),
     "cmd.screen.here": ("Voce ja esta na tela do navegador. O botao Terminal "
                         "(no topo) volta para o terminal.",
                         "You are already on the browser screen. The Terminal "

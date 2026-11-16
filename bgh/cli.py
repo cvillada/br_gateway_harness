@@ -48,6 +48,11 @@ def chat(_args) -> int:
             console.print(f"[red]{exc2}[/red]")
             return 1
 
+    # --maximizar vale SO nesta execucao (o padrao de fabrica e a janela como o
+    # terminal abriu: a maximizacao forcada incomodou gente no Windows).
+    if getattr(_args, "maximizar", False):
+        cfg["maximizar"] = True
+
     # Tela fixa quando faz sentido; senao, rolagem classica (que continua funcionando).
     use_tui = bool(cfg.get("tui", True)) and sys.stdin.isatty() and sys.stdout.isatty()
     if sys.stdout.isatty():
@@ -381,7 +386,7 @@ def _trocar_modelo(cfg: dict) -> None:
 
 def menu_config() -> None:
     """Configuracoes que a pessoa alcanca sem decorar comando nem editar arquivo."""
-    from .config import ConfigError, load_config
+    from .config import ConfigError, load_config, save_config
 
     while True:
         try:
@@ -395,17 +400,19 @@ def menu_config() -> None:
         print(f"  {t('cfg.titulo')}")
         print("")
         valor = t("cfg.rede.on") if ligado else t("cfg.rede.off")
+        cheia = t("onoff.on") if cfg.get("maximizar") else t("onoff.off")
         print(f"    1. {t('cfg.rede')}: {valor}")
         print(f"    2. {t('cfg.idioma')}: {i18n.LANG_NAMES[i18n.get_lang()]}")
         print(f"    3. {t('cfg.modelo')}: {cfg.get('model', '')}")
-        print(f"    4. {t('cfg.voltar')}")
+        print(f"    4. {t('cfg.janela')}: {cheia}")
+        print(f"    5. {t('cfg.voltar')}")
         print("")
         try:
             escolha = input(f"  {t('cfg.prompt')}").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return
-        if escolha in ("", "4", "v", "voltar", "back", "sair"):
+        if escolha in ("", "5", "v", "voltar", "back", "sair"):
             return
         if escolha == "1":
             _alternar_rede(cfg, ligado)
@@ -413,6 +420,11 @@ def menu_config() -> None:
             _trocar_idioma(cfg)
         elif escolha == "3":
             _trocar_modelo(cfg)
+        elif escolha == "4":
+            cfg["maximizar"] = not bool(cfg.get("maximizar"))
+            save_config(cfg)
+            estado = t("onoff.on") if cfg["maximizar"] else t("onoff.off")
+            print(f"  {t('cfg.janela')}: {estado}")
         else:
             print(f"  {t('cli.menu.bad')}")
 
@@ -448,6 +460,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="bgh", description=t("cli.help.prog"))
     sub = parser.add_subparsers(dest="cmd")
     chat_p = sub.add_parser("chat", help=t("cli.help.chat"))
+    chat_p.add_argument("--maximizar", action="store_true", help=t("cli.chat.maximizar"))
     chat_p.set_defaults(func=chat)
     setup_p = sub.add_parser("setup", help=t("cli.help.setup"))
     setup_p.add_argument("--provider", choices=["deepseek", "nubesbr", "local"], default=None)

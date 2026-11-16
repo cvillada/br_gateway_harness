@@ -3855,6 +3855,38 @@ ok("a area do palco ABRE e FECHA (sem espaco vazio permanente na tela)",
    and "filter=Condition(_palco_largo_visivel)" in _tui331
    and 'return [("class:palco", "")]' not in _tui331)
 
+# ---------- 0.2.33: a janela NAO abre maximizada por padrao ------------------
+# Cliente reclamou: o TEO tomava a tela inteira ao abrir. Agora o padrao e a
+# janela como o terminal abriu; quem quer cheia liga em /configurar (opcao 4) ou
+# roda `bgh chat --maximizar`.
+ok("janela maximizada vem DESLIGADA de fabrica",
+   DEFAULTS.get("maximizar") is False)
+
+import bgh.chat_core as _cc333
+
+_cont333 = {"max": 0, "titulo": 0}
+_orig_max333, _orig_tit333 = _cc333.maximize_window, _cc333.set_window_title
+try:
+    _cc333.maximize_window = lambda *a, **k: _cont333.__setitem__("max", _cont333["max"] + 1)
+    _cc333.set_window_title = lambda *a, **k: _cont333.__setitem__("titulo", _cont333["titulo"] + 1)
+    _cc333.prepare_console({})
+    ok("a abertura NAO maximiza a janela por padrao", _cont333["max"] == 0)
+    ok("o titulo da janela continua sendo posto", _cont333["titulo"] == 1)
+    _cc333.prepare_console({"maximizar": True})
+    ok("com a opcao ligada a janela abre cheia", _cont333["max"] == 1)
+finally:
+    _cc333.maximize_window, _cc333.set_window_title = _orig_max333, _orig_tit333
+
+_cli333 = (_RAIZ316 / "bgh" / "cli.py").read_text(encoding="utf-8")
+ok("a opcao aparece no menu de configuracoes e grava no config",
+   "cfg.janela" in _cli333 and 'cfg["maximizar"] = not bool' in _cli333)
+ok("bgh chat --maximizar existe e vale so naquela execucao",
+   'add_argument("--maximizar"' in _cli333
+   and 'if getattr(_args, "maximizar", False):' in _cli333)
+ok("a frase da opcao existe nas tres linguas",
+   all(_i18n316.TEXTS[k][i] for k in ("cfg.janela", "cli.chat.maximizar")
+       for i in range(3)))
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

@@ -206,9 +206,16 @@ def maximize_window(titulo: str = "TEO Agent") -> None:
 
 
 def prepare_console(cfg: dict | None = None) -> None:
-    """Nome na janela + tela maximizada (+ letra no Windows): antes da 1a tela."""
+    """Nome na janela (+ maximizar, se pedido) (+ letra no Windows): antes da 1a tela.
+
+    A maximizacao deixou de ser automatica: forcar a janela inteira incomodou
+    quem usa o TEO lado a lado com outro programa (reclamacao de cliente). Quem
+    quer a janela cheia liga em /configurar (opcao "Janela maximizada") ou roda
+    `bgh chat --maximizar` naquela vez.
+    """
     set_window_title("TEO Agent")
-    maximize_window("TEO Agent")
+    if (cfg or {}).get("maximizar"):
+        maximize_window("TEO Agent")
     if os.name == "nt":
         # Tamanho da letra escolhido no /fonte vale ja nesta abertura (Windows tem
         # API para isso; Linux/macOS dependem do proprio terminal).

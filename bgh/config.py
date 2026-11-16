@@ -53,6 +53,10 @@ DEFAULTS = {
     # 8192 comporta ~28 mil. DeepSeek V4 aceita ate 384 mil; motor local para no
     # fim natural do texto, entao nao custa nada quando a resposta e curta.
     "max_tokens": 8192,
+    # Janela maximizada na abertura: DESLIGADO de fabrica. Forcar a janela
+    # inteira atrapalha quem usa o TEO ao lado de outro programa (reclamacao de
+    # cliente); quem gosta liga em /configurar ou roda `bgh chat --maximizar`.
+    "maximizar": False,
     # Acessibilidade (/voz): le cada resposta em voz alta com a voz do SISTEMA
     # (spd-say/espeak-ng, SAPI do Windows, say do Mac). Desligado por padrao.
     "voz": False,
