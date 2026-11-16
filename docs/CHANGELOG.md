@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.31
+
+A barra de baixo da tela do terminal nao sai mais do lugar - e o documento
+citado na resposta abre com um clique.
+
+- A area do palco (a trilha do pedido, com "rodando... 0s | PARA PARAR: CTRL+C")
+  passou a ter altura CONSTANTE. Antes ela aparecia e sumia a cada resposta;
+  quando sumia, o bloco fixo de baixo encolhia 5 linhas. No Windows isso jogava
+  a barra de status para fora da tela (relato do teste em Windows: "a parte de
+  baixo sumia"). Agora, entre um turno e outro, a area fica reservada e vazia: a
+  linha de digitar e a barra de status ficam sempre no mesmo lugar.
+- A altura da linha de digitar desconta essa area reservada, entao mensagem
+  comprida continua quebrando em varias linhas sem empurrar a barra para fora.
+
 ## 0.2.30
 
 Os comandos passaram a valer nos tres idiomas de verdade - e o aviso de "TEO
@@ -818,7 +832,7 @@ Silencio deixou de parecer trava, e "parar" passou a valer dentro das ferramenta
 - Medidor de contexto passa para a ULTIMA linha da tela (barra de baixo), junto
   das instrucoes: "contexto: X% de N chars (M mensagens) | ENTER = falar | ...".
 - Processando: barra mostra bonequinho girando "| / - \" + "rodando..." e o
-  contexto, separados por " | ": "\ | rodando... | contexto: ... | PARA PARAR...".
+  contexto, separados por " | ": "\ | rodando... | contexto: ... | PARA PARARR...".
 - Linha "-" tambem abaixo do "voce>" (entrada entre duas linhas iguais).
 
 ## 0.1.1

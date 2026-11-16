@@ -529,8 +529,8 @@ def run_tui(cfg: dict) -> int:
         try:
             cols, rows = _term_size()
             visuais = linhas_de_tela(in_buf.text, cols - get_cwidth(t("sink.prompt")))
-            try:                       # palco aberto come 5 linhas da tela
-                ocupado = 5 if _palco_largo_visivel() else 0
+            try:                       # a area do palco come 5 linhas da tela
+                ocupado = 5 if _palco_largo_area() else 0
             except Exception:          # noqa: BLE001 - primeira pintura
                 ocupado = 0
             return max(1, min(8, visuais, rows - 4 - ocupado))
@@ -567,7 +567,10 @@ def run_tui(cfg: dict) -> int:
     # ----- palco: o caminho do pedido, so enquanto o TEO trabalha --------------
     palco_ligado = bool(cfg.get("palco", True))
 
-    def _palco_frags():
+    def _palco_frags() -> list:
+        if not _palco_visivel_agora():
+            # Area reservada e VAZIA entre um turno e outro (ver o porque abaixo).
+            return [("class:palco", "")]
         return palco.stage_lines(state, _largura(), time.time(),
                                  int(state.get("palco_frame") or 0))
 
@@ -576,18 +579,24 @@ def run_tui(cfg: dict) -> int:
         return palco.visivel(palco_ligado, state.get("fase"), bool(state["busy"]),
                              float(state.get("palco_hold") or 0), time.time())
 
-    def _palco_largo_visivel() -> bool:
-        return bool(_palco_visivel_agora() and _largura() >= palco.MIN_WIDTH)
+    # A ALTURA desta area e CONSTANTE (muda so com a largura da janela, nunca com
+    # o turno). Antes ela aparecia e sumia a cada resposta; quando sumia, o bloco
+    # de baixo encolhia 5 linhas e o terminal nao "puxa" o conteudo para baixo -
+    # sobrava um buraco embaixo e, no Windows, a barra de status ia para fora da
+    # tela (relato do dono: "a parte de baixo sumia"). Com altura fixa a barra
+    # fica sempre no mesmo lugar: e o que ele lembra como "ficava parada".
+    def _palco_largo_area() -> bool:
+        return bool(palco_ligado and _largura() >= palco.MIN_WIDTH)
 
-    def _palco_curto_visivel() -> bool:
-        return bool(_palco_visivel_agora() and _largura() < palco.MIN_WIDTH)
+    def _palco_curto_area() -> bool:
+        return bool(palco_ligado and _largura() < palco.MIN_WIDTH)
 
     palco_largo = ConditionalContainer(
         content=Window(FormattedTextControl(_palco_frags), height=5, style="class:palco"),
-        filter=Condition(_palco_largo_visivel))
+        filter=Condition(_palco_largo_area))
     palco_curto = ConditionalContainer(
         content=Window(FormattedTextControl(_palco_frags), height=1, style="class:palco"),
-        filter=Condition(_palco_curto_visivel))
+        filter=Condition(_palco_curto_area))
 
     root = HSplit([rule_top, palco_largo, palco_curto, input_row, rule_bottom, footer_win])
     layout = Layout(root)

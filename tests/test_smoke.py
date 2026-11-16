@@ -3830,6 +3830,22 @@ ok("as frases novas existem nas tres linguas",
 ok("a pasta temporaria do /doctor e testada de VERDADE (grava e apaga)",
    "teo_teste_escrita.txt" in _cli325_txt and "unlink()" in _cli325_txt)
 
+# ---------- 0.2.31: barra de baixo da tela fixa (Windows) ---------------------
+# Relato do dono testando no Windows: "a parte de baixo, que ficava parada
+# mostrando o processamento, agora some para fora da tela". A area do palco
+# aparecia e sumia a cada turno; quando sumia, o bloco fixo encolhia 5 linhas e
+# o terminal nao puxa o conteudo para baixo - a barra ia para fora da tela.
+_tui331 = (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8")
+ok("a area do palco tem altura constante (a barra nao muda de lugar)",
+   "def _palco_largo_area()" in _tui331
+   and "filter=Condition(_palco_largo_area)" in _tui331
+   and "_palco_visivel_agora" not in _tui331.split("root = HSplit")[1])
+ok("entre um turno e outro a area do palco fica VAZIA (nao desenha trilha velha)",
+   "if not _palco_visivel_agora():" in _tui331
+   and 'return [("class:palco", "")]' in _tui331)
+ok("a altura da linha de digitar desconta a area reservada do palco",
+   "ocupado = 5 if _palco_largo_area() else 0" in _tui331)
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 
