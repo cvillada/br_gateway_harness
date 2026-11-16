@@ -43,6 +43,7 @@ from prompt_toolkit.utils import get_cwidth
 
 from . import i18n, palco, tela, voz
 from .chat_core import (LINE, ChatCore, build_approval_options, help_lines, log_error,
+                         empurrar_cursor_para_o_fim,
                         parse_approval_choice)
 from .config import INPUT_HISTORY_FILE
 from .i18n import t
@@ -530,7 +531,7 @@ def run_tui(cfg: dict) -> int:
             cols, rows = _term_size()
             visuais = linhas_de_tela(in_buf.text, cols - get_cwidth(t("sink.prompt")))
             try:                       # a area do palco come 5 linhas da tela
-                ocupado = 5 if _palco_largo_area() else 0
+                ocupado = 5 if _palco_largo_visivel() else 0
             except Exception:          # noqa: BLE001 - primeira pintura
                 ocupado = 0
             return max(1, min(8, visuais, rows - 4 - ocupado))
@@ -568,9 +569,6 @@ def run_tui(cfg: dict) -> int:
     palco_ligado = bool(cfg.get("palco", True))
 
     def _palco_frags() -> list:
-        if not _palco_visivel_agora():
-            # Area reservada e VAZIA entre um turno e outro (ver o porque abaixo).
-            return [("class:palco", "")]
         return palco.stage_lines(state, _largura(), time.time(),
                                  int(state.get("palco_frame") or 0))
 
@@ -579,24 +577,22 @@ def run_tui(cfg: dict) -> int:
         return palco.visivel(palco_ligado, state.get("fase"), bool(state["busy"]),
                              float(state.get("palco_hold") or 0), time.time())
 
-    # A ALTURA desta area e CONSTANTE (muda so com a largura da janela, nunca com
-    # o turno). Antes ela aparecia e sumia a cada resposta; quando sumia, o bloco
-    # de baixo encolhia 5 linhas e o terminal nao "puxa" o conteudo para baixo -
-    # sobrava um buraco embaixo e, no Windows, a barra de status ia para fora da
-    # tela (relato do dono: "a parte de baixo sumia"). Com altura fixa a barra
-    # fica sempre no mesmo lugar: e o que ele lembra como "ficava parada".
-    def _palco_largo_area() -> bool:
-        return bool(palco_ligado and _largura() >= palco.MIN_WIDTH)
+    # A area do palco ABRE e FECHA: fica vazia fora do turno (era o pedido do
+    # dono: "so abre o espaco acima do voce> para mostrar o processamento").
+    # Quem mantem a barra de baixo na ultima linha da tela e o empurrao de cursor
+    # do Windows (chat_core.empurrar_cursor_para_o_fim), nao uma area reservada.
+    def _palco_largo_visivel() -> bool:
+        return bool(_palco_visivel_agora() and _largura() >= palco.MIN_WIDTH)
 
-    def _palco_curto_area() -> bool:
-        return bool(palco_ligado and _largura() < palco.MIN_WIDTH)
+    def _palco_curto_visivel() -> bool:
+        return bool(_palco_visivel_agora() and _largura() < palco.MIN_WIDTH)
 
     palco_largo = ConditionalContainer(
         content=Window(FormattedTextControl(_palco_frags), height=5, style="class:palco"),
-        filter=Condition(_palco_largo_area))
+        filter=Condition(_palco_largo_visivel))
     palco_curto = ConditionalContainer(
         content=Window(FormattedTextControl(_palco_frags), height=1, style="class:palco"),
-        filter=Condition(_palco_curto_area))
+        filter=Condition(_palco_curto_visivel))
 
     root = HSplit([rule_top, palco_largo, palco_curto, input_row, rule_bottom, footer_win])
     layout = Layout(root)
@@ -849,6 +845,10 @@ def run_tui(cfg: dict) -> int:
         in_buf.load_history_if_not_yet_loaded()
         core.banner()      # boas-vindas + ajuda ja no historico do terminal
         core.print_ctx()   # medidor comeca na barra de baixo, sem esperar a 1a resposta
+        # Windows: o console nao puxa o conteudo para o fim sozinho. Sem este
+        # empurrao, o bloco "voce> + barra" nascia no MEIO da tela quando a
+        # janela tinha acabado de maximizar (relato no Windows 10).
+        empurrar_cursor_para_o_fim()
         core.check_update_on_start()   # uma vez, em segundo plano (versao nova?)
 
     app = Application(

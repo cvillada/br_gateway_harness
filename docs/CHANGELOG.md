@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.32
+
+A tela do terminal se posiciona no fim da janela no Windows - e o espaco do
+palco volta a abrir e fechar, sem linha vazia sobrando.
+
+- Windows 10: na primeira abertura a tela fixa desenhava o bloco "voce> + barra"
+  no MEIO da janela (o console nao puxa o conteudo para o fim como o xterm,
+  principalmente quando a janela acabou de ser maximizada). Agora, depois do
+  banner, o TEO desce o cursor ate a ULTIMA linha da janela antes da primeira
+  pintura. Nada muda quando o cursor ja esta no fim.
+- A maximizacao espera a janela assumir o tamanho novo (janela ja maximizada
+  segue na hora): desenhar antes disso deixava o layout calculado para a janela
+  antiga.
+- Volta o comportamento pedido: a area do palco ABRE acima da linha de digitar
+  so enquanto o TEO trabalha. Na 0.2.31 ela ficava reservada (5 linhas vazias
+  entre a regua e o "voce>"), o que o dono reprovou na tela real.
+- Linux e macOS seguem exatamente como estavam (la o terminal ja puxa o conteudo
+  para cima quando a barra precisa de espaco).
+
 ## 0.2.31
 
 A barra de baixo da tela do terminal nao sai mais do lugar - e o documento

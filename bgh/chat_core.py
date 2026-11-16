@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
 from pathlib import Path
 
@@ -103,6 +104,75 @@ def _maximiza_x11(titulo: str) -> None:
         pass
 
 
+def _esperar_console_estabilizar(limite_s: float = 1.5) -> None:
+    """Depois do ShowWindow o Windows leva um instante para a janela assumir o
+    tamanho novo. Desenhar a tela antes disso deixa a barra de baixo desenhada
+    para a janela ANTIGA (no meio da tela, com o rodape vazio embaixo) - foi o
+    que aconteceu na primeira abertura no Windows 10. Espera o tamanho mudar e
+    ficar estavel; se nao mudar (janela ja maximizada), segue na hora.
+    """
+    try:
+        def tamanho() -> tuple[int, int]:
+            ts = os.get_terminal_size()
+            return int(ts.columns), int(ts.lines)
+
+        antes = tamanho()
+        fim = time.time() + limite_s
+        ultimo = antes
+        estavel = 0
+        while time.time() < fim:
+            time.sleep(0.05)
+            agora = tamanho()
+            if agora != antes and agora == ultimo:
+                estavel += 1
+                if estavel >= 2:
+                    return
+            ultimo = agora
+    except Exception:  # noqa: BLE001 - cortesia: nunca atrasa a abertura de verdade
+        pass
+
+
+def empurrar_cursor_para_o_fim() -> None:
+    """No Windows: desce o cursor ate a ULTIMA linha da janela antes de a tela
+    fixa desenhar.
+
+    O console do Windows nao puxa o conteudo para o fim como o xterm: quando o
+    banner/ajuda nao chega ao rodape da janela (ou quando a janela acabou de ser
+    maximizada), o bloco de baixo do TEO era desenhado no MEIO da tela e o resto
+    ficava vazio embaixo (relato no Windows 10: "nao se posiciona no final da
+    tela"). Um '\\n' por linha que falta resolve e nao muda nada quando o cursor
+    ja esta no fim.
+    """
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        class _COORD(ctypes.Structure):
+            _fields_ = [("X", ctypes.c_short), ("Y", ctypes.c_short)]
+
+        class _SMALL_RECT(ctypes.Structure):
+            _fields_ = [("Left", ctypes.c_short), ("Top", ctypes.c_short),
+                        ("Right", ctypes.c_short), ("Bottom", ctypes.c_short)]
+
+        class _INFO(ctypes.Structure):
+            _fields_ = [("dwSize", _COORD), ("dwCursorPosition", _COORD),
+                        ("wAttributes", ctypes.c_ushort), ("srWindow", _SMALL_RECT),
+                        ("dwMaximumWindowSize", _COORD)]
+
+        alca = ctypes.windll.kernel32.GetStdHandle(-11)      # STDOUT
+        info = _INFO()
+        if not ctypes.windll.kernel32.GetConsoleScreenBufferInfo(alca,
+                                                                ctypes.byref(info)):
+            return
+        faltam = int(info.srWindow.Bottom) - int(info.dwCursorPosition.Y)
+        if 0 < faltam <= 200:
+            sys.stdout.write("\n" * faltam)
+            sys.stdout.flush()
+    except Exception:  # noqa: BLE001 - cortesia: nunca impede a tela de abrir
+        pass
+
+
 def maximize_window(titulo: str = "TEO Agent") -> None:
     """Deixa a janela do TEO maximizada desde a abertura, nos TRES sistemas.
 
@@ -125,6 +195,7 @@ def maximize_window(titulo: str = "TEO Agent") -> None:
             hwnd = ctypes.windll.kernel32.GetConsoleWindow()
             if hwnd:
                 ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                _esperar_console_estabilizar()
         elif sys.platform == "darwin":
             _maximiza_mac()
         else:
