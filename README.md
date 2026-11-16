@@ -249,7 +249,7 @@ Comandos:
 | `/fonte` | tamanho da letra: 1 normal, 2 grande, 3 maior, 4 enorme. No Windows muda na hora; no Linux/Mac reabre a janela com zoom (ou ensina as teclas do seu terminal). Atalhos: `/font` |
 | `/ditar` | acessibilidade: escreva FALANDO. O TEO ouve o microfone, transcreve no idioma da tela e poe o texto na linha para conferir antes do ENTER. O modelo do idioma (pt/en/es, ~55 MB) e baixado uma vez, na primeira vez; depois funciona sem internet e o som nao sai do seu computador. Atalhos: `/dictate`, `/dictar`. Na tela fixa a tecla F2 faz o mesmo, e com a linha VAZIA a barra de espaco tambem (um bip avisa que comecou a ouvir, outro que parou; ESC corta) |
 | `/limpar` | apaga os rascunhos que o TEO cria na pasta `scratch` (scripts do `run_python` e textos da voz) e mostra o espaco liberado; pergunta antes e nao toca em conversa, memoria nem skills. Atalhos: `/clean` |
-| `/nov` `/skills` `/ajuda` `/sair` | conversa nova, skills, ajuda, sair |
+| `/nova` `/skills` `/ajuda` `/sair` | conversa nova, skills, ajuda, sair (`/nov` continua valendo) |
 
 Idioma: o TEO fala portugues (de fabrica), ingles e espanhol. O instalador pergunta
 o idioma no inicio e o `/lingua` troca a qualquer momento, na hora - banner, ajuda,
@@ -296,8 +296,12 @@ quer usar:
 - Licenca: os quatro caminhos viram botoes grandes. Se ninguem responder (aba
   fechada, computador suspenso), o TEO NAO faz - falha fechada, igual ao Enter
   sozinho do terminal.
-- Trocar de tela sem sair: `/tela` (ou `/app`, `/navegador`) no terminal abre o
-  navegador; o botao **Terminal** na tela do navegador traz de volta.
+- Trocar de tela sem sair: `/tela` (ou `/screen`, `/pantalla`, `/app`,
+  `/navegador`) no terminal abre o navegador; o botao **Terminal** na tela do
+  navegador traz de volta.
+- Documento citado na resposta vira link: o caminho que o TEO escreve (PDF, DOCX,
+  XLSX, CSV, imagem, TXT...) fica clicavel e abre em outra janela, sem perder a
+  conversa. So abre arquivo dentro das suas pastas e de tipo conhecido.
 - A opcao 3 (Configuracoes) mexe no que antes so existia em arquivo: abrir para a
   rede (com aviso e confirmacao digitada), idioma e modelo. Fica gravado no
   `~/.bgh/config.json`; `bgh app --local` ignora a rede so naquela execucao.

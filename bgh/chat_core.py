@@ -1,6 +1,6 @@
 """Nucleo do chat: a mesma logica para a tela fixa (tui.py) e o modo classico.
 
-Comandos com barra (/ajuda, /nov, /modelo...), atalhos @ e /, turno do modelo e
+Comandos com barra (/ajuda, /nova, /modelo...), atalhos @ e /, turno do modelo e
 menu de licenca vivem aqui. A saida passa por um "sink", assim cada tela decide
 como mostrar (rich no modo classico; area de texto na tela fixa).
 """
@@ -413,6 +413,18 @@ class ChatCore:
         """Mensagem digitada durante o processamento: vai ao modelo na proxima
         fronteira de rodada (estilo Hermes), sem derrubar o turno."""
         self.agent.steer(text)
+
+    def _avisar_modelo(self) -> None:
+        """Conta a tela qual modelo/servidor esta valendo AGORA.
+
+        A linha de cima da tela do navegador mostra o modelo. Sem este aviso ela
+        continuava com o nome do provedor anterior depois do /provedor (e do
+        /modelo) ate a pagina ser recarregada. Tela que nao tem essa linha
+        simplesmente nao implementa o metodo.
+        """
+        avisar = getattr(self.sink, "modelo_agora", None)
+        if callable(avisar):
+            avisar(self.cfg.get("model", ""), self.cfg.get("base_url", ""))
 
     def _refresh_server_context(self, *, troca: bool, render: bool) -> None:
         """Assume o teto de contexto publicado pelo servidor do provedor/modelo atual.
@@ -899,6 +911,12 @@ class ChatCore:
             if what == "exit":
                 voz.parar()        # sair cala a voz antes de fechar a tela
                 return "exit"
+            elif what == "screen":
+                # No terminal esta linha nem chega aqui: cli e tela fixa
+                # interceptam /tela antes do nucleo. Quem cai neste ramo ja
+                # esta NA tela do navegador e pediu para abri-la de novo -
+                # responder o caminho de volta e melhor que "nao entendi".
+                self.sink.line(t("cmd.screen.here"), style="cyan")
             elif what == "help":
                 self.sink.border()   # abre a lista
                 for seg_line in help_lines():
@@ -939,6 +957,9 @@ class ChatCore:
                     # devolvia o modelo antigo sem avisar.
                     sync_profile(self.cfg)
                     self.sink.line(t("cmd.model.now", model=alvo2), style="cyan")
+                    # Antes do menu de pensamento: a linha de cima da tela ja pode
+                    # mostrar o modelo novo enquanto a pessoa escolhe.
+                    self._avisar_modelo()
                     self._ask_thinking_level()
                     self._refresh_server_context(troca=True, render=True)
             elif what == "provider":
@@ -958,6 +979,7 @@ class ChatCore:
                         self.sink.line(t("cmd.provider.now", name=alvo3,
                                          model=prof["model"],
                                          base_url=prof["base_url"]), style="cyan")
+                        self._avisar_modelo()
                         self._ask_thinking_level()
                         self._refresh_server_context(troca=True, render=True)
                     else:

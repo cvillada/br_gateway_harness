@@ -54,7 +54,7 @@ def t(key: str, **valores) -> str:
 ALIASES = {
     "exit": ("sair", "exit", "quit", "salir"),
     "help": ("ajuda", "help", "ayuda"),
-    "new": ("nov", "new", "nuevo", "nova"),
+    "new": ("nova", "nov", "new", "nuevo"),
     "mem": ("mem", "memory", "memoria"),
     "skills": ("skills", "habilidades"),
     "model": ("modelo", "modelos", "model", "models"),
@@ -73,13 +73,19 @@ ALIASES = {
     "font": ("fonte", "font", "fuente"),
     "dictate": ("ditar", "dictate", "dictar"),
     "about": ("sobre", "about", "acerca"),
+    # /tela nao e tratado pelo nucleo (quem troca de tela e o cli/tui), mas o id
+    # canonico mora aqui: assim /tela, /screen e /pantalla valem nos tres idiomas
+    # e a tela do navegador (que cai no nucleo) sabe responder em vez de "nao
+    # entendi". "app"/"navegador"/"webapp" sao apelidos antigos, seguem valendo.
+    "screen": ("tela", "screen", "pantalla", "app", "navegador", "webapp",
+               "browser"),
 }
 
 # Como cada comando aparece ESCRITO na ajuda/avisos, por idioma.
 CMD = {
     "exit": ("/sair", "/exit", "/salir"),
     "help": ("/ajuda", "/help", "/ayuda"),
-    "new": ("/nov", "/new", "/nuevo"),
+    "new": ("/nova", "/new", "/nuevo"),
     "mem": ("/mem", "/mem", "/mem"),
     "skills": ("/skills", "/skills", "/habilidades"),
     "model": ("/modelo", "/model", "/modelo"),
@@ -97,6 +103,7 @@ CMD = {
     "font": ("/fonte", "/font", "/fuente"),
     "dictate": ("/ditar", "/dictate", "/dictar"),
     "about": ("/sobre", "/about", "/acerca"),
+    "screen": ("/tela", "/screen", "/pantalla"),
 }
 
 
@@ -239,7 +246,7 @@ HELP_SECTIONS = [
     ("help.h.commands", [
         ("/ajuda", "/help", "/ayuda",
          "esta lista", "this list", "esta lista"),
-        ("/nov", "/new", "/nuevo",
+        ("/nova", "/new", "/nuevo",
          "conversa nova (limpa contexto; memoria e skills continuam)",
          "new conversation (clears context; memory and skills stay)",
          "conversacion nueva (limpia el contexto; memoria y skills siguen)"),
@@ -595,6 +602,24 @@ CHAT = {
     "cmd.unknown": ("Comando desconhecido. {help} mostra a lista.",
                     "Unknown command. {help} shows the list.",
                     "Comando desconocido. {help} muestra la lista."),
+    "cmd.screen.here": ("Voce ja esta na tela do navegador. O botao Terminal "
+                        "(no topo) volta para o terminal.",
+                        "You are already on the browser screen. The Terminal "
+                        "button (top) goes back to the terminal.",
+                        "Ya estas en la pantalla del navegador. El boton Terminal "
+                        "(arriba) vuelve al terminal."),
+    "app.arquivo.nao": ("Documento nao encontrado (ou o TEO nao abre esse tipo de arquivo).",
+                        "Document not found (or TEO does not open this file type).",
+                        "Documento no encontrado (o el TEO no abre este tipo de archivo)."),
+    "app.arquivo.grande": ("Documento grande demais para abrir na tela ({mb} MB). "
+                           "Abra pela pasta do computador.",
+                           "Document too large to open on screen ({mb} MB). Open it "
+                           "from the computer folder.",
+                           "Documento demasiado grande para abrir en pantalla ({mb} MB). "
+                           "Abrelo desde la carpeta del ordenador."),
+    "app.abrir_arquivo": ("abrir o documento em outra janela",
+                          "open the document in another window",
+                          "abrir el documento en otra ventana"),
     "cmd.new.done": ("Conversa zerada (memoria e skills preservadas).",
                      "Conversation cleared (memory and skills kept).",
                      "Conversacion reiniciada (memoria y skills conservadas)."),
@@ -2014,7 +2039,7 @@ APP = {
     "app.help.parar": ("durante a resposta o botao Enviar vira Parar; ele para na hora",
                        "while answering, the Send button becomes Stop; it stops right away",
                        "mientras responde, el boton Enviar pasa a Parar; para al instante"),
-    "app.cmd.novo": ("/nov", "/new", "/nuevo"),
+    "app.cmd.novo": ("/nova", "/new", "/nuevo"),
     "app.help.novo": ("conversa nova; a memoria e as skills continuam",
                       "new conversation; memory and skills stay",
                       "conversacion nueva; memoria y skills siguen"),

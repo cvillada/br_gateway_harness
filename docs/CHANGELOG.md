@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.30
+
+Os comandos passaram a valer nos tres idiomas de verdade - e o aviso de "TEO
+trabalhando" nao corta mais a ultima linha da sua mensagem.
+
+- Em portugues a conversa nova e `/nova` (antes `/nov`). Quem ja tem o costume
+  digitar `/nov` continua funcionando: virou apelido, como ja era `/nova`.
+  Ingles e espanhol seguem `/new` e `/nuevo`.
+- `/screen` e `/pantalla` agora abrem a tela do navegador. Antes so `/tela` (e os
+  antigos `/app`, `/navegador`, `/webapp`) funcionavam: a ajuda em ingles e em
+  espanhol escrevia `/screen` e `/pantalla`, a pessoa digitava e recebia
+  "comando desconhecido". A lista de apelidos passou a sair do catalogo de
+  idiomas (`i18n.ALIASES["screen"]`), entao nao tem mais uma segunda lista
+  escrita a mao para ficar para tras.
+- Com a tela do navegador aberta, digitar `/tela` (ou `/screen`) responde que
+  voce ja esta nela e que o botao Terminal, no topo, volta para o terminal - em
+  vez de "comando desconhecido".
+- A conversa nao perde mais o fim quando a faixa de "O TEO esta trabalhando"
+  aparece. A faixa aumenta a altura do rodape e a conversa encolhe alguns
+  pixels: sem devolver a rolagem, a ultima linha da mensagem da pessoa ficava
+  cortada no meio pela borda de baixo (acontecia com a mensagem recem-enviada,
+  inclusive quando ela tinha lista de marcadores). Agora, quem esta lendo o fim
+  da conversa continua no fim; quem esta relendo o comeco nao e puxado.
+- A rolagem para o fim virou um salto instantaneo: com animacao suave, o reflow
+  seguinte (a faixa entrando, a caixa de escrever crescendo) cortava a animacao
+  no meio e deixava a linha cortada do mesmo jeito.
+- Mesmo cuidado quando a caixa de escrever cresce (mensagem de varias linhas):
+  ela tambem come altura da conversa.
+- Documento citado na resposta virou LINK: quando o TEO cria um arquivo e escreve
+  o caminho (PDF, DOCX, XLSX, CSV, imagem, TXT...), o caminho aparece sublinhado
+  na tela do navegador e um clique abre o documento em OUTRA janela - a conversa
+  fica onde esta. O endereco que serve o arquivo (`/api/arquivo`) exige a sessao
+  da tela, so aceita os tipos de documento de uma lista fechada e so arquivos
+  dentro das pastas da pessoa (home, pasta do TEO e temporaria). HTML, SVG e JS
+  NAO sao servidos de proposito: rodariam na mesma origem do TEO, com acesso ao
+  cookie da sessao. Acima de 200 MB a tela manda abrir pela pasta.
+- Caminho com ESPACO no nome - o caso comum numa maquina de verdade - tambem vira
+  link: `/home/ana/Meus Documentos/Relatorio Final.pdf`. Antes de oferecer o
+  clique, a tela pergunta ao servidor se aquele arquivo existe ali (204/404), entao
+  nao aparece link quebrado: o que o TEO escreveu mas nao existe fica texto normal.
+  Para crianca e idoso, link que nao abre e pior que nenhum link.
+
 ## 0.2.29
 
 Da para ver, de longe, que o TEO esta trabalhando - e a barra "/" virou a

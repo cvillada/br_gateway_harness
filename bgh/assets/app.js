@@ -19,6 +19,7 @@ var ajudaCaixa = null;   // o menu fica num cartao unico (nunca tres copias)
 var ajudaItens = [];     // pares [comando, explicacao] vindos de /api/inicio
 var idiomaAtual = "";    // muda pelo /lingua: a tela se reescreve no sinal de vida
 var ultimoSeq = 0;       // trava de replay: evento ja visto nao desenha de novo
+var versaoApp = "";      // versao mostrada ao lado do modelo, na linha de cima
 
 function $(id) { return document.getElementById(id); }
 function t(chave) { return strings[chave] || chave; }
@@ -41,10 +42,17 @@ fetch("/api/inicio", { headers: { "Accept": "application/json" } })
       "<div class='faixa-rede'>" + t("app.sessao") + "</div>");
   });
 
+/* Linha de cima (nome do modelo + versao). Fica numa funcao porque o modelo
+ * muda ao vivo: /provedor e /modelo antes so apareciam depois de recarregar. */
+function mostrarModelo(nome) {
+  $("sub").textContent = (nome || "") + (versaoApp ? "  v" + versaoApp : "");
+}
+
 /* ---------------- textos e cores ---------------- */
 function montarTextos(dados) {
   document.title = "TEO";
-  $("sub").textContent = (dados.modelo || "") + (dados.versao ? "  v" + dados.versao : "");
+  versaoApp = dados.versao || "";
+  mostrarModelo(dados.modelo);
   $("enviar").textContent = t("app.enviar");
   $("sair").textContent = t("app.fechar");
   $("ajuda").textContent = t("app.ajuda");
@@ -123,7 +131,12 @@ function abrirFluxo(desde) {
   if (fluxo) { fluxo.close(); }
   var inicio = (typeof desde === "number") ? desde : 0;
   fluxo = new EventSource("/api/eventos?desde=" + inicio);
-  fluxo.onopen = function () { faixa(""); };
+  fluxo.onopen = function () {
+    faixa("");
+    // Replay do buffer (aba recarregada no meio de um turno) chega logo depois:
+    // a varredura cobre a resposta que ja estava na tela.
+    setTimeout(function () { ligarCaminhos(); }, 800);
+  };
   fluxo.onerror = function () {
     if (encerrado) { return; }
     faixa(t("app.caiu"));
@@ -167,6 +180,7 @@ function tratar(e) {
     case "ferramenta": ferramenta(e); break;
     case "ctx": contexto(e); break;
     case "estado": ocupado = !!e.ocupado; aplicarOcupado(); break;
+    case "modelo": mostrarModelo(e.modelo); break;
     case "rodada": passo += 1; mostrarPasso(); break;
     case "pergunta": pergunta(e); break;
     case "pergunta_fechada": fecharPergunta(e.id); break;
@@ -190,7 +204,13 @@ function pertoDoFim() {
 function rolar(antes) {
   if (antes) {
     var c = conversa();
+    // Salto instantaneo, e nao a rolagem suave do CSS: a animacao era cortada
+    // pelo reflow seguinte (a faixa de "TEO trabalhando" entra, a caixa de
+    // digitar cresce) e a ultima linha da mensagem ficava cortada no meio pela
+    // borda de baixo da conversa.
+    c.style.scrollBehavior = "auto";
     c.scrollTop = c.scrollHeight;
+    c.style.scrollBehavior = "";
   }
 }
 
@@ -322,6 +342,118 @@ function delta(canal, texto) {
   if (estava) { c.scrollTop = c.scrollHeight; }
 }
 
+/* ---------------- documento citado: caminho vira link -------------------- */
+/* A resposta do TEO cita o caminho do arquivo que ele acabou de criar. Antes era
+ * so texto: a pessoa tinha que copiar e procurar na mao. Agora o caminho de
+ * documento vira link e abre em OUTRA janela (a conversa fica onde esta).
+ * Lista fechada de tipos, igual a do servidor: so o que ele serve.
+ */
+var DOC_EXTS = ["pdf", "txt", "log", "md", "csv", "tsv", "json", "png", "jpg",
+                "jpeg", "gif", "webp", "bmp", "docx", "doc", "xlsx", "xls",
+                "pptx", "ppt", "odt", "ods", "odp", "rtf", "epub", "zip"];
+/* Caminho pode ter ESPACO no nome ("/home/ana/Meus Documentos/Contas.pdf"):
+ * o candidato vai ate a extensao de documento e quem decide se existe e o
+ * servidor (checar=1). Assim nao aparece link morto na tela de uma crianca ou
+ * de um idoso, e caminho com espaco funciona igual ao sem espaco.
+ * A lista de extensoes aqui tem que ser a MESMA de DOC_EXTS (a suite confere).
+ */
+var DOC_RE = /(^|[\s("'`<\[])((?:~?\/)[^"'\n<>|]*?\.(?:pdf|txt|log|md|csv|tsv|json|png|jpg|jpeg|gif|webp|bmp|docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp|rtf|epub|zip))(?![A-Za-z0-9])/gi;
+
+function candidatosDeDocumento(texto) {
+  var achados = [];
+  var m;
+  DOC_RE.lastIndex = 0;
+  while ((m = DOC_RE.exec(texto)) !== null) {
+    var inicio = m.index + m[1].length;
+    var bruto = m[2].replace(/[.,;:!?]+$/, "");
+    if (bruto.length > 2) { achados.push({ inicio: inicio, texto: bruto }); }
+    if (DOC_RE.lastIndex <= m.index) { DOC_RE.lastIndex = m.index + 1; }
+  }
+  return achados;
+}
+
+function conferirDocumento(caminho) {
+  // O servidor responde 204 se o arquivo existe e pode ser aberto.
+  return fetch("/api/arquivo?checar=1&c=" + encodeURIComponent(caminho))
+    .then(function (r) { return r.ok; })
+    .catch(function () { return false; });
+}
+
+/* Um trecho pode juntar dois caminhos ("veja /home/a e depois /home/b.pdf").
+ * Se o caminho inteiro nao existe, tenta os pedacos que comecam num "/" mais a
+ * frente - o mais longo primeiro, que e o caso normal e gasta uma pergunta so.
+ */
+function conferirCandidato(cand) {
+  var opcoes = [cand.texto];
+  for (var i = 1; i < cand.texto.length; i++) {
+    if (cand.texto.charAt(i) === "/") { opcoes.push(cand.texto.slice(i)); }
+  }
+  var cadeia = Promise.resolve(null);
+  opcoes.forEach(function (opcao) {
+    cadeia = cadeia.then(function (achado) {
+      if (achado) { return achado; }
+      return conferirDocumento(opcao).then(function (ok) {
+        if (!ok) { return null; }
+        return { inicio: cand.inicio + (cand.texto.length - opcao.length),
+                 texto: opcao };
+      });
+    });
+  });
+  return cadeia;
+}
+
+function montarComLinks(el, achados) {
+  var texto = el.textContent || "";
+  var frag = document.createDocumentFragment();
+  var pos = 0;
+  achados.forEach(function (achado) {
+    if (achado.inicio < pos) { return; }
+    if (achado.inicio > pos) {
+      frag.appendChild(document.createTextNode(texto.slice(pos, achado.inicio)));
+    }
+    var a = document.createElement("a");
+    a.className = "arquivo";
+    a.href = "/api/arquivo?c=" + encodeURIComponent(achado.texto);
+    a.target = "_blank";                    // nova janela/aba: a conversa nao sai
+    a.rel = "noopener noreferrer";
+    a.textContent = achado.texto;
+    a.title = t("app.abrir_arquivo");
+    frag.appendChild(a);
+    pos = achado.inicio + achado.texto.length;
+  });
+  if (pos < texto.length) {
+    frag.appendChild(document.createTextNode(texto.slice(pos)));
+  }
+  el.textContent = "";
+  el.appendChild(frag);
+}
+
+function ligarCaminhos(raiz) {
+  var alvos = (raiz || document).querySelectorAll(
+    ".cartao.resposta .rascunho-corpo, .linha");
+  for (var i = 0; i < alvos.length; i++) {
+    (function (el) {
+      if (el.dataset.ligado === "1" || el.dataset.ligando === "1") { return; }
+      var texto = el.textContent || "";
+      if (texto.indexOf("/") < 0) { el.dataset.ligado = "1"; return; }
+      var cands = candidatosDeDocumento(texto);
+      if (!cands.length) { el.dataset.ligado = "1"; return; }
+      el.dataset.ligando = "1";
+      Promise.all(cands.map(conferirCandidato))
+        .then(function (achados) {
+          var bons = achados.filter(function (a) { return a; })
+                             .sort(function (a, b) { return a.inicio - b.inicio; });
+          if (bons.length) { montarComLinks(el, bons); }
+        })
+        .catch(function () { /* sem rede: fica texto, como antes */ })
+        .then(function () {
+          delete el.dataset.ligando;
+          el.dataset.ligado = "1";
+        });
+    })(alvos[i]);
+  }
+}
+
 function ferramenta(e) {
   var lista = $("ferramentas");
   var vazio = $("ferramentas-vazio");
@@ -369,6 +501,9 @@ function fimTurno() {
   canais = {};
   ocupado = false;
   aplicarOcupado();
+  // Fim do turno = resposta completa: agora o caminho de documento pode virar
+  // link (durante o streaming o texto ainda esta pela metade).
+  ligarCaminhos();
 }
 
 /* ---------------- caixa de digitar ---------------- */
@@ -399,8 +534,12 @@ function ligarBotoes() {
 function ajustarAltura() {
   var caixa = $("texto");
   if (!caixa) { return; }
+  // A caixa crescendo tambem come altura da conversa: quem esta no fim nao pode
+  // ficar com a ultima linha cortada.
+  var estavaNoFim = pertoDoFim();
   caixa.style.height = "auto";
   caixa.style.height = Math.min(caixa.scrollHeight + 4, 180) + "px";
+  rolar(estavaNoFim);
 }
 
 function enviar(silencioso) {
@@ -484,6 +623,10 @@ function irParaTerminal() {
 }
 
 function aplicarOcupado() {
+  // A faixa muda a ALTURA do rodape: a conversa encolhe alguns pixels e, sem
+  // devolver a rolagem, a ultima linha da mensagem da pessoa ficava cortada no
+  // meio pela borda. Mede o "estava no fim" ANTES de mexer no layout.
+  var estavaNoFim = pertoDoFim();
   var botao = $("enviar");
   botao.textContent = ocupado ? t("app.parar") : t("app.enviar");
   botao.classList.toggle("parar", ocupado);
@@ -503,6 +646,8 @@ function aplicarOcupado() {
     if (rotulo) { rotulo.textContent = ocupado ? t("app.trabalhando_curto") : ""; }
   }
   if (ocupado) { comecarRelogio(); } else { pararRelogio(); }
+  // Devolve a leitura no fim da conversa depois da mudanca de altura.
+  rolar(estavaNoFim);
 }
 
 /* Contador do turno: "7 s", "1:12". E o sinal mais honesto de que o TEO nao

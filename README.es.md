@@ -261,7 +261,7 @@ Comandos:
 Idioma: el TEO habla portugues (de fabrica), ingles y espanol. El instalador pregunta
 el idioma al inicio y el `/idioma` lo cambia en cualquier momento, en el acto -
 banner, ayuda, menus, permiso, avisos y barra de abajo. Los comandos funcionan en los
-tres idiomas en cualquier idioma de pantalla (`/ajuda`, `/nov`, `/modelo`,
+tres idiomas en cualquier idioma de pantalla (`/ajuda`, `/nova`, `/modelo`,
 `/pensamento`, `/sair`...), y el modelo pasa a responder en el idioma elegido (si la
 persona escribe en otro idioma, responde en el idioma del mensaje).
 
@@ -305,8 +305,12 @@ usarlo:
 - Permiso: los cuatro caminos se vuelven botones grandes. Si nadie responde
   (pestana cerrada, computadora suspendida), el TEO NO lo hace - falla cerrado,
   igual que el Enter solo del terminal.
-- Cambiar de pantalla sin salir: `/tela` (o `/app`, `/navegador`) en el terminal
-  abre el navegador; el boton **Terminal** en la pantalla del navegador vuelve.
+- Cambiar de pantalla sin salir: `/tela` (o `/screen`, `/pantalla`, `/app`,
+  `/navegador`) en el terminal abre el navegador; el boton **Terminal** en la
+  pantalla del navegador vuelve.
+- Un documento citado se vuelve enlace: la ruta que el TEO escribe (PDF, DOCX,
+  XLSX, CSV, imagen, TXT...) se puede clicar y abre en otra ventana, sin perder la
+  conversacion. Solo abre archivos dentro de tus carpetas y de tipo conocido.
 - La opcion 3 (Configuracion) cambia lo que antes solo existia en el archivo:
   abrir a la red (con aviso y confirmacion escrita), idioma y modelo. Se guarda en
   `~/.bgh/config.json`; `bgh app --local` ignora la red solo en esa ejecucion.

@@ -42,10 +42,13 @@ processo. Aqui a aba e descartavel - o processo e o servidor. Por isso:
 from __future__ import annotations
 
 import json
+import os
 import queue
 import secrets
+import shutil
 import socket
 import sys
+import tempfile
 import threading
 import time
 import webbrowser
@@ -54,7 +57,7 @@ from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FuturoTimeout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 from . import __version__, i18n, tela
 from .chat_core import ChatCore, build_approval_options, ctx_parts, log_error
@@ -92,9 +95,47 @@ ASSET_ROTAS = {
     "/teo.png": "teo.png",
     "/favicon.ico": "teo.ico",
 }
+
+# --- documentos citados na resposta (link clicavel) -------------------------
+# A tela do TEO roda em 127.0.0.1 com um token: um endereco que serve QUALQUER
+# arquivo do computador nao pode existir aqui. Por isso: lista FECHADA de tipos
+# e so arquivo dentro das pastas da pessoa. HTML/SVG/JS ficam de fora de
+# proposito - um arquivo desses rodaria na MESMA origem do TEO e teria o cookie
+# da sessao na mao.
+DOC_TIPOS = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain; charset=utf-8",
+    ".log": "text/plain; charset=utf-8",
+    ".md": "text/plain; charset=utf-8",
+    ".csv": "text/csv; charset=utf-8",
+    ".tsv": "text/tab-separated-values; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc": "application/msword",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".pptx": ("application/vnd.openxmlformats-officedocument."
+              "presentationml.presentation"),
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".odt": "application/vnd.oasis.opendocument.text",
+    ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    ".odp": "application/vnd.oasis.opendocument.presentation",
+    ".rtf": "application/rtf",
+    ".epub": "application/epub+zip",
+    ".zip": "application/zip",
+}
+# Teto de tamanho do documento servido (acima disso o aviso manda abrir pela pasta).
+DOC_MAX = 200 * 1024 * 1024
 # Chaves de bgh/i18n.py que o JavaScript usa (o catalogo inteiro nao vai junto).
 CHAVES_APP = (
     "app.enviar", "app.parar", "app.placeholder", "app.dica", "app.trabalhando",
+    "app.abrir_arquivo",
     "app.trabalhando_curto",
     "app.ligando", "app.caiu", "app.pensamento", "app.ferramentas", "app.contexto",
     "app.licenca_titulo", "app.licenca_dica", "app.sem_resposta", "app.encerrando",
@@ -268,6 +309,12 @@ class AppSink:
                 extra: str = "") -> None:
         self.canal.emitir("ctx", texto=str(text), pct=pct, hot=hot_pct,
                           extra=str(extra or ""))
+
+    def modelo_agora(self, modelo: str, base_url: str) -> None:
+        """Troca de modelo/provedor: a linha de cima da tela mostra o modelo e
+        ficava com o nome antigo ate a pessoa recarregar a pagina."""
+        self.canal.emitir("modelo", modelo=str(modelo or ""),
+                          base_url=str(base_url or ""))
 
     # ----- aparencia e avisos ------------------------------------------------
     def aplicar_tema(self) -> None:
@@ -755,11 +802,13 @@ class _Handler(BaseHTTPRequestHandler):
             return self._texto(421, "endereco nao reconhecido (Host)")
         if caminho in ASSET_ROTAS:
             return self._asset(ASSET_ROTAS[caminho])
-        if caminho not in ("/", "/api/inicio", "/api/eventos"):
+        if caminho not in ("/", "/api/inicio", "/api/eventos", "/api/arquivo"):
             return self._texto(404, "nao existe")
         if not self._token_ok():
             return self._texto(401, t("app.sessao"))
         self.app.tocar()
+        if caminho == "/api/arquivo":
+            return self._arquivo()
         if caminho == "/":
             if (self.query.get("t") or [""])[0]:
                 # Token saiu da URL e virou cookie: nao fica no historico/log.
@@ -776,6 +825,57 @@ class _Handler(BaseHTTPRequestHandler):
                          f"{COOKIE}={self.app.token}; Path=/; HttpOnly; SameSite=Strict")
         self.send_header("Content-Length", "0")
         self.end_headers()
+        self.close_connection = True
+
+    def _arquivo(self) -> None:
+        """Serve um documento citado na resposta, para o clique abrir em outra aba.
+
+        Regras: arquivo comum, de tipo da lista fechada (DOC_TIPOS) e dentro das
+        pastas da pessoa (home, pasta do TEO e temporaria). Qualquer outra coisa
+        e 404 - a tela escuta em porta e nao pode ser uma janela para o disco
+        inteiro.
+        """
+        bruto = (self.query.get("c") or [""])[0].strip()
+        alvo = Path(os.path.expanduser(bruto)) if bruto else None
+        try:
+            alvo = alvo.resolve(strict=True) if alvo is not None else None
+        except (OSError, RuntimeError):
+            alvo = None
+        tipo = DOC_TIPOS.get(alvo.suffix.lower()) if alvo is not None else None
+        if alvo is None or not alvo.is_file() or tipo is None or not _pasta_da_pessoa(alvo):
+            return self._texto(404, t("app.arquivo.nao"))
+        try:
+            tamanho = alvo.stat().st_size
+        except OSError:
+            return self._texto(404, t("app.arquivo.nao"))
+        if tamanho > DOC_MAX:
+            return self._texto(413, t("app.arquivo.grande",
+                                      mb=str(tamanho // (1024 * 1024))))
+        # Checagem rapida (`checar=1`): a tela pergunta se o caminho EXISTE antes
+        # de transformar em link. Assim nada de link morto na conversa de uma
+        # crianca ou de um idoso - e caminho com ESPACO no nome tambem funciona,
+        # porque quem confirma e o disco, nao um palpite do navegador.
+        if (self.query.get("checar") or [""])[0] in ("1", "sim", "true"):
+            self.send_response(204)
+            self._cabecalhos("text/plain; charset=utf-8", 0)
+            self.end_headers()
+            self.close_connection = True
+            return
+        nome = alvo.name.replace('"', "").replace("\\", "").replace("\n", " ")
+        ascii_nome = nome.encode("ascii", "replace").decode("ascii")
+        self.send_response(200)
+        self._cabecalhos(tipo, tamanho, {
+            "Content-Disposition":
+                f'inline; filename="{ascii_nome}"; filename*=UTF-8\'\'{quote(nome)}',
+            # Sem scripts, sem acesso a nada: o arquivo e um documento, nao uma pagina.
+            "Content-Security-Policy": "sandbox",
+        })
+        self.end_headers()
+        try:
+            with open(alvo, "rb") as fonte:
+                shutil.copyfileobj(fonte, self.wfile, 256 * 1024)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
         self.close_connection = True
 
     def _asset(self, nome: str) -> None:
@@ -918,6 +1018,25 @@ class _Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError):
             return None
         return dados if isinstance(dados, dict) else None
+
+
+def _pasta_da_pessoa(alvo: Path) -> bool:
+    """True se o documento esta numa pasta que a pessoa usa de verdade.
+
+    A tela nunca vira uma janela para o disco inteiro: home, pasta do TEO
+    (BGH_HOME) e temporaria. /etc, /usr, a pasta de outro usuario ficam de fora.
+    """
+    raizes = [Path.home(), Path(tempfile.gettempdir())]
+    casa = os.environ.get("BGH_HOME")
+    if casa:
+        raizes.append(Path(casa))
+    for raiz in raizes:
+        try:
+            alvo.relative_to(raiz.resolve())
+            return True
+        except (ValueError, OSError):
+            continue
+    return False
 
 
 def _escapar(texto: str) -> str:

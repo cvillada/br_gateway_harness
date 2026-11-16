@@ -20,6 +20,7 @@ import http.client
 import inspect
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -101,8 +102,14 @@ ok("menu: lixo nao escolhe por conta", _opcao_do_menu("xyz") == "")
 ok("/tela pede a tela do navegador", eh_troca_para_app("/tela"))
 ok("/app tambem", eh_troca_para_app("/app"))
 ok("/navegador tambem", eh_troca_para_app("  /navegador "))
+# A ajuda em ingles/espanhol escreve /screen e /pantalla: os tres nomes tem que
+# abrir a tela (antes so /tela funcionava e /screen caia em "comando desconhecido").
+ok("/screen tambem (nome do comando em ingles)", eh_troca_para_app("/screen"))
+ok("/pantalla tambem (nome do comando em espanhol)", eh_troca_para_app("/pantalla"))
+ok("maiuscula e espaco nao atrapalham", eh_troca_para_app(" /SCREEN "))
 ok("texto comum nao troca de tela", not eh_troca_para_app("abre a tela pra mim"))
 ok("/telapronta nao e /tela", not eh_troca_para_app("/telapronta"))
+ok("/screenshots nao e /screen", not eh_troca_para_app("/screenshots"))
 
 # ---------- rede: flag manda mais que config -------------------------------
 ok("rede desligada por padrao", rede_efetiva({}) is False)
@@ -485,6 +492,18 @@ ok("a frase da faixa vem do i18n (tres idiomas)",
    and t("app.trabalhando_curto").strip() != "")
 ok("a dica do turno nao repete a frase da faixa (aviso, nao eco)",
    not t("app.trabalhando").startswith(t("app.trabalhando_curto")))
+# A faixa muda a ALTURA do rodape: a conversa encolhe e, sem devolver a rolagem,
+# a ultima linha da mensagem da pessoa ficava cortada no meio pela borda (visto
+# na tela real, com lista de marcadores na propria mensagem).
+ok("a faixa nao corta a ultima linha da mensagem (volta para o fim)",
+   "var estavaNoFim = pertoDoFim();" in _js12
+   and _js12.count("rolar(estavaNoFim);") >= 2)
+ok("rolar e salto instantaneo (a animacao era cortada pelo reflow)",
+   'c.style.scrollBehavior = "auto";' in _js12
+   and "c.scrollTop = c.scrollHeight;" in _js12)
+ok("a caixa de digitar crescendo tambem preserva o fim da conversa",
+   "var estavaNoFim = pertoDoFim();" in
+   _js12[_js12.index("function ajustarAltura()"):_js12.index("function enviar(")])
 
 # ---------- 13. a barra sozinha abre a lista de opcoes ----------------------
 # No terminal o "/" abre o menu da pasta. No navegador nao existe pasta: a barra
@@ -514,6 +533,139 @@ try:
     ok("config recem-criado nao liga a voz sozinho", _novo14.get("voz") is False)
 finally:
     _cfg14.CONFIG_PATH = _path14
+
+# ---------- 15. /modelo e /provedor atualizam a linha de cima ---------------
+# A linha de cima da tela (nome do modelo + versao) era escrita UMA vez, na
+# abertura: depois de trocar de modelo/provedor o nome antigo continuava la ate
+# a pessoa recarregar a pagina (bug visto pelo dono do projeto no navegador).
+from bgh.chat_core import ChatCore as _Core15
+
+
+class _LLM15:
+    """Modelo de mentira: aqui so a troca de nome importa."""
+
+    def __init__(self):
+        self.cfg = {}
+
+    def complete(self, *a, **k):
+        return iter(())
+
+
+app4 = App(dict(CFG), token="tok4")
+app4.core = _Core15(dict(CFG), app4.sink, llm=_LLM15())  # type: ignore[arg-type]
+# O menu de "nivel de pensamento" abriria um modal e a thread ficaria esperando
+# resposta do navegador: aqui a escolha e nenhuma, o que ele ja sabe entender.
+app4.sink.ask_choice = lambda *a, **k: ""
+app4.subir_servidor(porta=0)
+time.sleep(0.05)
+_fila15 = app4.canal.assinar(0)
+app4.core.submit("/modelo modelo-trocado")
+_eventos15 = []
+while not _fila15.empty():
+    _eventos15.append(_fila15.get_nowait())
+app4.canal.desassinar(_fila15)
+_modelo15 = [e for e in _eventos15 if e.get("tipo") == "modelo"]
+ok("trocar de modelo avisa a tela na hora (evento 'modelo')",
+   bool(_modelo15) and _modelo15[-1].get("modelo") == "modelo-trocado")
+ok("o aviso leva o servidor junto",
+   bool(_modelo15) and "base_url" in _modelo15[-1])
+ok("a tela desenha o aviso (o nome de cima e escrito em UM lugar)",
+   'case "modelo": mostrarModelo(e.modelo); break;' in _js12
+   and _js12.count('$("sub").textContent') == 1)
+ok("idioma antigo nao fica: o nome vem do evento, nao de /api/inicio",
+   "function mostrarModelo" in _js12)
+app4.encerrar("teste")
+app4.esperar_fim(5)
+
+# ---------- 16. documento citado na resposta vira link que abre --------------
+# Pedido do dono: quando o TEO cria um documento, o caminho na resposta tem que
+# ser clicavel e abrir em OUTRA janela. Aqui se prova o lado do servidor: o que
+# ele serve, o que ele RECUSA e que sem sessao nao sai nada.
+_css16 = (_raiz12 / "bgh" / "assets" / "app.css").read_text(encoding="utf-8")
+_pasta16 = Path(tempfile.mkdtemp(prefix="bgh_doc_", dir=TMP))
+_doc16 = _pasta16 / "relatorio.txt"
+_doc16.write_text("conteudo do relatorio", encoding="utf-8")
+_pagina16 = _pasta16 / "pagina.html"       # tipo que NAO pode ser servido
+_pagina16.write_text("<h1>oi</h1>", encoding="utf-8")
+_sem_ext16 = _pasta16 / "binario"          # sem extensao: tambem nao
+_sem_ext16.write_bytes(b"\x00\x01")
+
+app5 = App(dict(CFG), token="tok5")
+app5.core = CoreFalso(app5)  # type: ignore[assignment]
+app5.subir_servidor(porta=0)
+time.sleep(0.05)
+
+
+def pedir16(caminho, cookie=True):
+    conn = http.client.HTTPConnection("127.0.0.1", app5.porta, timeout=6)
+    cab = {"Cookie": "teo_app=tok5"} if cookie else {}
+    conn.request("GET", caminho, headers=cab)
+    resp = conn.getresponse()
+    corpo = resp.read()
+    cabecalhos = dict(resp.getheaders())
+    conn.close()
+    return resp.status, corpo, cabecalhos
+
+
+from urllib.parse import quote as _quote16
+
+_url_doc16 = "/api/arquivo?c=" + _quote16(str(_doc16))
+_status16, _corpo16, _cab16 = pedir16(_url_doc16, cookie=False)
+ok("documento sem sessao = 401", _status16 == 401)
+
+_status16, _corpo16, _cab16 = pedir16(_url_doc16)
+ok("documento da pessoa abre (200) com o conteudo certo",
+   _status16 == 200 and _corpo16 == b"conteudo do relatorio")
+ok("o documento abre DENTRO da janela (inline) e sem rodar script",
+   "inline" in _cab16.get("Content-Disposition", "")
+   and _cab16.get("Content-Security-Policy") == "sandbox")
+ok("tipo do documento vem certo (texto)", "text/plain" in _cab16.get("Content-Type", ""))
+
+_status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_pagina16)))
+ok("HTML NAO e servido (rodaria na mesma origem do TEO)", _status16 == 404)
+_status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_sem_ext16)))
+ok("arquivo sem extensao conhecida nao e servido", _status16 == 404)
+_status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_pasta16 / "nao_existe.txt")))
+ok("documento que nao existe = 404", _status16 == 404)
+_status16, _, _ = pedir16("/api/arquivo?c=" + _quote16("/etc/passwd"))
+ok("fora das pastas da pessoa = 404 (nada de /etc, /usr)", _status16 == 404)
+_status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_pasta16)))
+ok("pasta (nao arquivo) = 404", _status16 == 404)
+_status16, _, _ = pedir16("/api/arquivo?c=")
+ok("sem caminho = 404", _status16 == 404)
+
+_status16, _, _ = pedir16(_url_doc16 + "&checar=1")
+ok("a tela pergunta se o documento existe (204, sem baixar nada)", _status16 == 204)
+_status16, _corpo16b, _ = pedir16("/api/arquivo?checar=1&c=" + _quote16(str(_pagina16)))
+ok("a checagem tambem recusa HTML", _status16 == 404 and bool(_corpo16b))
+_status16, _, _ = pedir16("/api/arquivo?checar=1&c="
+                          + _quote16(str(_pasta16 / "nao_existe.txt")))
+ok("checagem de arquivo inexistente = 404 (nao vira link morto)", _status16 == 404)
+
+from bgh.app_servidor import DOC_TIPOS as _TIPOS16
+
+_exts_js16 = re.findall(r'"([a-z0-9]{2,5})"',
+                        _js12[_js12.index("var DOC_EXTS"):
+                              _js12.index("var DOC_RE")])
+ok("a tela conhece exatamente os tipos que o servidor serve",
+   sorted(set("." + e for e in _exts_js16)) == sorted(_TIPOS16.keys()))
+_regex16 = _js12[_js12.index("var DOC_RE"):_js12.index("function candidatosDeDocumento")]
+_alvo16 = re.search(r"\.\(\?:([a-z0-9|]+)\)\)", _regex16)
+ok("o regex do link cobre os mesmos tipos da lista",
+   _alvo16 is not None and sorted(_alvo16.group(1).split("|")) == sorted(_exts_js16))
+ok("caminho com espaco no nome e aceito (o candidato vai ate a extensao)",
+   "<>|]*?" in _regex16 and "checar=1" in _js12)
+
+ok("a tela transforma o caminho em link que abre em outra janela",
+   'a.target = "_blank";' in _js12 and "function ligarCaminhos" in _js12
+   and '"/api/arquivo?c="' in _js12)
+ok("a varredura roda quando a resposta termina",
+   "ligarCaminhos();" in _js12[_js12.index("function fimTurno"):
+                               _js12.index("function fimTurno") + 800])
+ok("o link de documento tem estilo proprio (da para ver que e clicavel)",
+   "a.arquivo" in _css16)
+app5.encerrar("teste")
+app5.esperar_fim(5)
 
 print()
 print(f"TODOS OS TESTES DA TELA PASSARAM ({PASS} verificacoes)")

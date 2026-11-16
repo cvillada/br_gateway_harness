@@ -2734,6 +2734,33 @@ ok("alias funciona em qualquer idioma (canon)", _i18n316.canon("ayuda") == "help
 _i18n316.set_lang("pt")
 ok("escrita de comando acha o id em qualquer idioma",
    _i18n316.cmd("help") == "/ajuda" and _i18n316.canon("thinking") == "thinking")
+# Em portugues a conversa nova e /nova. /nov nao pode morrer: quem ja digitava
+# assim continua digitando (apelido, como /nuevo e /new).
+ok("conversa nova em pt e /nova, e /nov continua valendo",
+   _i18n316.cmd("new") == "/nova" and _i18n316.canon("nova") == "new"
+   and _i18n316.canon("nov") == "new")
+
+# Todo comando que aparece na ajuda tem que valer nos TRES idiomas. Um apelido
+# que so existe na coluna da ajuda (foi o caso de /screen: aparecia na ajuda em
+# ingles e caia em "comando desconhecido") e um comando que a pessoa le, digita
+# e nada acontece.
+_comandos330 = []
+for _cab330, _linhas330 in _i18n316.HELP_SECTIONS:
+    for _l330 in _linhas330:
+        _nomes330 = [_n.split()[0].lstrip("/").lower()
+                     for _n in _l330[0:3] if _n.startswith("/")]
+        if not _nomes330:
+            continue
+        if len({_i18n316.canon(_n) for _n in _nomes330}) != 1:
+            _comandos330.append(_l330[0:3])
+ok("todo comando da ajuda vale nos tres idiomas (mesmo id canonico)",
+   not _comandos330)
+ok("/tela, /screen e /pantalla sao o MESMO comando",
+   _i18n316.canon("tela") == _i18n316.canon("screen") == _i18n316.canon("pantalla")
+   == "screen")
+ok("apelido antigo de troca de tela continua valendo",
+   _i18n316.canon("app") == "screen" and _i18n316.canon("navegador") == "screen"
+   and _i18n316.canon("webapp") == "screen")
 
 # --- /lingua trocando a tela na hora -----------------------------------------
 class _LLMLang316:

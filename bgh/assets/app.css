@@ -239,6 +239,19 @@ h1 {
 
 .cartao.resposta { border-left: 6px solid var(--accent); }
 
+/* Documento citado na resposta: o caminho vira link e abre em OUTRA janela
+   (o TEO continua na aba dele, com a conversa). */
+.cartao a.arquivo,
+.linha a.arquivo {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.cartao a.arquivo:hover,
+.linha a.arquivo:hover { text-decoration-thickness: 3px; }
+
 /* Ajuda/opcoes: um cartao unico, com rolagem propria para nao empurrar a
    conversa inteira para fora da tela. */
 .cartao.ajuda { white-space: normal; padding: .85rem 1rem; }

@@ -261,7 +261,7 @@ Commands:
 Language: TEO speaks Portuguese (factory default), English and Spanish. The installer
 asks the language at the start and `/language` switches it at any moment, right away
 - banner, help, menus, permission, warnings and the bottom bar. Commands work in the
-three languages on any screen language (`/ajuda`, `/nov`, `/modelo`, `/pensamento`,
+three languages on any screen language (`/ajuda`, `/nova`, `/modelo`, `/pensamento`,
 `/sair`...), and the model starts answering in the chosen language (if the person
 writes in another language, it answers in the language of the message).
 
@@ -304,9 +304,12 @@ Whoever opens TEO - from the desktop icon or typing `bgh` - chooses how to use i
 - Permission: the four paths become big buttons. If nobody answers (tab closed,
   computer asleep), TEO does NOT do it - fail closed, like the lone Enter in the
   terminal.
-- Switch screens without leaving: `/tela` (or `/app`, `/navegador`) in the
-  terminal opens the browser; the **Terminal** button on the browser screen takes
-  you back.
+- Switch screens without leaving: `/tela` (or `/screen`, `/pantalla`, `/app`,
+  `/navegador`) in the terminal opens the browser; the **Terminal** button on the
+  browser screen takes you back.
+- A quoted document becomes a link: the path TEO writes (PDF, DOCX, XLSX, CSV,
+  image, TXT...) is clickable and opens in another window, without losing the
+  conversation. Only files inside your folders and of a known type open.
 - Option 3 (Settings) changes what used to live only in the file: open to the
   network (warning plus typed confirmation), language and model. It is saved in
   `~/.bgh/config.json`; `bgh app --local` ignores the network for that run only.

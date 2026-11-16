@@ -22,6 +22,8 @@ import shutil
 import subprocess
 import sys
 
+from . import i18n
+
 # ---------------------------------------------------------------------------
 # Cores: nome -> (fundo, letra, letra fraca, destaque, eco do usuario, rodape)
 # Fundo claro pede letra escura e vice-versa; os pares abaixo passam no teste de
@@ -347,13 +349,17 @@ def reabrir(nivel_escolhido: int) -> bool:
 TROCA_APP = 77      # codigo de saida: "terminei aqui, abra a tela do navegador"
 TROCA_CHAT = 78     # codigo de saida: "fechei o app, abra o terminal"
 
-COMANDOS_TROCA_APP = ("tela", "app", "navegador", "webapp")
+# Apelidos vem do catalogo (i18n.ALIASES["screen"]): /tela, /screen, /pantalla e
+# os antigos /app, /navegador, /webapp. Antes esta lista era escrita a mao e
+# ficou para tras do menu de ajuda - "/screen" aparecia na ajuda em ingles e nao
+# abria nada (bug relatado pelo dono do projeto).
+COMANDOS_TROCA_APP = i18n.ALIASES["screen"]
 
 
 def eh_troca_para_app(texto: str) -> bool:
-    """True se a linha digitada pede a tela do navegador (/tela, /app...)."""
+    """True se a linha digitada pede a tela do navegador (/tela, /screen...)."""
     bruto = (texto or "").strip().lower()
     if not bruto.startswith("/"):
         return False
     nome = bruto[1:].split()[0] if bruto[1:].split() else ""
-    return nome in COMANDOS_TROCA_APP
+    return i18n.canon(nome) == "screen"
