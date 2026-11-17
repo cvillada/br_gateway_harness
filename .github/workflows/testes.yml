@@ -10,6 +10,12 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# Run novo no MESMO ref cancela o anterior. Sem isso, cada emenda deixava o run
+# antigo segurando slot na fila (o macOS chega a esperar 10-15 min por maquina).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   testes:
     strategy:
@@ -17,12 +23,24 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11", "3.12"]
+        # macOS e o runner mais escasso (arm64). Uma versao de Python basta: o
+        # que muda entre 3.11/3.12 ja e coberto em ubuntu e windows, e o caminho
+        # de codigo do macOS (screencapture) nao roda no CI de qualquer jeito.
+        exclude:
+          - os: macos-latest
+            python-version: "3.11"
     runs-on: ${{ matrix.os }}
+    # Job travado nao pode segurar slot de fila ate o limite do repositorio.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          # Cache do pip: instalar rich/openai/vosk etc. custa ~30-60s por job e
+          # nao muda entre execucoes do mesmo requirements.
+          cache: pip
+          cache-dependency-path: requirements.txt
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
@@ -36,7 +54,10 @@ jobs:
       - name: Rodar a suite da tela do navegador
         # A tela do navegador usa so a biblioteca padrao (http.server, threading,
         # secrets), mas socket e loopback mudam de comportamento entre sistemas:
-        # este passo e o que prova o app nos tres, sem modelo e sem internet.
+        # este passo e o que prova o app sem modelo e sem internet.
+        # No macOS fica de fora: runner mais caro e o mesmo codigo ja roda em
+        # ubuntu e windows (as plataformas que o cliente realmente usa).
+        if: runner.os != 'macOS'
         env:
           PYTHONIOENCODING: utf-8
           PYTHONUTF8: "1"
