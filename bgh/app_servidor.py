@@ -527,6 +527,12 @@ class App:
             return
         if core is None:
             return
+        if anexos_ids and not caminhos:
+            # O anexo foi escolhido, mas nao esta mais aqui (outra janela, sessao
+            # reiniciada). Chamar o modelo so com o texto faria ele responder "nao
+            # recebi imagem" - confuso e falso. Melhor parar e pedir de novo.
+            self.canal.emitir("linha", texto=t("anexo.perdido"), estilo="yellow")
+            return
         ocupado = self.pegar_busy()
         if not ocupado:
             # Aviso no meio do turno: mesmo caminho do terminal (core.steer).

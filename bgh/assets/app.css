@@ -596,10 +596,30 @@ input:focus-visible {
 }
 
 .dica {
-  max-width: 52rem;
-  margin: .45rem auto 0;
+  /* Divida a linha com o clipe e os anexos: o rodape tem que gastar o minimo de
+     altura (numa tela de notebook a conversa fica pequena). Truncar com "..." e
+     melhor que quebrar em duas linhas. */
+  flex: 1 1 10rem;
+  min-width: 0;
+  margin: 0;
   font-size: .72rem;
   color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Tela baixa (notebook/netbook): a conversa vale mais que o enfeite do rodape. */
+@media (max-height: 720px) {
+  .topo { padding: .35rem 1rem; }
+  .gato { width: 2.2rem; height: 2.2rem; }
+  h1 { font-size: 1.15rem; }
+  .rodape { padding: .45rem 1rem calc(.45rem + env(safe-area-inset-bottom)); }
+  .dica { display: none; }
+  textarea { min-height: 2.6rem; padding: .55rem .9rem; }
+  .botao-enviar { min-height: 2.6rem; padding: .55rem 1.1rem; }
+  .botao-clipe { width: 2.2rem; height: 2.2rem; }
+  .trabalhando { margin-bottom: .35rem; }
 }
 
 /* ---------- clipe de anexo (embaixo da linha de digitar) ---------- */
@@ -608,7 +628,7 @@ input:focus-visible {
   align-items: center;
   gap: .5rem;
   max-width: 52rem;
-  margin: .5rem auto 0;
+  margin: .35rem auto 0;
   flex-wrap: wrap;
 }
 

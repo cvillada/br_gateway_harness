@@ -33,6 +33,22 @@ from . import anexos as anexos_mod
 
 LINE = "-" * 46  # separador visual (ASCII puro; nao depende de unicode no terminal)
 
+# Frases com que o modelo costuma dizer "nao me chegou imagem". So valem quando a
+# TELA mandou foto neste turno: ai a frase dele e sintoma de servidor que
+# descartou a imagem, nao de pedido sem imagem.
+SEM_IMAGEM_PISTAS = (
+    "nao chegou", "não chegou", "nao recebi", "não recebi",
+    "so recebi texto", "só recebi texto", "sem imagem anexada",
+    "no image", "did not receive", "didn't receive", "no attachment",
+    "no llego la imagen", "no recibi la imagen",
+)
+
+
+def _parece_sem_imagem(texto: str) -> bool:
+    """Heuristica estreita: o modelo reclamou que nao recebeu imagem."""
+    trecho = str(texto or "")[:800].lower()
+    return any(pista in trecho for pista in SEM_IMAGEM_PISTAS)
+
 
 def log_error(exc: BaseException, contexto: str) -> None:
     """Guarda o detalhe tecnico no arquivo; a tela ve apenas frase humana.
@@ -1400,6 +1416,13 @@ class ChatCore:
             except OSError:
                 tamanho_arq = "?"
             if cat == "imagem":
+                # Conferir AQUI (e nao so no agent) para a recusa aparecer em
+                # amarelo na tela: antes o aviso era discreto e a pessoa achava
+                # que a foto tinha ido.
+                _url_img, _tam_img, erro_img = files_mod.image_data_url(str(alvo))
+                if erro_img:
+                    self.sink.line(erro_img, style="yellow")
+                    continue
                 imagens.append(str(alvo))
                 self.sink.line(t("attach.image_ok", target=alvo, size=tamanho_arq),
                                style="cyan")
@@ -1478,6 +1501,12 @@ class ChatCore:
             self._flush_pend()
             if self.st["thinking"]:
                 self.sink.line("")
+            # Foto enviada e o modelo dizendo que nao viu: a pessoa precisa saber
+            # que o arquivo SAIU daqui (o servidor e que descartou). Caso real do
+            # dono: ele reenviou tres vezes uma foto que ja tinha ido.
+            if envio and answer != STOPPED_NOTE and _parece_sem_imagem(answer):
+                self.sink.line(t("agent.image_lost", nova=i18n.cmd("new")),
+                               style="yellow")
             if answer == STOPPED_NOTE:
                 # Usuario mandou parar: confirmar em uma linha proprio visivel.
                 self.sink.line(STOPPED_NOTE, style="yellow")

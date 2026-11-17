@@ -208,6 +208,10 @@ class Agent:
         if imagem:
             fotos.insert(0, imagem)
         if fotos:
+            # Conversa longa + foto = o servidor local pode DESCARTAR a imagem em
+            # silencio (o modelo entao responde "nao chegou imagem"). Abrir espaco
+            # antes de enviar e o que evita esse susto.
+            self._abrir_espaco_para_imagem()
             self._anexar_imagens(user_text, fotos)
         else:
             self.messages.append({"role": "user", "content": user_text})
@@ -504,10 +508,27 @@ class Agent:
                 break
         return did
 
-    def _force_compress(self) -> bool:
-        """Compactacao depois que o servidor ja recusou: baixa ate 70% do orcamento."""
+    def _abrir_espaco_para_imagem(self, pct: float = 0.55) -> bool:
+        """Compacta ANTES de mandar foto quando a conversa ja encheu o contexto.
+
+        Caso real (Nei, 17/11): conversa com 150+ mensagens e uma foto. A foto foi
+        enviada (o session.json guarda o marcador), mas o servidor local cortou a
+        imagem para caber no contexto e o modelo respondeu "nao chegou imagem".
+        Com 55% do orcamento livre a foto (que consome muitos tokens) cabe.
+        """
         budget = int(self.cfg.get("context_budget_chars", 156000))
-        target = int(budget * 0.70)
+        if self._estimate_chars() <= int(budget * pct):
+            return False
+        did = self._force_compress(pct)
+        if did:
+            self.last_compressed = True
+            self._note(t("agent.compressed_for_image"))
+        return did
+
+    def _force_compress(self, pct: float = 0.70) -> bool:
+        """Compactacao depois que o servidor ja recusou: baixa ate pct do orcamento."""
+        budget = int(self.cfg.get("context_budget_chars", 156000))
+        target = int(budget * pct)
         did = False
         for _ in range(4):
             if self._estimate_chars() <= target:

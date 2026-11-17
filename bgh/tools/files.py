@@ -84,9 +84,10 @@ def human_size(n: int) -> str:
 
 
 # Extensoes de imagem que a gente manda para o modelo (visao) e o teto de tamanho:
-# base64 cresce 33% e o pedido inteiro vai para a API, entao 5 MB e o limite util.
+# base64 cresce 33% e o pedido inteiro vai para a API. 12 MB cobre screenshot de
+# tela 4K e foto de celular (a 0.2.34 usava 5 MB e recusava foto grande demais).
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
-MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
 
 def is_image(path: str) -> bool:

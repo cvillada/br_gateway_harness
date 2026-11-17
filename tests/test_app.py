@@ -765,8 +765,8 @@ ok("anexo sozinho, sem texto, tambem vira turno",
 
 _st17 = pedir_json17("/api/turno", {"texto": "oi", "anexos": ["naoexiste1"]})
 time.sleep(0.3)
-ok("id de anexo que nao existe nao derruba o turno",
-   len(app6.core.chamadas) == 3)
+ok("id de anexo que nao existe: NAO chama o modelo so com o texto (0.2.35)",
+   len(app6.core.chamadas) == 2)
 
 # --- leitura de cada tipo (o que o MODELO recebe) ---
 _p17 = Path(tempfile.mkdtemp(prefix="bgh_anx_", dir=TMP))
@@ -905,6 +905,11 @@ ok("o clipe tem estilo proprio e gira com o tema",
    ".botao-clipe" in _css16 and ".anexo-item" in _css16)
 ok("o link de documento aceita caminho do Windows (bug da 0.2.33)",
    "A-Za-z" in _regex16 and "\\\\" in _regex16)
+ok("a dica divide a linha do clipe (o rodape nao gasta linha extra)",
+   _html17.index('id="dica"') > _html17.index('class="linha-anexo"')
+   and _html17.index('id="dica"') < _html17.index("</footer>"))
+ok("tela baixa esconde a dica e encolhe o campo (conversa ganha altura)",
+   "@media (max-height: 720px)" in _css16 and ".dica { display: none; }" in _css16)
 
 
 class _Consulta17:

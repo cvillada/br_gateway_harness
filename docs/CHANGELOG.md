@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.35
+
+Tres ajustes que o dono achou testando a 0.2.34.
+
+- IMAGEM EM CONVERSA LONGA: a foto era enviada, mas com 150+ mensagens o
+  servidor local descartava a imagem e o modelo respondia "nao chegou nenhuma
+  imagem" (o `session.json` guardava o marcador, provando que a foto saiu daqui).
+  Agora, antes de mandar foto, o TEO compacta a conversa se ela passou de 55% do
+  orcamento - a imagem cabe e o modelo enxerga. Se mesmo assim o modelo disser
+  que nao viu, aparece em amarelo: a imagem foi enviada, o servidor descartou,
+  tente /nova.
+- Foto recusada por tamanho agora aparece em amarelo na hora (era aviso discreto)
+  e o teto subiu de 5 MB para 12 MB (screenshot 4K e foto de celular).
+- Anexo que sumiu (outra janela, sessao reiniciada) NAO chama mais o modelo so
+  com o texto: o TEO avisa e pede para mandar de novo, em vez de deixar o modelo
+  responder "nao recebi nada".
+- RODAPE MAIS BAIXO: a dica ("ENTER envia...") saiu da linha propria e divide a
+  linha do clipe; em tela baixa (ate 640 px de altura) ela some, o campo e o
+  botao encolhem e a conversa ganha altura.
+- MENU DE CONFIGURACOES: com "5. Voltar" na lista, a pergunta dizia "Enter = 4".
+  Agora o numero do Voltar e calculado da propria lista e o prompt usa o mesmo
+  numero (nao desencontra se entrar uma opcao nova).
+
 ## 0.2.34
 
 O TEO agora recebe arquivo pela tela, e o link de documento funciona no Windows.

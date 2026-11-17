@@ -2614,7 +2614,8 @@ _foto299.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
 _txt299 = _dir299 / "nota.txt"
 _txt299.write_text("nao sou imagem", encoding="utf-8")
 _grande299 = _dir299 / "grande.png"
-_grande299.write_bytes(b"0" * (6 * 1024 * 1024))
+# Teto de 12 MB desde a 0.2.35 (foto de celular e screenshot 4K): 13 MB recusa.
+_grande299.write_bytes(b"0" * (13 * 1024 * 1024))
 
 _url299, _n299, _err299 = _img_url299(str(_foto299))
 ok("imagem vira data URL para a visao do modelo",
@@ -3952,6 +3953,73 @@ ok("tipo fora da lista nao vira texto", _ler334(_exe334)[0] == ""
 ok("PDF sem pypdf tem frase de saida (nao traceback)",
    "pypdf" in _i18n316.t("anexo.pdf_lib", atualizar="/atualizar")
    and "{atualizar}" not in _i18n316.t("anexo.pdf_lib", atualizar="/atualizar"))
+
+# ---------- v0.2.35: foto em conversa longa, rodape baixo, menu ---------------
+# Caso real do dono: 150+ mensagens na conversa, foto anexada, e o modelo
+# respondendo "nao chegou nenhuma imagem" (a foto tinha ido - o session.json
+# guardava o marcador). O servidor local descartava a imagem por contexto.
+_cfg335 = dict(_cfg299)
+_cfg335["context_budget_chars"] = 2000
+_ag335 = _Agent26(dict(_cfg335), _OkLLM26(), Gate(dict(_cfg335), ask_d))
+for _i335 in range(40):
+    _ag335.messages.append({"role": "user", "content": "pergunta " + "x" * 90})
+    _ag335.messages.append({"role": "assistant", "content": "resposta " + "y" * 90})
+_chars_antes335 = _ag335._estimate_chars()
+_notas335: list[str] = []
+_ag335.on_note = _notas335.append
+_ag335.run_turn("o que tem na foto?", imagem=str(_foto334a))
+ok("foto em conversa longa: o TEO resume ANTES de mandar (a imagem cabe)",
+   any("imagem caber" in n for n in _notas335))
+ok("a conversa encolheu de verdade antes da foto",
+   len(_ag335.messages) <= 15 and "RESUMO" in str(_ag335.messages[1].get("content")))
+_ult335 = [m for m in _ag335.messages
+           if m.get("role") == "user" and isinstance(m.get("content"), list)]
+ok("depois de resumir, a foto continua indo como imagem",
+   bool(_ult335) and _ult335[-1]["content"][1]["type"] == "image_url")
+
+
+class _SemFoto335:
+    """Modelo que responde 'nao chegou imagem' mesmo tendo recebido a foto."""
+
+    def chat(self, messages, tools=None):
+        return {"role": "assistant",
+                "content": "Nao chegou nenhuma imagem aqui. So recebi texto."}
+
+    def summarize(self, text):
+        return ""
+
+
+_sink335 = RecSink()
+_core335 = ChatCore(dict(_cfg334), _sink335, llm=_SemFoto335())
+_core335.submit("o que tem na foto?", anexos=[str(_foto334a)])
+ok("modelo que diz 'nao chegou imagem' ganha a explicacao certa na tela",
+   any("A imagem foi enviada" in l for l in _sink335.lines))
+ok("a explicacao e do i18n (tres idiomas)",
+   all(_i18n316.TEXTS["agent.image_lost"][i] for i in range(3)))
+
+from bgh.chat_core import _parece_sem_imagem as _sem_img335
+
+ok("a pista de 'sem imagem' nao dispara em resposta normal",
+   not _sem_img335("O contrato tem duas paginas e nenhum anexo extra."))
+
+# --- menu de configuracoes: numero do Voltar e o mesmo do prompt ---
+import builtins as _bt335
+
+from bgh import cli as _cli335
+
+_linhas335: list[str] = []
+_prompts335: list[str] = []
+_orig_input335, _orig_print335 = _bt335.input, _bt335.print
+try:
+    _bt335.input = lambda prompt="": (_prompts335.append(str(prompt)), "5")[1]
+    _bt335.print = lambda *a, **k: _linhas335.append(" ".join(str(x) for x in a))
+    _cli335.menu_config()
+finally:
+    _bt335.input, _bt335.print = _orig_input335, _orig_print335
+_texto335 = "\n".join(_linhas335)
+ok("o menu lista o Voltar com o numero certo", "5. Voltar" in _texto335)
+ok("a pergunta do menu usa o MESMO numero do Voltar (Enter = 5)",
+   bool(_prompts335) and "Enter = 5" in _prompts335[0])
 
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e

@@ -1144,6 +1144,25 @@ AGENT = {
                          "extra wait)...",
                          "Compactando la conversacion en un resumen (el resumen cuesta una "
                          "espera extra)..."),
+    # Caso real (Nei, 17/11): conversa com 150+ mensagens e uma foto. A foto FOI
+    # enviada (o session.json prova), mas o servidor local descartou a imagem e o
+    # modelo respondeu "nao chegou imagem". Duas medidas: compactar antes de mandar
+    # foto (agent._abrir_espaco_para_imagem) e dizer a verdade quando isso escapar.
+    "agent.compressed_for_image": ("Conversa longa: resumi o comeco para a imagem caber "
+                                   "no contexto do modelo.",
+                                   "Long conversation: I summarized the beginning so the "
+                                   "image fits in the model context.",
+                                   "Conversacion larga: resumi el comienzo para que la "
+                                   "imagen quepa en el contexto del modelo."),
+    "agent.image_lost": ("A imagem foi enviada junto do pedido; se o modelo disse que nao "
+                         "viu, o servidor descartou a foto (contexto cheio). Tente {nova} e "
+                         "mande a foto de novo.",
+                         "The image was sent with your request; if the model said it did not "
+                         "see it, the server dropped the photo (context full). Try {nova} and "
+                         "send the photo again.",
+                         "La imagen se envio con el pedido; si el modelo dijo que no la vio, "
+                         "el servidor descarto la foto (contexto lleno). Prueba {nova} y "
+                         "manda la foto de nuevo."),
     "agent.summary_fallback": ("(partes antigas da conversa foram removidas por limite de "
                                "contexto)",
                                "(old parts of the conversation were removed by the context "
@@ -2081,8 +2100,8 @@ APP = {
     "cfg.idioma": ("Idioma", "Language", "Idioma"),
     "cfg.modelo": ("Modelo", "Model", "Modelo"),
     "cfg.voltar": ("Voltar", "Back", "Volver"),
-    "cfg.prompt": ("Numero (Enter = 4): ", "Number (Enter = 4): ",
-                   "Numero (Enter = 4): "),
+    "cfg.prompt": ("Numero (Enter = {voltar}): ", "Number (Enter = {voltar}): ",
+                   "Numero (Enter = {voltar}): "),
     "cfg.rede.aviso": (
         "ATENCAO: com a rede ligada, o TEO (que executa comandos NESTA maquina)\n"
         "pode ser aberto por qualquer pessoa que estiver na mesma rede e souber o\n"

@@ -401,18 +401,29 @@ def menu_config() -> None:
         print("")
         valor = t("cfg.rede.on") if ligado else t("cfg.rede.off")
         cheia = t("onoff.on") if cfg.get("maximizar") else t("onoff.off")
-        print(f"    1. {t('cfg.rede')}: {valor}")
-        print(f"    2. {t('cfg.idioma')}: {i18n.LANG_NAMES[i18n.get_lang()]}")
-        print(f"    3. {t('cfg.modelo')}: {cfg.get('model', '')}")
-        print(f"    4. {t('cfg.janela')}: {cheia}")
-        print(f"    5. {t('cfg.voltar')}")
+        # As opcoes sao montadas em lista: o numero do "Voltar" e o tamanho dela
+        # (a frase do prompt dizia "Enter = 4" com Voltar em 5 - reclamacao do
+        # dono, 17/11). Assim nunca mais desencontra ao somar uma opcao.
+        opcoes = [
+            (t("cfg.rede"), valor),
+            (t("cfg.idioma"), i18n.LANG_NAMES[i18n.get_lang()]),
+            (t("cfg.modelo"), cfg.get("model", "")),
+            (t("cfg.janela"), cheia),
+        ]
+        for numero, (rotulo, estado) in enumerate(opcoes, start=1):
+            if estado:
+                print(f"    {numero}. {rotulo}: {estado}")
+            else:
+                print(f"    {numero}. {rotulo}")
+        voltar = len(opcoes) + 1
+        print(f"    {voltar}. {t('cfg.voltar')}")
         print("")
         try:
-            escolha = input(f"  {t('cfg.prompt')}").strip().lower()
+            escolha = input(f"  {t('cfg.prompt', voltar=voltar)}").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return
-        if escolha in ("", "5", "v", "voltar", "back", "sair"):
+        if escolha in ("", str(voltar), "v", "voltar", "back", "sair"):
             return
         if escolha == "1":
             _alternar_rede(cfg, ligado)
