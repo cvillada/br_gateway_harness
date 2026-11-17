@@ -104,9 +104,12 @@ ASSET_ROTAS = {
 # --- documentos citados na resposta (link clicavel) -------------------------
 # A tela do TEO roda em 127.0.0.1 com um token: um endereco que serve QUALQUER
 # arquivo do computador nao pode existir aqui. Por isso: lista FECHADA de tipos
-# e so arquivo dentro das pastas da pessoa. HTML/SVG/JS ficam de fora de
-# proposito - um arquivo desses rodaria na MESMA origem do TEO e teria o cookie
-# da sessao na mao.
+# e so arquivo dentro das pastas da pessoa.
+# HTML ENTRA (v0.2.36) porque o TEO escreve cartilha/relatorio em .html e o dono
+# quer clicar e abrir. Quem protege e o cabecalho `Content-Security-Policy:
+# sandbox` que TODO documento servido leva (_arquivo): a pagina abre em origem
+# opaca - sem script, sem formulario, sem cookie da sessao, sem tocar no TEO.
+# SVG e JS continuam FORA: SVG pode carregar script e JS nunca e documento.
 DOC_TIPOS = {
     ".pdf": "application/pdf",
     ".txt": "text/plain; charset=utf-8",
@@ -115,6 +118,8 @@ DOC_TIPOS = {
     ".csv": "text/csv; charset=utf-8",
     ".tsv": "text/tab-separated-values; charset=utf-8",
     ".json": "application/json; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".htm": "text/html; charset=utf-8",
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",

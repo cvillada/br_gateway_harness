@@ -585,8 +585,11 @@ _css16 = (_raiz12 / "bgh" / "assets" / "app.css").read_text(encoding="utf-8")
 _pasta16 = Path(tempfile.mkdtemp(prefix="bgh_doc_", dir=TMP))
 _doc16 = _pasta16 / "relatorio.txt"
 _doc16.write_text("conteudo do relatorio", encoding="utf-8")
-_pagina16 = _pasta16 / "pagina.html"       # tipo que NAO pode ser servido
-_pagina16.write_text("<h1>oi</h1>", encoding="utf-8")
+_pagina16 = _pasta16 / "cartilha.html"     # HTML do TEO: abre, mas sem script
+_pagina16.write_text("<h1>oi</h1><script>document.title='x'</script>",
+                     encoding="utf-8")
+_script16 = _pasta16 / "solto.js"          # JS nunca e documento: fora
+_script16.write_text("alert(1)", encoding="utf-8")
 _sem_ext16 = _pasta16 / "binario"          # sem extensao: tambem nao
 _sem_ext16.write_bytes(b"\x00\x01")
 
@@ -621,8 +624,13 @@ ok("o documento abre DENTRO da janela (inline) e sem rodar script",
    and _cab16.get("Content-Security-Policy") == "sandbox")
 ok("tipo do documento vem certo (texto)", "text/plain" in _cab16.get("Content-Type", ""))
 
-_status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_pagina16)))
-ok("HTML NAO e servido (rodaria na mesma origem do TEO)", _status16 == 404)
+_status16, _corpo16h, _cab16h = pedir16("/api/arquivo?c=" + _quote16(str(_pagina16)))
+ok("cartilha .html do TEO abre no navegador (0.2.36)",
+   _status16 == 200 and b"<h1>oi</h1>" in _corpo16h)
+ok("...e abre SEM rodar script e SEM a sessao do TEO (CSP sandbox)",
+   _cab16h.get("Content-Security-Policy") == "sandbox")
+_status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_script16)))
+ok("arquivo .js NAO e servido (nunca e documento)", _status16 == 404)
 _status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_sem_ext16)))
 ok("arquivo sem extensao conhecida nao e servido", _status16 == 404)
 _status16, _, _ = pedir16("/api/arquivo?c=" + _quote16(str(_pasta16 / "nao_existe.txt")))
@@ -636,8 +644,8 @@ ok("sem caminho = 404", _status16 == 404)
 
 _status16, _, _ = pedir16(_url_doc16 + "&checar=1")
 ok("a tela pergunta se o documento existe (204, sem baixar nada)", _status16 == 204)
-_status16, _corpo16b, _ = pedir16("/api/arquivo?checar=1&c=" + _quote16(str(_pagina16)))
-ok("a checagem tambem recusa HTML", _status16 == 404 and bool(_corpo16b))
+_status16, _corpo16b, _ = pedir16("/api/arquivo?checar=1&c=" + _quote16(str(_script16)))
+ok("a checagem tambem recusa tipo fora da lista", _status16 == 404 and bool(_corpo16b))
 _status16, _, _ = pedir16("/api/arquivo?checar=1&c="
                           + _quote16(str(_pasta16 / "nao_existe.txt")))
 ok("checagem de arquivo inexistente = 404 (nao vira link morto)", _status16 == 404)
@@ -910,6 +918,15 @@ ok("a dica divide a linha do clipe (o rodape nao gasta linha extra)",
    and _html17.index('id="dica"') < _html17.index("</footer>"))
 ok("tela baixa esconde a dica e encolhe o campo (conversa ganha altura)",
    "@media (max-height: 720px)" in _css16 and ".dica { display: none; }" in _css16)
+# v0.2.36: o modelo manda tabela com "|" e a tela desenhava os pipes crus.
+ok("a resposta desenha tabela de verdade (linhas com | viram <table>)",
+   "function montarTabela" in _js12 and "function blocosDaResposta" in _js12
+   and 'tabela.className = "tabela"' in _js12)
+ok("a tabela e desenhada no fim do turno, junto com os links",
+   "renderizarRespostas();" in _js12[_js12.index("function fimTurno"):
+                                     _js12.index("function fimTurno") + 900])
+ok("tabela larga rola dentro do cartao (nao empurra a conversa)",
+   ".tabela-caixa" in _css16 and "overflow-x: auto" in _css16)
 
 
 class _Consulta17:

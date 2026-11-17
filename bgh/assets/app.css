@@ -707,6 +707,48 @@ input:focus-visible {
   opacity: .85;
 }
 
+/* ---------- tabela da resposta (linhas com "|" viram tabela) ---------- */
+/* O cartao usa white-space: pre-wrap (texto do core alinha com espacos): dentro
+   da tabela isso vira espaco fantasma, entao "normal" aqui e obrigatorio. */
+.tabela-caixa {
+  max-width: 100%;
+  overflow-x: auto;      /* tabela larga rola sozinha, sem empurrar a conversa */
+  margin: .5rem 0;
+  white-space: normal;
+}
+
+.tabela {
+  border-collapse: collapse;
+  font-size: .92rem;
+  min-width: 50%;
+  /* Tabela dentro de .linha herdaria o cinza do aviso: o conteudo e resposta,
+     entao usa a cor do texto normal. */
+  color: var(--fg);
+}
+
+.tabela th,
+.tabela td {
+  border: 1px solid var(--linha);
+  padding: .4rem .7rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.tabela th {
+  background: var(--chip);
+  font-weight: 700;
+}
+
+.tabela tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--chip) 55%, transparent); }
+
+/* Cada bloco da resposta guarda as quebras de linha que o modelo escreveu. */
+.bloco-texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- modal ---------- */
 .veu {
   position: fixed;

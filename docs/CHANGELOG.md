@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.36
+
+Tabela de verdade na tela e cartilha .html clicavel (achados testando a 0.2.35).
+
+- TABELA NA RESPOSTA: quando o modelo manda linhas com "|", a tela do navegador
+  desenhava os pipes crus. Agora a resposta e remontada em blocos - texto
+  (com caminho que existe virando link) e tabela com cabecalho, bordas e rolagem
+  propria quando e larga. Aceita o separador torto que o modelo as vezes manda
+  ("||||" no lugar de |---|---|).
+- O pedido ao modelo passou a PERMITIR tabela simples (so ela; ** negrito, ## e
+  tracos continuam proibidos) e a dizer que a tela desenha a grade.
+- CARTILHA .html VIRA LINK: o arquivo .html que o TEO cria era recusado pelo
+  servidor para nao rodar na mesma origem da tela. Agora abre - e continua sem
+  poder nada: todo documento sai com `Content-Security-Policy: sandbox` (origem
+  opaca, sem script, sem cookie). .js e .svg seguem fora da lista.
+- Link e tabela agora saem da MESMA passada: antes o link reescrevia o texto do
+  cartao e teria apagado a tabela.
+
 ## 0.2.35
 
 Tres ajustes que o dono achou testando a 0.2.34.

@@ -161,7 +161,7 @@ function abrirFluxo(desde) {
     faixa("");
     // Replay do buffer (aba recarregada no meio de um turno) chega logo depois:
     // a varredura cobre a resposta que ja estava na tela.
-    setTimeout(function () { ligarCaminhos(); }, 800);
+    setTimeout(function () { renderizarRespostas(); ligarCaminhos(); }, 800);
   };
   fluxo.onerror = function () {
     if (encerrado) { return; }
@@ -388,7 +388,8 @@ function delta(canal, texto) {
  */
 var DOC_EXTS = ["pdf", "txt", "log", "md", "csv", "tsv", "json", "png", "jpg",
                 "jpeg", "gif", "webp", "bmp", "docx", "doc", "xlsx", "xls",
-                "pptx", "ppt", "odt", "ods", "odp", "rtf", "epub", "zip"];
+                "pptx", "ppt", "odt", "ods", "odp", "rtf", "epub", "zip",
+                "html", "htm"];
 /* Caminho pode ter ESPACO no nome ("/home/ana/Meus Documentos/Contas.pdf"):
  * o candidato vai ate a extensao de documento e quem decide se existe e o
  * servidor (checar=1). Assim nao aparece link morto na tela de uma crianca ou
@@ -399,7 +400,7 @@ var DOC_EXTS = ["pdf", "txt", "log", "md", "csv", "tsv", "json", "png", "jpg",
  * la - foi bug real na 0.2.33.
  * A lista de extensoes aqui tem que ser a MESMA de DOC_EXTS (a suite confere).
  */
-var DOC_RE = /(^|[\s("'`<\[])((?:~?\/|[A-Za-z]:[\\/]|\\\\)[^"'\n<>|]*?\.(?:pdf|txt|log|md|csv|tsv|json|png|jpg|jpeg|gif|webp|bmp|docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp|rtf|epub|zip))(?![A-Za-z0-9])/gi;
+var DOC_RE = /(^|[\s("'`<\[])((?:~?\/|[A-Za-z]:[\\/]|\\\\)[^"'\n<>|]*?\.(?:pdf|txt|log|md|csv|tsv|json|png|jpg|jpeg|gif|webp|bmp|docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp|rtf|epub|zip|html|htm))(?![A-Za-z0-9])/gi;
 
 function candidatosDeDocumento(texto) {
   var achados = [];
@@ -470,29 +471,178 @@ function montarComLinks(el, achados) {
   el.appendChild(frag);
 }
 
+/* Liga os caminhos de UM elemento (bloco de texto, celula de tabela ou linha). */
+function ligarNo(el) {
+  if (!el || el.dataset.ligado === "1" || el.dataset.ligando === "1") { return; }
+  var texto = el.textContent || "";
+  if (texto.indexOf("/") < 0) { el.dataset.ligado = "1"; return; }
+  var cands = candidatosDeDocumento(texto);
+  if (!cands.length) { el.dataset.ligado = "1"; return; }
+  el.dataset.ligando = "1";
+  Promise.all(cands.map(conferirCandidato))
+    .then(function (achados) {
+      var bons = achados.filter(function (a) { return a; })
+                         .sort(function (a, b) { return a.inicio - b.inicio; });
+      if (bons.length) { montarComLinks(el, bons); }
+    })
+    .catch(function () { /* sem rede: fica texto, como antes */ })
+    .then(function () {
+      delete el.dataset.ligando;
+      el.dataset.ligado = "1";
+    });
+}
+
 function ligarCaminhos(raiz) {
-  var alvos = (raiz || document).querySelectorAll(
-    ".cartao.resposta .rascunho-corpo, .linha");
+  // Linhas soltas (avisos do core, saida de ferramenta) continuam linha a linha.
+  // A RESPOSTA passa por renderizarRespostas(), que desenha tabela e link juntos.
+  var alvos = (raiz || document).querySelectorAll(".linha");
   for (var i = 0; i < alvos.length; i++) {
-    (function (el) {
-      if (el.dataset.ligado === "1" || el.dataset.ligando === "1") { return; }
-      var texto = el.textContent || "";
-      if (texto.indexOf("/") < 0) { el.dataset.ligado = "1"; return; }
-      var cands = candidatosDeDocumento(texto);
-      if (!cands.length) { el.dataset.ligado = "1"; return; }
-      el.dataset.ligando = "1";
-      Promise.all(cands.map(conferirCandidato))
-        .then(function (achados) {
-          var bons = achados.filter(function (a) { return a; })
-                             .sort(function (a, b) { return a.inicio - b.inicio; });
-          if (bons.length) { montarComLinks(el, bons); }
-        })
-        .catch(function () { /* sem rede: fica texto, como antes */ })
-        .then(function () {
-          delete el.dataset.ligando;
-          el.dataset.ligado = "1";
-        });
-    })(alvos[i]);
+    // Linha ja desenhada em blocos/tabela: reescrever o textContent apagaria
+    // a tabela. Os links de dentro dela ja foram ligados bloco a bloco.
+    if (alvos[i].dataset.renderizado === "1") { continue; }
+    ligarNo(alvos[i]);
+  }
+}
+
+/* ------------- resposta: linha com "|" vira tabela de verdade ------------- */
+/* O modelo as vezes manda tabela (mesmo o pedido dizendo para nao usar markdown).
+ * Na tela do navegador isso ficava como "| arquivo | tamanho |" cru, feio de ler.
+ * Aqui a resposta e lida inteira e remontada em BLOCOS: texto (com caminho que
+ * existe virando link) e tabela. Antes o link reescrevia o textContent do cartao
+ * e apagaria a tabela - por isso as duas coisas moram na mesma passada.
+ */
+function linhaDeTabela(texto) {
+  var s = String(texto || "").trim();
+  return s.length > 1 && s.charAt(0) === "|" && s.indexOf("|", 1) > 0;
+}
+
+function celulasDaLinha(texto) {
+  var s = String(texto || "").trim().replace(/^\|/, "").replace(/\|$/, "");
+  return s.split("|").map(function (c) { return c.trim(); });
+}
+
+function ehSeparador(celulas) {
+  if (!celulas || !celulas.length) { return false; }
+  return celulas.every(function (c) { return c === "" || /^:?-{2,}:?$/.test(c); });
+}
+
+function montarTabela(linhas) {
+  var grade = linhas.map(celulasDaLinha);
+  // Cabecalho = a linha antes dos tracinhos. O modelo as vezes escreve "||||"
+  // no lugar de |---|---|: os dois contam como separador (caso real do dono).
+  var cabecalho = null;
+  if (grade.length > 1 && ehSeparador(grade[1])) {
+    cabecalho = grade.shift();
+    grade.shift();
+  }
+  var largura = 0;
+  var todas = grade.concat(cabecalho ? [cabecalho] : []);
+  todas.forEach(function (celulas) {
+    if (celulas.length > largura) { largura = celulas.length; }
+  });
+  var caixa = document.createElement("div");
+  caixa.className = "tabela-caixa";
+  var tabela = document.createElement("table");
+  tabela.className = "tabela";
+
+  function acrescentarLinha(celulas, tag) {
+    var tr = document.createElement("tr");
+    for (var i = 0; i < largura; i++) {
+      var cel = document.createElement(tag);
+      cel.textContent = celulas[i] || "";
+      ligarNo(cel);          // caminho dentro da tabela tambem vira link
+      tr.appendChild(cel);
+    }
+    return tr;
+  }
+
+  if (cabecalho) {
+    var thead = document.createElement("thead");
+    thead.appendChild(acrescentarLinha(cabecalho, "th"));
+    tabela.appendChild(thead);
+  }
+  var tbody = document.createElement("tbody");
+  grade.forEach(function (celulas) {
+    tbody.appendChild(acrescentarLinha(celulas, "td"));
+  });
+  tabela.appendChild(tbody);
+  caixa.appendChild(tabela);
+  return caixa;
+}
+
+/* Blocos da resposta, na ordem em que o modelo escreveu. */
+function blocosDaResposta(texto) {
+  var linhas = String(texto || "").split("\n");
+  var blocos = [];
+  var corrida = [];
+  var tabela = [];
+
+  function fecharCorrida() {
+    if (corrida.length) { blocos.push({ tipo: "texto", linhas: corrida }); }
+    corrida = [];
+  }
+
+  function fecharTabela() {
+    if (tabela.length >= 2) {
+      blocos.push({ tipo: "tabela", linhas: tabela });
+    } else if (tabela.length) {
+      corrida = corrida.concat(tabela);   // uma linha so com "|" nao e tabela
+    }
+    tabela = [];
+  }
+
+  linhas.forEach(function (linha) {
+    if (linhaDeTabela(linha)) {
+      fecharCorrida();
+      tabela.push(linha);
+    } else {
+      fecharTabela();
+      corrida.push(linha);
+    }
+  });
+  fecharTabela();
+  fecharCorrida();
+  return blocos;
+}
+
+function desenharBlocos(el, blocos) {
+  el.dataset.renderizado = "1";
+  el.textContent = "";
+  blocos.forEach(function (bloco) {
+    if (bloco.tipo === "tabela") {
+      el.appendChild(montarTabela(bloco.linhas));
+      return;
+    }
+    var div = document.createElement("div");
+    div.className = "bloco-texto";
+    div.textContent = bloco.linhas.join("\n");
+    el.appendChild(div);
+    ligarNo(div);
+  });
+}
+
+function renderResposta(corpo) {
+  if (!corpo || corpo.dataset.renderizado === "1") { return; }
+  var texto = corpo.textContent || "";
+  if (!texto.trim()) { return; }
+  desenharBlocos(corpo, blocosDaResposta(texto));
+}
+
+function renderizarRespostas(raiz) {
+  var doc = raiz || document;
+  var corpos = doc.querySelectorAll(".cartao.resposta .rascunho-corpo");
+  for (var i = 0; i < corpos.length; i++) { renderResposta(corpos[i]); }
+  // A resposta tambem chega como LINHA quando o modelo/servidor nao faz
+  // streaming (o core manda o texto fechado por line()). Ai a tabela ficaria no
+  // meio de uma linha e merece a mesma grade. So mexe em linha que TEM tabela:
+  // aviso do core e saida de ferramenta continuam texto puro.
+  var linhas = doc.querySelectorAll(".linha");
+  for (var j = 0; j < linhas.length; j++) {
+    var el = linhas[j];
+    if (el.dataset.renderizado === "1") { continue; }
+    var blocos = blocosDaResposta(el.textContent || "");
+    var temTabela = blocos.some(function (bloco) { return bloco.tipo === "tabela"; });
+    if (temTabela) { desenharBlocos(el, blocos); }
   }
 }
 
@@ -543,8 +693,10 @@ function fimTurno() {
   canais = {};
   ocupado = false;
   aplicarOcupado();
-  // Fim do turno = resposta completa: agora o caminho de documento pode virar
-  // link (durante o streaming o texto ainda esta pela metade).
+  // Fim do turno = resposta completa: agora a resposta pode ser desenhada
+  // (tabela) e o caminho de documento virar link - durante o streaming o texto
+  // ainda esta pela metade, entao nada disso pode rodar antes.
+  renderizarRespostas();
   ligarCaminhos();
 }
 

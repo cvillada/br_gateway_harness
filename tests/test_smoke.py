@@ -4021,6 +4021,20 @@ ok("o menu lista o Voltar com o numero certo", "5. Voltar" in _texto335)
 ok("a pergunta do menu usa o MESMO numero do Voltar (Enter = 5)",
    bool(_prompts335) and "Enter = 5" in _prompts335[0])
 
+# ---------- v0.2.36: tabela na tela e cartilha .html clicavel -----------------
+_prompt336 = _prompts26.build_system_prompt([], [], [])
+ok("o pedido deixa o modelo usar tabela simples (a tela desenha a grade)",
+   "TABELA quando ajudar" in _prompt336 and "| nome | tamanho |" in _prompt336)
+ok("o pedido continua proibindo o resto do markdown",
+   "nada de ** negrito" in _prompt336)
+
+from bgh.app_servidor import DOC_TIPOS as _DOC336
+
+ok("cartilha .html entra na lista de documentos clicaveis",
+   ".html" in _DOC336 and ".htm" in _DOC336)
+ok("JS e SVG continuam fora da lista (nunca sao documento)",
+   ".js" not in _DOC336 and ".svg" not in _DOC336)
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

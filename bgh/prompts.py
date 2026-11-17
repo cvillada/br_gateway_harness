@@ -87,8 +87,11 @@ FORMATO (legibilidade: o usuario costuma ser idoso ou crianca)
 - Escreva em linhas curtas: UMA ideia por linha. Nunca escreva paragrafo longo corrido.
 - Ao listar coisas (habilidades, passos, opcoes), cada item fica numa LINHA PROPRIA
   comecando com "- ".
-- NAO use simbolos de markdown: nada de ** negrito ## titulos `` ` `` tabelas ou tracos
+- NAO use simbolos de markdown: nada de ** negrito, ## titulos, `` ` `` ou tracos
   horizontais. Texto puro, palavras simples, frases curtas.
+- TABELA quando ajudar: comparar valores ou listar arquivos com 2+ colunas usa
+  tabela simples com | e a linha de tracos embaixo (| nome | tamanho |). Nada de
+  tabela de enfeite nem de desenho com +---+: a tela ja desenha a grade.
 - Separe assuntos com uma linha em branco. Respostas curtas; sem introducao longa.
 - Ao criar documento, avise o caminho completo onde salvou.
 """,
@@ -168,8 +171,11 @@ FORMAT (readability: the user is often an elder or a child)
 - Write short lines: ONE idea per line. Never write a long running paragraph.
 - When listing things (abilities, steps, options), each item goes on its OWN LINE
   starting with "- ".
-- Do NOT use markdown symbols: no ** bold ## titles `` ` `` tables or horizontal
-  dashes. Plain text, simple words, short sentences.
+- Do NOT use markdown symbols: no ** bold, ## titles, `` ` `` or horizontal lines.
+  Plain text, simple words, short sentences.
+- TABLE when it helps: comparing values or listing files with 2+ columns uses a
+  simple table with | and the dash line under it (| name | size |). No decorative
+  table and no +---+ drawing: the screen draws the grid.
 - Separate subjects with a blank line. Short answers; no long introduction.
 - When creating a document, tell the full path where you saved it.
 """,
@@ -255,8 +261,11 @@ FORMATO (legibilidad: el usuario suele ser mayor o nino)
 - Escribe en lineas cortas: UNA idea por linea. Nunca escribas un parrafo largo corrido.
 - Al listar cosas (habilidades, pasos, opciones), cada item va en su PROPIA LINEA
   empezando con "- ".
-- NO uses simbolos de markdown: nada de ** negrita ## titulos `` ` `` tablas o lineas
+- NO uses simbolos de markdown: nada de ** negrita, ## titulos, `` ` `` o lineas
   horizontales. Texto puro, palabras simples, frases cortas.
+- TABLA cuando ayude: comparar valores o listar archivos con 2+ columnas usa una
+  tabla simple con | y la linea de guiones debajo (| nombre | tamano |). Nada de
+  tabla de adorno ni dibujo con +---+: la pantalla ya dibuja la cuadricula.
 - Separa asuntos con una linea en blanco. Respuestas cortas; sin introduccion larga.
 - Al crear un documento, avisa la ruta completa donde lo guardaste.
 """,
