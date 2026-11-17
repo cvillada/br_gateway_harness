@@ -17,7 +17,8 @@ Tela do navegador no tamanho que cabe no seu notebook - ja na abertura.
 - `/zoom` e da TELA do navegador; no terminal o tamanho da letra continua sendo
   o `/fonte` (o proprio comando avisa isso).
 
-Suite local: 617 verificacoes gerais + 181 da tela (todas verdes).
+Suite local: 617 verificacoes gerais + 181 da tela (todas verdes). CI: os 6 jobs
+(ubuntu/windows/macos, Python 3.11 e 3.12) e os executaveis windows/macos verdes.
 
 ## 0.2.39
 
