@@ -17,6 +17,8 @@ Tela do navegador no tamanho que cabe no seu notebook - ja na abertura.
 - `/zoom` e da TELA do navegador; no terminal o tamanho da letra continua sendo
   o `/fonte` (o proprio comando avisa isso).
 
+Suite local: 617 verificacoes gerais + 181 da tela (todas verdes).
+
 ## 0.2.39
 
 Site com login: o TEO tem o navegador DELE, e quem entra e a pessoa.
