@@ -58,6 +58,7 @@ ALIASES = {
     "mem": ("mem", "memory", "memoria"),
     "skills": ("skills", "habilidades"),
     "site": ("site", "sites", "logins"),
+    "zoom": ("zoom", "escala", "scale"),
     "model": ("modelo", "modelos", "model", "models"),
     "provider": ("provedor", "provedores", "provider", "providers",
                  "proveedor", "proveedores"),
@@ -106,6 +107,7 @@ CMD = {
     "about": ("/sobre", "/about", "/acerca"),
     "screen": ("/tela", "/screen", "/pantalla"),
     "site": ("/site", "/site", "/site"),
+    "zoom": ("/zoom", "/zoom", "/zoom"),
 }
 
 
@@ -297,6 +299,14 @@ HELP_SECTIONS = [
         ("/skills", "/skills", "/habilidades",
          "lista as skills conhecidas", "lists the known skills",
          "lista las skills conocidas"),
+        ("/zoom [75|90|100|110|125]", "/zoom [75|90|100|110|125]",
+         "/zoom [75|90|100|110|125]",
+         "tamanho da tela do navegador (75% cabe inteiro num notebook de 14\"); "
+         "sozinho mostra o atual e fica guardado",
+         "browser screen size (75% fits a 14\" notebook); alone it shows the "
+         "current value and is saved",
+         "tamano de la pantalla del navegador (75% cabe entero en un portatil de "
+         "14\"); solo muestra el actual y queda guardado"),
         ("/site", "/site", "/site",
          "sites com login: /site mostra o estado, /site abrir <endereco> abre uma "
          "janela do navegador do TEO para VOCE entrar, /site esquecer apaga as sessoes",
@@ -661,6 +671,31 @@ CHAT = {
                      "Conversacion reiniciada (memoria y skills conservadas)."),
     "cmd.skills.empty": ("(nenhuma skill ainda)", "(no skills yet)",
                          "(ninguna skill todavia)"),
+    # /zoom: tamanho da TELA DO NAVEGADOR (v0.2.40). Notebook de 14" corta o
+    # rodape em 100%; a 75% cabe inteiro. Fica guardado no config.
+    "cmd.zoom.list": ("Tela do navegador em {atual}%. Opcoes: 75, 90, 100, 110 ou "
+                      "125. Use {cmd} <numero> - fica guardado para as proximas "
+                      "aberturas.",
+                      "Browser screen at {atual}%. Options: 75, 90, 100, 110 or 125. "
+                      "Use {cmd} <number> - it is saved for the next openings.",
+                      "Pantalla del navegador al {atual}%. Opciones: 75, 90, 100, 110 o "
+                      "125. Usa {cmd} <numero> - queda guardado para las proximas "
+                      "aperturas."),
+    "cmd.zoom.now": ("Tela do navegador agora em {atual}% (guardado). Se a tela ja "
+                     "estiver aberta, ela se ajusta em ate 12 segundos.",
+                     "Browser screen now at {atual}% (saved). If the screen is already "
+                     "open it adjusts within 12 seconds.",
+                     "Pantalla del navegador ahora al {atual}% (guardado). Si ya esta "
+                     "abierta se ajusta en hasta 12 segundos."),
+    "cmd.zoom.bad": ("Escolha 75, 90, 100, 110 ou 125. Exemplo: {cmd} 75.",
+                     "Choose 75, 90, 100, 110 or 125. Example: {cmd} 75.",
+                     "Elige 75, 90, 100, 110 o 125. Ejemplo: {cmd} 75."),
+    "cmd.zoom.terminal": ("O {cmd} vale para a tela do navegador. No terminal, o "
+                          "tamanho da letra e o {fonte}.",
+                          "{cmd} applies to the browser screen. In the terminal the "
+                          "letter size is {fonte}.",
+                          "{cmd} vale para la pantalla del navegador. En el terminal el "
+                          "tamano de la letra es {fonte}."),
     # /site: navegador proprio do TEO para site com login (v0.2.39).
     "cmd.site.status_vazio": (
         "Nenhum login guardado no navegador do TEO. Para entrar num site: {cmd} "
@@ -2355,6 +2390,12 @@ APP = {
     "app.help.pensamento": ("mostra ou esconde o rascunho do modelo na resposta",
                             "shows or hides the model draft in the answer",
                             "muestra u oculta el borrador del modelo en la respuesta"),
+    "app.cmd.zoom": ("/zoom", "/zoom", "/zoom"),
+    "app.help.zoom": ("tamanho da tela: /zoom 75 para notebook de 14 polegadas "
+                      "(fica guardado)",
+                      "screen size: /zoom 75 for a 14 inch notebook (saved)",
+                      "tamano de pantalla: /zoom 75 para portatil de 14 pulgadas "
+                      "(guardado)"),
     "app.cmd.site": ("/site", "/site", "/site"),
     "app.help.site": ("sites com login: /site abrir <endereco> abre uma janela para "
                       "VOCE entrar; /site esquecer apaga as sessoes",

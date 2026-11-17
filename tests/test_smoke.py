@@ -4486,6 +4486,60 @@ ok("as ferramentas de sempre continuam todas registradas",
     "instalar_pacote", "limpar_apoio", "ver_pagina", "ver_tela",
     "abrir_navegador"} <= _specs339)
 
+# ---------- v0.2.40: /zoom (tamanho da tela do navegador) --------------------
+# Notebook de 14" a 100% corta o rodape e some a dica; a 75% cabe inteiro. O
+# tamanho fica guardado no config e a tela obedece ao abrir.
+from bgh.config import DEFAULTS as _DEF340
+
+ok("zoom da tela vem de fabrica em 100%", _DEF340.get("zoom_web") == 100)
+
+_linhas340: list[str] = []
+
+
+def _core340():
+    core = ChatCore(dict(_cfg334), RecSink(), llm=_OkLLM26())
+    core.sink.line = lambda texto, style=None: _linhas340.append(str(texto))
+    return core
+
+
+_c340 = _core340()
+_c340.submit("/zoom")
+ok("/zoom sozinho mostra o tamanho atual e as opcoes",
+   any("100%" in linha and "75" in linha for linha in _linhas340))
+
+_linhas340.clear()
+_c340.submit("/zoom 75")
+ok("/zoom 75 grava no config", _c340.cfg.get("zoom_web") == 75)
+ok("/zoom 75 confirma na tela", any("75%" in linha for linha in _linhas340))
+ok("o valor foi para o config.json em disco",
+   json.loads((Path(os.environ["BGH_HOME"]) / "config.json").read_text())
+   .get("zoom_web") == 75)
+
+_linhas340.clear()
+_c340.submit("/zoom 88")
+ok("/zoom com valor fora da lista avisa e nao grava",
+   any("75, 90, 100" in linha for linha in _linhas340)
+   and _c340.cfg.get("zoom_web") == 75)
+
+_linhas340.clear()
+from bgh.config import load_config as _carregar340
+
+_c_novo340 = ChatCore(_carregar340(), RecSink(), llm=_OkLLM26())
+_c_novo340.sink.line = lambda texto, style=None: _linhas340.append(str(texto))
+_c_novo340.submit("/zoom")
+ok("a tela nova ja abre com o zoom guardado (le do config.json)",
+   any("75%" in linha for linha in _linhas340))
+
+ok("os textos do /zoom existem nas tres linguas",
+   all(_i18n316.TEXTS[chave][i]
+       for chave in ("cmd.zoom.list", "cmd.zoom.now", "cmd.zoom.bad")
+       for i in range(3)))
+_ajuda340 = [[cmd for cmd, _desc in linhas]
+             for _titulo, linhas in _i18n316.help_table()]
+ok("o /zoom aparece na ajuda (com as opcoes)",
+   any(cmd.startswith("/zoom") and "75" in cmd
+       for secao in _ajuda340 for cmd in secao))
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

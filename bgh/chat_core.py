@@ -1033,6 +1033,26 @@ class ChatCore:
                 from .tools import memory
 
                 self.sink.line(memory.add(rest, target="user"))
+            elif what == "zoom":
+                # Tamanho da TELA DO NAVEGADOR (a do terminal e /fonte). Vale para
+                # notebook pequeno: a 100% o rodape fica cortado e some a dica.
+                zooms = (75, 90, 100, 110, 125)
+                atual = int(self.cfg.get("zoom_web", 100) or 100)
+                pedaco = rest.strip().replace("%", "")
+                if not pedaco:
+                    self.sink.line(t("cmd.zoom.list", atual=atual,
+                                     cmd=i18n.cmd("zoom")), style="cyan")
+                    if not getattr(self.sink, "tela_navegador", False):
+                        self.sink.line(t("cmd.zoom.terminal", cmd=i18n.cmd("zoom"),
+                                         fonte=i18n.cmd("font")), style="dim")
+                elif pedaco.isdigit() and int(pedaco) in zooms:
+                    novo = int(pedaco)
+                    self.cfg["zoom_web"] = novo
+                    save_config(self.cfg)
+                    self.sink.line(t("cmd.zoom.now", atual=novo), style="cyan")
+                else:
+                    self.sink.line(t("cmd.zoom.bad", cmd=i18n.cmd("zoom")),
+                                   style="yellow")
             elif what == "site":
                 # Navegador proprio do TEO para site com login. Quem entra no site e
                 # a PESSOA (na janela que este comando abre); o TEO so le depois.

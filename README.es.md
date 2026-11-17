@@ -320,6 +320,9 @@ usarlo:
   el router.
 - Atajos: `bgh app` (va directo al navegador), `bgh chat` (va directo al
   terminal).
+- Tamano de pantalla: `/zoom 75` encaja la pantalla entera en un portatil de 14
+  pulgadas (opciones 75, 90, 100, 110 o 125; queda guardado). En el terminal el
+  tamano de la letra es `/fonte`.
 
 ## Ver la pantalla y leer sitios con login (0.2.37 a 0.2.39)
 

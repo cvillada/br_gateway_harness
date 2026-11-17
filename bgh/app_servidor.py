@@ -180,6 +180,7 @@ HELP_APP = (
     ("item", "pensamento"),
     ("sec", "quando"),
     ("item", "skills"),
+    ("item", "zoom"),
     ("item", "site"),
     ("item", "doctor"),
     ("item", "atualizar"),
@@ -274,6 +275,8 @@ class AppSink:
     # O menu numerado de pastas do terminal nao existe aqui: com False o core
     # cai na listagem em texto, que ja funciona e nao precisa de codigo novo.
     menu_arquivos = False
+    # Esta tela ENTENDE o /zoom (o terminal nao: la o tamanho da letra e /fonte).
+    tela_navegador = True
 
     def __init__(self, app: "App"):
         self.app = app
@@ -747,6 +750,7 @@ class App:
             "ajuda": ajuda_do_app(),
             # O clipe da tela precisa saber os limites e o accept ANTES de mandar
             # arquivo: o servidor continua sendo quem manda (valida de novo).
+            "zoom": int(self.cfg.get("zoom_web", 100) or 100),
             "anexo": {"max_mb": round(ANEXO_MAX / (1024 * 1024)),
                       "max": anexos_mod.MAX_ANEXOS,
                       "aceita": ",".join(anexos_mod.aceitos())},
@@ -1107,7 +1111,10 @@ class _Handler(BaseHTTPRequestHandler):
             # esta na frente da tela" de "a aba foi fechada". Vai tambem o idioma
             # atual: se a pessoa trocou no /lingua, a tela se reescreve sozinha.
             return self._json(200, {"ok": True, "ocupado": bool(self.app.busy),
-                                    "lingua": i18n.get_lang()})
+                                    "lingua": i18n.get_lang(),
+                                    # /zoom muda ao vivo: a pagina se ajusta no
+                                    # proximo sinal de vida (12s), sem recarregar.
+                                    "zoom": int(self.app.cfg.get("zoom_web", 100) or 100)})
         if caminho == "/api/sair":
             self.app.encerrar("sair")
             return self._json(200, {"ok": True})

@@ -916,8 +916,14 @@ ok("o link de documento aceita caminho do Windows (bug da 0.2.33)",
 ok("a dica divide a linha do clipe (o rodape nao gasta linha extra)",
    _html17.index('id="dica"') > _html17.index('class="linha-anexo"')
    and _html17.index('id="dica"') < _html17.index("</footer>"))
-ok("tela baixa esconde a dica e encolhe o campo (conversa ganha altura)",
-   "@media (max-height: 720px)" in _css16 and ".dica { display: none; }" in _css16)
+ok("tela baixa encolhe a dica e o campo (e NAO esconde a dica - 0.2.40)",
+   "@media (max-height: 720px)" in _css16 and ".dica { font-size: .66rem; }" in _css16
+   and ".dica { display: none; }" not in _css16)
+ok("a tela sabe o tamanho guardado (/zoom) e aplica na abertura",
+   "aplicarZoom(dados.zoom)" in _js12
+   and 'document.documentElement.style.zoom' in _js12)
+ok("o /zoom tambem chega pelo sinal de vida (muda sem recarregar)",
+   'typeof d.zoom === "number"' in _js12)
 # v0.2.36: o modelo manda tabela com "|" e a tela desenhava os pipes crus.
 ok("a resposta desenha tabela de verdade (linhas com | viram <table>)",
    "function montarTabela" in _js12 and "function blocosDaResposta" in _js12
@@ -950,6 +956,8 @@ app7.core = CoreFalso17(app7)  # type: ignore[assignment]
 app7.subir_servidor(porta=0)
 time.sleep(0.05)
 _inicio17 = _Consulta17(app7.porta, "tok17b").inicio()
+ok("/api/inicio leva o zoom da tela (padrao 100)",
+   _inicio17.get("zoom") == 100)
 ok("/api/inicio leva o limite e os tipos do clipe",
    _inicio17.get("anexo", {}).get("max_mb") == 15
    and _inicio17.get("anexo", {}).get("max") == _anx17.MAX_ANEXOS

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.40
+
+Tela do navegador no tamanho que cabe no seu notebook.
+
+- `/zoom`: tamanho da TELA do navegador - 75, 90, 100, 110 ou 125 por cento.
+  Fica guardado no config e vale nas proximas aberturas; se a tela ja estiver
+  aberta, ela se ajusta sozinha em ate 12 segundos (vai pelo sinal de vida).
+  75% cabe inteiro num notebook de 14 polegadas, com o rodape e a dica a vista.
+- A dica do rodape ("ENTER envia...") NAO some mais em tela baixa: antes ela era
+  escondida para ganhar altura (0.2.35) e o dono reclamou de perde-la. Agora ela
+  encolhe e corta com "...", numa linha so.
+- `/zoom` e da TELA do navegador; no terminal o tamanho da letra continua sendo
+  o `/fonte` (o proprio comando avisa isso).
+
 ## 0.2.39
 
 Site com login: o TEO tem o navegador DELE, e quem entra e a pessoa.
