@@ -299,14 +299,14 @@ HELP_SECTIONS = [
         ("/skills", "/skills", "/habilidades",
          "lista as skills conhecidas", "lists the known skills",
          "lista las skills conocidas"),
-        ("/zoom [75|90|100|110|125]", "/zoom [75|90|100|110|125]",
-         "/zoom [75|90|100|110|125]",
-         "tamanho da tela do navegador (75% cabe inteiro num notebook de 14\"); "
-         "sozinho mostra o atual e fica guardado",
-         "browser screen size (75% fits a 14\" notebook); alone it shows the "
-         "current value and is saved",
-         "tamano de la pantalla del navegador (75% cabe entero en un portatil de "
-         "14\"); solo muestra el actual y queda guardado"),
+        ("/zoom [75|90|100|110|125|auto]", "/zoom [75|90|100|110|125|auto]",
+         "/zoom [75|90|100|110|125|auto]",
+         "tamanho da tela do navegador; no automatico abre a 75% em janela baixa "
+         "(notebook) e 100% em tela grande",
+         "browser screen size; on automatic it opens at 75% on a short window "
+         "(notebook) and 100% on a large screen",
+         "tamano de la pantalla del navegador; en automatico abre al 75% en ventana "
+         "baja (portatil) y 100% en pantalla grande"),
         ("/site", "/site", "/site",
          "sites com login: /site mostra o estado, /site abrir <endereco> abre uma "
          "janela do navegador do TEO para VOCE entrar, /site esquecer apaga as sessoes",
@@ -681,6 +681,21 @@ CHAT = {
                       "Pantalla del navegador al {atual}%. Opciones: 75, 90, 100, 110 o "
                       "125. Usa {cmd} <numero> - queda guardado para las proximas "
                       "aperturas."),
+    "cmd.zoom.list_auto": ("Tela do navegador em AUTOMATICO: 75% em janela baixa "
+                           "(notebook) e 100% em tela grande. Opcoes: {cmd} 75, 90, "
+                           "100, 110, 125 - ou {cmd} auto para voltar ao automatico.",
+                           "Browser screen on AUTOMATIC: 75% on a short window "
+                           "(notebook) and 100% on a large screen. Options: {cmd} 75, "
+                           "90, 100, 110, 125 - or {cmd} auto to go back to automatic.",
+                           "Pantalla del navegador en AUTOMATICO: 75% en ventana baja "
+                           "(portatil) y 100% en pantalla grande. Opciones: {cmd} 75, "
+                           "90, 100, 110, 125 - o {cmd} auto para volver al automatico."),
+    "cmd.zoom.auto_now": ("Tela do navegador de volta ao AUTOMATICO (75% em janela "
+                          "baixa, 100% em tela grande).",
+                          "Browser screen back to AUTOMATIC (75% on a short window, "
+                          "100% on a large screen).",
+                          "Pantalla del navegador de vuelta al AUTOMATICO (75% en "
+                          "ventana baja, 100% en pantalla grande)."),
     "cmd.zoom.now": ("Tela do navegador agora em {atual}% (guardado). Se a tela ja "
                      "estiver aberta, ela se ajusta em ate 12 segundos.",
                      "Browser screen now at {atual}% (saved). If the screen is already "

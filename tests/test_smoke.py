@@ -4491,7 +4491,8 @@ ok("as ferramentas de sempre continuam todas registradas",
 # tamanho fica guardado no config e a tela obedece ao abrir.
 from bgh.config import DEFAULTS as _DEF340
 
-ok("zoom da tela vem de fabrica em 100%", _DEF340.get("zoom_web") == 100)
+ok("zoom da tela vem de fabrica em AUTOMATICO (75% no notebook, 100% em tela grande)",
+   _DEF340.get("zoom_web") == "auto")
 
 _linhas340: list[str] = []
 
@@ -4504,8 +4505,8 @@ def _core340():
 
 _c340 = _core340()
 _c340.submit("/zoom")
-ok("/zoom sozinho mostra o tamanho atual e as opcoes",
-   any("100%" in linha and "75" in linha for linha in _linhas340))
+ok("/zoom sozinho diz que esta no automatico e mostra as opcoes",
+   any("AUTOMATICO" in linha and "75" in linha for linha in _linhas340))
 
 _linhas340.clear()
 _c340.submit("/zoom 75")
@@ -4529,6 +4530,15 @@ _c_novo340.sink.line = lambda texto, style=None: _linhas340.append(str(texto))
 _c_novo340.submit("/zoom")
 ok("a tela nova ja abre com o zoom guardado (le do config.json)",
    any("75%" in linha for linha in _linhas340))
+
+_linhas340.clear()
+_c_novo340.submit("/zoom auto")
+ok("/zoom auto volta para o automatico",
+   _c_novo340.cfg.get("zoom_web") == "auto"
+   and any("AUTOMATICO" in linha for linha in _linhas340))
+ok("o automatico tambem foi para o config.json",
+   json.loads((Path(os.environ["BGH_HOME"]) / "config.json").read_text())
+   .get("zoom_web") == "auto")
 
 ok("os textos do /zoom existem nas tres linguas",
    all(_i18n316.TEXTS[chave][i]

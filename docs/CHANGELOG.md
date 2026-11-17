@@ -2,12 +2,15 @@
 
 ## 0.2.40
 
-Tela do navegador no tamanho que cabe no seu notebook.
+Tela do navegador no tamanho que cabe no seu notebook - ja na abertura.
 
-- `/zoom`: tamanho da TELA do navegador - 75, 90, 100, 110 ou 125 por cento.
-  Fica guardado no config e vale nas proximas aberturas; se a tela ja estiver
-  aberta, ela se ajusta sozinha em ate 12 segundos (vai pelo sinal de vida).
-  75% cabe inteiro num notebook de 14 polegadas, com o rodape e a dica a vista.
+- AUTOMATICO (padrao de fabrica): a propria tela escolhe o tamanho ao abrir -
+  75% quando a janela e baixa (notebook de 14", onde 100% empurrava o rodape
+  para fora e sumia com a dica) e 100% em tela grande, onde 75% ficaria pequeno
+  demais para o publico do TEO. Nada a digitar: ja abre certo.
+- `/zoom 75|90|100|110|125` fixa um tamanho (fica guardado no config) e
+  `/zoom auto` volta ao automatico; se a tela ja estiver aberta, o ajuste chega
+  em ate 12 segundos pelo sinal de vida, sem recarregar.
 - A dica do rodape ("ENTER envia...") NAO some mais em tela baixa: antes ela era
   escondida para ganhar altura (0.2.35) e o dono reclamou de perde-la. Agora ela
   encolhe e corta com "...", numa linha so.

@@ -18,7 +18,8 @@ var anexoMaxMb = 15;     // limites reais vem do /api/inicio (servidor manda)
 var anexoMaxQtd = 5;
 var anexosAceitos = "";
 var anexosSubindo = 0;   // envios em curso: nao deixa mandar turno sem o arquivo
-var zoomAtual = 100;     // tamanho da tela em % (/zoom; 100 = sem zoom)
+var zoomAtual = 100;     // tamanho APLICADO na tela em %
+var zoomPedido = "auto"; // o que o config pede: numero ou "auto"
 var relogio = null;      // contador de segundos do turno em andamento
 var segundos = 0;
 var ajudaCaixa = null;   // o menu fica num cartao unico (nunca tres copias)
@@ -85,7 +86,8 @@ function montarTextos(dados) {
   }
   if ($("arquivo") && anexosAceitos) { $("arquivo").accept = anexosAceitos; }
   if (dados.ajuda) { ajudaItens = dados.ajuda; }
-  if (dados.zoom) { aplicarZoom(dados.zoom); }
+  // "auto" e o padrao de fabrica: abre em 75% no notebook e 100% em tela grande.
+  aplicarZoom(dados.zoom === undefined ? "auto" : dados.zoom);
   idiomaAtual = dados.lingua || "";
   dicaTexto = dados.dica || t("app.dica");
   $("dica").textContent = dicaTexto;
@@ -948,10 +950,24 @@ function irParaTerminal() {
 
 /* /zoom: escala a TELA inteira (nao so a letra). Num notebook de 14" o layout a
  * 100% empurra o rodape para fora e a dica some; a 75% cabe inteiro. Em 100% o
- * estilo fica limpo (sem "zoom" no html), para nao brigar com nada do navegador. */
-function aplicarZoom(pct) {
-  var n = Number(pct);
-  if (!isFinite(n) || n <= 0) { n = 100; }
+ * estilo fica limpo (sem "zoom" no html), para nao brigar com nada do navegador.
+ *
+ * "auto" (padrao de fabrica): a PROPRIA tela decide - 75% quando a janela e baixa
+ * (notebook) e 100% em tela grande, onde 75% ficaria pequeno para idoso/crianca.
+ */
+function zoomAutomatico() {
+  return (window.innerHeight < 760) ? 75 : 100;
+}
+
+function aplicarZoom(pedido) {
+  zoomPedido = pedido;
+  var n;
+  if (pedido === "auto" || pedido === null || pedido === undefined) {
+    n = zoomAutomatico();
+  } else {
+    n = Number(pedido);
+    if (!isFinite(n) || n <= 0) { n = 100; }
+  }
   zoomAtual = n;
   document.documentElement.style.zoom = (n === 100) ? "" : n + "%";
 }
@@ -1028,7 +1044,7 @@ setInterval(function () {
         recarregarTextos();
       }
       // /zoom digitado no terminal (ou aqui) chega por aqui em ate 12s.
-      if (d && typeof d.zoom === "number" && d.zoom !== zoomAtual) {
+      if (d && d.zoom !== undefined && String(d.zoom) !== String(zoomPedido)) {
         aplicarZoom(d.zoom);
       }
     })

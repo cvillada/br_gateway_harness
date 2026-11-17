@@ -750,7 +750,7 @@ class App:
             "ajuda": ajuda_do_app(),
             # O clipe da tela precisa saber os limites e o accept ANTES de mandar
             # arquivo: o servidor continua sendo quem manda (valida de novo).
-            "zoom": int(self.cfg.get("zoom_web", 100) or 100),
+            "zoom": zoom_da_tela(self.cfg),
             "anexo": {"max_mb": round(ANEXO_MAX / (1024 * 1024)),
                       "max": anexos_mod.MAX_ANEXOS,
                       "aceita": ",".join(anexos_mod.aceitos())},
@@ -782,6 +782,16 @@ def ip_lan() -> str | None:
     except OSError:
         pass
     return None
+
+
+def zoom_da_tela(cfg: dict):
+    """Zoom guardado: numero (75/90/100/110/125) ou "auto" (a tela decide)."""
+    valor = cfg.get("zoom_web", "auto")
+    if isinstance(valor, (int, float)) and valor > 0:
+        return int(valor)
+    if str(valor).strip().isdigit():
+        return int(str(valor).strip())
+    return "auto"
 
 
 def _hosts_locais() -> set[str]:
@@ -1114,7 +1124,7 @@ class _Handler(BaseHTTPRequestHandler):
                                     "lingua": i18n.get_lang(),
                                     # /zoom muda ao vivo: a pagina se ajusta no
                                     # proximo sinal de vida (12s), sem recarregar.
-                                    "zoom": int(self.app.cfg.get("zoom_web", 100) or 100)})
+                                    "zoom": zoom_da_tela(self.app.cfg)})
         if caminho == "/api/sair":
             self.app.encerrar("sair")
             return self._json(200, {"ok": True})

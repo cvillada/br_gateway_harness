@@ -1037,14 +1037,23 @@ class ChatCore:
                 # Tamanho da TELA DO NAVEGADOR (a do terminal e /fonte). Vale para
                 # notebook pequeno: a 100% o rodape fica cortado e some a dica.
                 zooms = (75, 90, 100, 110, 125)
-                atual = int(self.cfg.get("zoom_web", 100) or 100)
-                pedaco = rest.strip().replace("%", "")
+                bruto = self.cfg.get("zoom_web", "auto")
+                atual = int(bruto) if str(bruto).isdigit() else "auto"
+                pedaco = rest.strip().replace("%", "").lower()
                 if not pedaco:
-                    self.sink.line(t("cmd.zoom.list", atual=atual,
-                                     cmd=i18n.cmd("zoom")), style="cyan")
+                    if atual == "auto":
+                        self.sink.line(t("cmd.zoom.list_auto", cmd=i18n.cmd("zoom")),
+                                       style="cyan")
+                    else:
+                        self.sink.line(t("cmd.zoom.list", atual=atual,
+                                         cmd=i18n.cmd("zoom")), style="cyan")
                     if not getattr(self.sink, "tela_navegador", False):
                         self.sink.line(t("cmd.zoom.terminal", cmd=i18n.cmd("zoom"),
                                          fonte=i18n.cmd("font")), style="dim")
+                elif pedaco in ("auto", "automatico", "automatic"):
+                    self.cfg["zoom_web"] = "auto"
+                    save_config(self.cfg)
+                    self.sink.line(t("cmd.zoom.auto_now"), style="cyan")
                 elif pedaco.isdigit() and int(pedaco) in zooms:
                     novo = int(pedaco)
                     self.cfg["zoom_web"] = novo
