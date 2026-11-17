@@ -20,6 +20,9 @@ Suite local: 623 verificacoes gerais + 181 da tela. O Safari foi provado com
 osascript falso (texto da aba, titulo e a permissao desligada); o Safari REAL so
 se prova no Mac.
 
+CI: os 5 jobs (ubuntu/windows em 3.11 e 3.12, macOS em 3.12) e os executaveis
+windows/macos verdes.
+
 ## 0.2.40
 
 Tela do navegador no tamanho que cabe no seu notebook - ja na abertura.
