@@ -758,15 +758,22 @@ CHAT = {
         "I could not open the browser window: {erro}",
         "No pude abrir la ventana del navegador: {erro}"),
     "cmd.site.safari": (
-        "No Mac sem Chrome/Edge o login NAO fica guardado no navegador do TEO: o "
-        "Safari abriu, mas depois eu nao consigo ler o site. Para esse recurso "
-        "funcionar no Mac, instale o Chrome.",
-        "On a Mac without Chrome/Edge the login is NOT stored in the TEO browser: "
-        "Safari opened, but afterwards I cannot read the site. To use this on the "
-        "Mac, install Chrome.",
-        "En Mac sin Chrome/Edge el inicio de sesion NO se guarda en el navegador del "
-        "TEO: Safari se abrio, pero despues no puedo leer el sitio. Para usar esto en "
-        "el Mac, instala Chrome."),
+        "No Mac o TEO usa o SEU Safari, que ja esta logado: abra a pagina no Safari, "
+        "entre na conta e me peca para ler a aba aberta (o ver_pagina com origem=aba). "
+        "Nao precisa perfil separado nem fechar janela. Se eu disser que nao consegui "
+        "ler a pagina, ligue em Safari > Preferencias > Avancado > 'Mostrar recursos "
+        "de desenvolvimento' e, no menu Desenvolvedor, 'Permitir JavaScript de "
+        "eventos da Apple'.",
+        "On a Mac TEO uses YOUR Safari, already logged in: open the page in Safari, "
+        "sign in and ask me to read the open tab (ver_pagina with origem=tab). No "
+        "separate profile and no need to close anything. If I say I could not read "
+        "the page, enable Safari > Preferences > Advanced > 'Show features for web "
+        "developers' and then Develop menu > 'Allow JavaScript from Apple Events'.",
+        "En Mac el TEO usa TU Safari, ya con sesion: abre la pagina en Safari, entra "
+        "y pide que lea la pestana abierta (ver_pagina con origen=pestana). Sin perfil "
+        "separado y sin cerrar nada. Si digo que no pude leer la pagina, activa Safari "
+        "> Preferencias > Avanzado > 'Mostrar funciones para desarrolladores web' y en "
+        "el menu Desarrollo, 'Permitir JavaScript de eventos de Apple'."),
     "cmd.site.uso": (
         "Use: {cmd} (estado do navegador), {cmd} abrir <endereco do site>, "
         "{cmd} esquecer (apaga as sessoes guardadas).",
@@ -1941,11 +1948,14 @@ TOOLS = {
         "JavaScript."),
     "tool.ver_pagina.arg.origem": (
         "Caminho completo de um arquivo .html (ex.: /home/ana/site/index.html) ou "
-        "endereco http(s)",
+        "endereco http(s). No macOS, use \"aba\" para ler a aba ABERTA do Safari "
+        "(pagina que a pessoa ja logou e deixou aberta)",
         "Full path of an .html file (e.g. /home/ana/site/index.html) or an http(s) "
-        "address",
+        "address. On macOS, use \"tab\" to read the OPEN Safari tab (a page the "
+        "person already logged in to and left open)",
         "Ruta completa de un archivo .html (ej.: /home/ana/site/index.html) o "
-        "direccion http(s)"),
+        "direccion http(s). En macOS, usa \"pestana\" para leer la pestana ABIERTA "
+        "de Safari (pagina en la que la persona ya entro y dejo abierta)"),
     "tool.ver_pagina.arg.largura": ("Largura da janela em pixels (padrao 1280)",
                                     "Window width in pixels (default 1280)",
                                     "Ancho de la ventana en pixels (predeterminado 1280)"),

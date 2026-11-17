@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.41
+
+No Mac o navegador e o Safari - e o TEO agora le a pagina de verdade nele.
+
+- `ver_pagina` no macOS usa o SAFARI (nao precisa instalar Chrome): abre a pagina
+  (ou usa a que ja esta aberta) e pede `document.body.innerText` por AppleScript.
+  Resultado: o texto que o JavaScript montou e o conteudo de site COM LOGIN - a
+  sessao e a da propria pessoa no Safari, sem copiar cookie nem criar perfil.
+- `ver_pagina(origem="aba")`: le a aba que a pessoa deixou aberta no Safari. E o
+  caminho mais curto no Mac: ela entra no site no Safari e pede "le a minha aba".
+- Sem a opcao "Permitir JavaScript de eventos da Apple" o texto cai para o HTML
+  servido e o resultado ENSINA a ligar (Safari > Preferencias > Avancado >
+  "Mostrar recursos de desenvolvimento" e menu Desenvolvedor).
+- `/site` no Mac passa a explicar essa rota, em vez de mandar instalar Chrome.
+- O print continua sendo o da REGIAO da janela do Safari (nao da tela inteira).
+
 ## 0.2.40
 
 Tela do navegador no tamanho que cabe no seu notebook - ja na abertura.

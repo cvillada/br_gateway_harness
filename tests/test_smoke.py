@@ -4550,6 +4550,85 @@ ok("o /zoom aparece na ajuda (com as opcoes)",
    any(cmd.startswith("/zoom") and "75" in cmd
        for secao in _ajuda340 for cmd in secao))
 
+# ---------- v0.2.40b: macOS com SAFARI (le a aba aberta, ja logada) ----------
+# O dono lembrou: no Mac o navegador e o Safari. Em vez de "instale Chrome", o TEO
+# le a PAGINA RENDERIZADA da aba aberta por AppleScript (document.body.innerText),
+# que e o jeito de ler site logado sem copiar cookie.
+from bgh.tools import pagina as _pag340
+
+_orig_e_mac340 = _pag340._e_mac
+_orig_safari340 = _pag340._safari
+try:
+    _pag340._e_mac = lambda: False
+    _saida_aba_linux = _pag340.run({"origem": "aba"}, _Ctx339())
+    _pag340._e_mac = lambda: True
+    _pag340._safari = lambda *a, **k: "SAFARI_LEU_ABA"
+    _saida_aba_mac = _pag340.run({"origem": "aba"}, _Ctx339())
+finally:
+    _pag340._e_mac = _orig_e_mac340
+    _pag340._safari = _orig_safari340
+
+ok("'aba' fora do macOS explica o caminho certo (ver_tela / caminho ou URL)",
+   _saida_aba_linux.startswith("ERRO") and "macOS" in _saida_aba_linux)
+ok("no macOS, 'aba' entrega a leitura para o Safari", _saida_aba_mac == "SAFARI_LEU_ABA")
+
+_safari_epoch = {"n": 0}
+
+
+def _osascript_fake(partes, timeout=20):
+    """Finge o Safari: URL, titulo e o texto da aba."""
+    _safari_epoch["n"] += 1
+    if "get URL" in " ".join(partes):
+        return "https://mail.exemplo.com/caixa", ""
+    if "get name" in " ".join(partes):
+        return "Caixa de entrada - Mail", ""
+    if "do JavaScript" in " ".join(partes):
+        return "3 mensagens nao lidas\n- Ana: reuniao amanha\n- Bruno: nota fiscal", ""
+    if "bounds" in " ".join(partes):
+        return "0, 25, 1200, 800", ""
+    return "", ""
+
+
+_orig_osascript340 = _pag340._osascript
+_orig_print340 = _pag340._safari_print
+try:
+    _pag340._osascript = _osascript_fake
+    _pag340._safari_print = lambda png: None
+    _saida_safari340 = _pag340._safari("aba", "", _dir334 / "safari340.png", 0, None,
+                                       ler_aba=True)
+finally:
+    _pag340._osascript = _orig_osascript340
+    _pag340._safari_print = _orig_print340
+
+ok("Safari: o texto vem da ABA aberta (pagina montada pelo JavaScript)",
+   "3 mensagens nao lidas" in _saida_safari340
+   and "Ana: reuniao amanha" in _saida_safari340)
+ok("Safari: o resultado diz de onde veio o texto e o titulo da aba",
+   "Safari (aba aberta)" in _saida_safari340
+   and "TITULO: Caixa de entrada - Mail" in _saida_safari340)
+
+
+def _osascript_sem_js(partes, timeout=20):
+    if "do JavaScript" in " ".join(partes):
+        return "", ("Safari got an error: Erro ao executar JavaScript. A opcao "
+                    "Permitir JavaScript de eventos da Apple esta desativada.")
+    return "", ""
+
+
+try:
+    _pag340._osascript = _osascript_sem_js
+    _pag340._safari_print = lambda png: None
+    _saida_semjs340 = _pag340._safari("aba", "", _dir334 / "safari340b.png", 0, None,
+                                      ler_aba=True)
+finally:
+    _pag340._osascript = _orig_osascript340
+    _pag340._safari_print = _orig_print340
+
+ok("Safari sem 'JavaScript de eventos da Apple': ensina a ligar a opcao",
+   "Permitir JavaScript de eventos da Apple" in _saida_semjs340)
+ok("...e nao mente: avisa que o texto veio do HTML servido",
+   "HTML servido" in _saida_semjs340)
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

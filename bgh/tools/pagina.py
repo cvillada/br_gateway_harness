@@ -51,7 +51,10 @@ SPEC = {
                 "origem": {
                     "type": "string",
                     "description": ("Caminho completo de um arquivo .html (ex.: "
-                                    "/home/ana/site/index.html) ou endereco http(s)"),
+                                    "/home/ana/site/index.html) ou endereco http(s). "
+                                    "No macOS, use \"aba\" para ler a aba ABERTA do "
+                                    "Safari (pagina que a pessoa ja logou e deixou "
+                                    "aberta)"),
                 },
                 "largura": {"type": "integer",
                             "description": "Largura da janela em pixels (padrao 1280)"},
@@ -308,6 +311,8 @@ def run_abrir(args: dict, ctx) -> str:
         "conectado\", ela deve marcar (cookie de sessao sozinho nao fica guardado).",
         "2. Quando aparecer a pagina que ela quer mostrar, FECHAR a janela.",
         "3. Depois pedir de novo para eu ler a pagina, que eu leio o texto ja logado.",
+        "   (No macOS, com Safari: nao precisa fechar nada - eu leio a ABA aberta, "
+        "com ver_pagina origem=aba.)",
         "",
         "Enquanto a janela estiver aberta eu NAO consigo ler o site (o perfil fica "
         "em uso) - o passo 2 e obrigatorio.",
@@ -422,11 +427,9 @@ def _titulo(html: str) -> str:
     return htmllib.unescape(achado.group(1)).strip() if achado else ""
 
 
-def _montar(origem: str, navegador: str, html: str, erros: list[str],
-            png: Path | None, nota: str = "") -> str:
+def _montar_texto(origem: str, navegador: str, titulo: str, texto: str,
+                  erros: list[str], png: Path | None, nota: str = "") -> str:
     """Resultado em texto: o modelo le isso e o print vai como imagem."""
-    titulo = _titulo(html)
-    texto = html_para_texto(html)
     linhas = [f"PAGINA ABERTA: {origem}", f"NAVEGADOR: {navegador}"]
     if titulo:
         linhas.append(f"TITULO: {titulo}")
@@ -437,7 +440,7 @@ def _montar(origem: str, navegador: str, html: str, erros: list[str],
         linhas.extend(erros)
     else:
         linhas.append("ERROS DO CONSOLE: nenhum")
-    if not texto.strip():
+    if not (texto or "").strip():
         linhas.append("TEXTO: a pagina ficou VAZIA depois do JavaScript "
                       "(nenhum texto visivel para ler).")
     else:
@@ -449,63 +452,118 @@ def _montar(origem: str, navegador: str, html: str, erros: list[str],
     return "\n".join(linhas)
 
 
-def _safari(url: str, png: Path, espera_s: int, alvo: Path | None,
-            origem: str) -> str:
-    """macOS sem Chrome/Edge: Safari abre a janela e o print vem da tela.
+def _montar(origem: str, navegador: str, html: str, erros: list[str],
+            png: Path | None, nota: str = "") -> str:
+    """Versao do navegador headless: entra HTML, sai texto."""
+    return _montar_texto(origem, navegador, _titulo(html), html_para_texto(html),
+                         erros, png, nota=nota)
 
-    O Safari nao tem modo headless e nao expoe o console. Entao: janela visivel,
-    print pela regiao da janela e texto vindo do HTML servido (ou do proprio
-    arquivo). O resultado DIZ isso ao modelo, em vez de fingir que leu tudo.
-    """
-    def osascript(*partes: str) -> str:
-        try:
-            saida = subprocess.run(
-                ["osascript", *partes],
-                capture_output=True, text=True, timeout=20,
-            )
-            return saida.stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            return ""
 
-    osascript("-e", 'tell application "Safari" to activate',
-              "-e", 'on run argv', "-e", 'tell application "Safari"',
-              "-e", "open location (item 1 of argv)", "-e", "end tell",
-              "-e", "end run", "--", url)
-    time.sleep(max(1, espera_s))
-    medidas = osascript("-e", 'tell application "Safari" to get bounds of front window')
+# --- macOS: Safari (o navegador que a pessoa JA usa, ja logada) --------------
+def _e_mac() -> bool:
+    return sys.platform == "darwin"
+
+
+# "current tab of front window" = a aba que esta na frente, em qualquer janela.
+ABA_URL = ["-e", 'tell application "Safari" to get URL of current tab of front window']
+ABA_TITULO = ["-e", 'tell application "Safari" to get name of current tab of front window']
+# Sem "Permitir JavaScript de eventos da Apple" (menu Desenvolvedor) isto falha.
+ABA_TEXTO = ["-e", ('tell application "Safari" to do JavaScript '
+                    '"document.body.innerText" in current tab of front window')]
+
+
+def _osascript(partes: list[str], timeout: int = 20) -> tuple[str, str]:
+    """(stdout, stderr) do osascript. Nunca levanta: vazio quando nao deu."""
+    try:
+        saida = subprocess.run(["osascript", *partes], capture_output=True,
+                               text=True, timeout=timeout)
+        return (saida.stdout or "").strip(), (saida.stderr or "").strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "", str(exc)
+
+
+def _safari_sem_js(erro: str) -> bool:
+    """O erro de 'JavaScript de eventos da Apple' desligado."""
+    texto = (erro or "").lower()
+    return "javascript" in texto or "not allowed" in texto
+
+
+def _safari_abrir(url: str) -> None:
+    _osascript(["-e", 'tell application "Safari" to activate',
+                "-e", "on run argv", "-e", 'tell application "Safari"',
+                "-e", "open location (item 1 of argv)", "-e", "end tell",
+                "-e", "end run", "--", url])
+
+
+def _safari_print(png: Path) -> None:
+    """Print da REGIAO da janela do Safari (sem capturar o resto da tela)."""
+    medidas, _ = _osascript(
+        ["-e", 'tell application "Safari" to get bounds of front window'])
     numeros = [int(n) for n in re.findall(r"-?\d+", medidas)[:4]]
-    if len(numeros) == 4:
-        x1, y1, x2, y2 = numeros
-        largura, altura = max(1, x2 - x1), max(1, y2 - y1)
-        try:
-            subprocess.run(["screencapture", "-x", "-o",
-                            "-R", f"{x1},{y1},{largura},{altura}", str(png)],
-                           capture_output=True, timeout=20)
-        except (OSError, subprocess.SubprocessError):
-            pass
+    if len(numeros) != 4:
+        return
+    x1, y1, x2, y2 = numeros
+    largura, altura = max(1, x2 - x1), max(1, y2 - y1)
+    try:
+        subprocess.run(["screencapture", "-x", "-o", "-R",
+                        f"{x1},{y1},{largura},{altura}", str(png)],
+                       capture_output=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        pass
 
-    if alvo is not None:
-        try:
-            html = alvo.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            html = ""
-    else:
-        html = ""
-        try:
-            import requests
 
-            resp = requests.get(url, timeout=20,
-                                headers={"User-Agent": "Mozilla/5.0 (Macintosh) TEO"})
-            if "html" in resp.headers.get("content-type", ""):
-                html = resp.text
-        except Exception:  # noqa: BLE001 - sem rede o print ainda vale
-            html = ""
+def _safari(origem: str, url: str, png: Path, espera_s: int, alvo: Path | None,
+            ler_aba: bool = False) -> str:
+    """macOS: le a PAGINA RENDERIZADA da aba do Safari (a sessao da pessoa).
 
-    return _montar(origem, "Safari (janela visivel)", html, [],
-                   png if Path(png).is_file() else None,
-                   nota=("no Mac sem Chrome/Edge o TEO usa o Safari: o print mostra a "
-                         "tela desenhada, mas o console nao e lido e o texto vem do "
-                         "HTML servido (JavaScript de pagina remota pode faltar)."))
+    O Safari nao tem headless - e nao precisa: a aba esta aberta no navegador em
+    que a pessoa JA ESTA LOGADA. Pedindo `document.body.innerText` por AppleScript,
+    o TEO le o texto montado pelo JavaScript e o conteudo de site com login, sem
+    copiar cookie nenhum e sem perfil separado.
+
+    Requisito unico: Safari > Preferencias > Avancado > "Mostrar recursos de
+    desenvolvimento" e, no menu Desenvolvedor, "Permitir JavaScript de eventos da
+    Apple". Sem isso, o texto cai para o HTML servido e o resultado DIZ o porque.
+    """
+    if not ler_aba:
+        _safari_abrir(url)
+        time.sleep(max(1, espera_s))
+
+    aba_url, _ = _osascript(ABA_URL)
+    titulo, _ = _osascript(ABA_TITULO)
+    texto, erro_js = _osascript(ABA_TEXTO)
+    nota = ("Safari do Mac: o texto vem da aba ABERTA (do jeito que a pessoa ve, "
+            "inclusive site logado). O console do Safari nao e lido.")
+    if erro_js or not (texto or "").strip():
+        texto = ""
+        if alvo is not None:
+            try:
+                texto = html_para_texto(alvo.read_text(encoding="utf-8",
+                                                      errors="replace"))
+            except OSError:
+                texto = ""
+        elif url:
+            try:
+                import requests
+
+                resp = requests.get(url, timeout=20,
+                                    headers={"User-Agent":
+                                             "Mozilla/5.0 (Macintosh) TEO"})
+                if "html" in resp.headers.get("content-type", ""):
+                    texto = html_para_texto(resp.text)
+            except Exception:  # noqa: BLE001 - sem rede o print ainda vale
+                texto = ""
+        if _safari_sem_js(erro_js):
+            nota = ("Para eu ler a PAGINA montada (e nao o HTML cru), ligue no "
+                    "Safari: Preferencias > Avancado > 'Mostrar recursos de "
+                    "desenvolvimento' e depois, no menu Desenvolvedor, 'Permitir "
+                    "JavaScript de eventos da Apple'. Sem isso o texto vem do HTML "
+                    "servido.")
+        elif aba_url and not ler_aba:
+            nota = f"Safari leu a aba aberta ({aba_url})."
+    _safari_print(png)
+    return _montar_texto(origem, "Safari (aba aberta)", titulo, texto, [],
+                         png if Path(png).is_file() else None, nota=nota)
 
 
 def run(args: dict, ctx) -> str:
@@ -514,6 +572,18 @@ def run(args: dict, ctx) -> str:
         return "ERRO: informe o caminho do arquivo ou o endereco http(s)."
     if stopped(ctx):
         return STOPPED_NOTE
+    if origem.lower() in ("aba", "aba aberta", "aba do safari"):
+        if not _e_mac():
+            return ("ERRO: 'aba' e do macOS com Safari (le a aba que a pessoa deixou "
+                    "aberta, ja logada). No Linux/Windows use ver_tela, ou informe o "
+                    "caminho/URL.")
+        try:
+            limpar(horas=24)
+        except OSError:
+            pass
+        png = pasta() / f"pagina-{secrets.token_hex(4)}.png"
+        espera = _clamp(int(args.get("espera") or 1), 0, MAX_ESPERA_S)
+        return _safari(origem, "", png, espera, None, ler_aba=True)
     url, alvo, erro = _alvo(origem)
     if erro:
         return erro
@@ -550,7 +620,7 @@ def run(args: dict, ctx) -> str:
                     "print da tela ou use o web_extract para o texto publico.")
         return _montar(origem, nome, html, _erros_console(stderr), png)
     if nome == "safari":
-        return _safari(url, png, espera, alvo, origem)
+        return _safari(origem, url, png, espera, alvo)
     return ("ERRO: nao achei navegador nesta maquina (Chrome, Chromium, Edge ou "
             "Brave). Sem navegador eu nao consigo abrir a pagina desenhada - o "
             "web_extract continua servindo para pagina simples.")
