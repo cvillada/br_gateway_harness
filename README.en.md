@@ -319,6 +319,28 @@ Whoever opens TEO - from the desktop icon or typing `bgh` - chooses how to use i
 - Shortcuts: `bgh app` (straight to the browser), `bgh chat` (straight to the
   terminal).
 
+## Seeing the screen and reading sites with login (0.2.37 to 0.2.39)
+
+- `ver_pagina`: TEO opens your page (a .html file or an address) in a real browser
+  and LOOKS at it: the text that only appears after JavaScript runs, the console
+  errors and a screenshot. It serves to check what TEO itself just built (the
+  development loop) and to read a page that builds its content with JavaScript.
+  No permission needed - it is the same as opening and looking.
+- `ver_tela`: a screenshot of YOUR screen, for the logged-in site case: you sign
+  in with your browser, leave the page open and ask "look at my screen". It asks
+  permission first, because the shot takes everything open on the screen.
+- Logged-in sites, reading the TEXT (better than an image for mail lists,
+  reports and tables): `/site open https://...` opens a TEO browser window for
+  YOU to sign in; close the window and ask for the reading. If the site offers
+  "keep me signed in", tick it - a session cookie alone is not kept.
+- `/site` shows whether a login is stored; `/site forget` erases everything
+  (cookies and sessions). TEO never types a password, never clicks "sign in" and
+  never automates a session: you are the one who signs in.
+- The TEO browser uses its own profile (`~/.bgh/navegador`), separate from your
+  personal browser - it does not touch your passwords or tabs.
+- Tables in the answer now come out as a real table on the browser screen, and a
+  document path (including .html) becomes a link that opens in another window.
+
 ## Security (Hermes model, simple menu for the user)
 
 - Safe command: runs without asking.

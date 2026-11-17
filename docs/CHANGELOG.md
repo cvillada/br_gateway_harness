@@ -23,6 +23,8 @@ Site com login: o TEO tem o navegador DELE, e quem entra e a pessoa.
 - macOS: sem Chrome/Edge o Safari abre a janela, mas o login NAO fica guardado -
   o TEO avisa isso em vez de prometer o que nao entrega.
 
+Suite local: 605 verificacoes gerais + 177 da tela (todas verdes).
+
 ## 0.2.38
 
 O TEO pode OLHAR a tela da pessoa - com licenca.

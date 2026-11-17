@@ -311,6 +311,29 @@ quer usar:
 - Atalhos: `bgh app` (vai direto ao navegador), `bgh chat` (vai direto ao
   terminal).
 
+## Ver a tela e ler sites com login (0.2.37 a 0.2.39)
+
+- `ver_pagina`: o TEO abre a sua pagina (arquivo .html ou endereco) num navegador
+  de verdade e OLHA: o texto que so aparece depois do JavaScript, os erros do
+  console e um print da tela. Serve para ele conferir o que ele mesmo acabou de
+  construir (ciclo de desenvolvimento) e para ler pagina que monta o conteudo
+  com JavaScript. Nao pede licenca - e a mesma coisa que abrir e olhar.
+- `ver_tela`: print da SUA tela, para o caso de site com login: voce entra no
+  navegador, deixa a pagina aberta e pede "olha a minha tela". Pede licenca antes
+  de fotografar, porque o print leva tudo o que estiver aberto na tela.
+- Sites com login, lendo o TEXTO (melhor que imagem para lista de e-mails,
+  relatorios e tabelas): `/site abrir https://...` abre uma janela do navegador
+  do TEO para VOCE entrar; voce fecha a janela e pede a leitura. Se o site
+  oferecer "manter conectado", marque - cookie de sessao sozinho nao fica
+  guardado.
+- `/site` mostra se ha login guardado; `/site esquecer` apaga tudo (cookies e
+  sessoes). O TEO nunca digita senha, nunca clica em "entrar" e nao automatiza
+  sessao: quem entra e voce.
+- O navegador do TEO usa um perfil proprio (`~/.bgh/navegador`), separado do seu
+  navegador pessoal - ele nao encosta nas suas senhas e abas.
+- Tabelas na resposta agora saem como tabela de verdade na tela do navegador, e
+  caminho de documento (inclusive .html) vira link que abre em outra janela.
+
 ## Seguranca (modelo Hermes, menu simples para o usuario)
 
 - Comando seguro: executa sem perguntar.
