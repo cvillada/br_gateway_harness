@@ -67,6 +67,21 @@
     <textarea id="texto" rows="1" autocomplete="off" spellcheck="true"></textarea>
     <button id="enviar" class="botao-enviar" type="button"></button>
   </div>
+  <!-- Clipe de anexo: fica EMBAIXO da linha de digitar (pedido do dono), a
+       esquerda, e cresce para a direita com os arquivos escolhidos. O rotulo
+       do botao vem do i18n por JS (aria-label + title): aqui nao ha texto. -->
+  <div class="linha-anexo">
+    <button id="clipe" class="botao-clipe" type="button">
+      <svg class="clipe-desenho" viewBox="0 0 24 24" width="22" height="22"
+           aria-hidden="true" focusable="false">
+        <path d="M8.5 12.5l5.9-5.9a3 3 0 0 1 4.2 4.2l-8 8a5 5 0 0 1-7.1-7.1l7.6-7.6"
+              fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+    <input id="arquivo" type="file" multiple hidden>
+    <ul id="anexos" class="anexos" hidden></ul>
+  </div>
   <p id="dica" class="dica"></p>
 </footer>
 

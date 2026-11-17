@@ -25,6 +25,10 @@ STOPPED_NOTE = "(parei a resposta, como voce pediu)"
 VISION_MARKERS = ("image", "vision", "multimodal", "image_url", "media type",
                   "content type")
 
+# Teto de fotos por turno: cada uma vira base64 no pedido (33% maior) e o
+# contexto do modelo local e curto. Acima disso a tela avisa que ficaram de fora.
+MAX_IMAGENS = 4
+
 
 def _parece_falta_de_visao(exc: BaseException) -> bool:
     texto = str(exc).lower()
@@ -116,9 +120,19 @@ class Agent:
         return f"{self.cfg.get('base_url', '')}|{self.cfg.get('model', '')}"
 
     def _anexar_imagem(self, user_text: str, caminho: str) -> None:
-        """Mensagem do usuario com a foto (parte de imagem para a visao)."""
+        """Mensagem do usuario com UMA foto (chamada antiga, mantida)."""
+        self._anexar_imagens(user_text, [caminho])
+
+    def _anexar_imagens(self, user_text: str, caminhos: list) -> None:
+        """Mensagem do usuario com as fotos anexadas (clipe da tela ou '@').
+
+        Cada foto e uma parte 'image_url' na MESMA mensagem: assim o modelo ve
+        todas juntas e o historico continua com um turno so. O que nao puder ir
+        (arquivo grande, formato estranho) vira aviso na tela - nunca some calado.
+        """
         from .tools.files import image_data_url
 
+        caminhos = [c for c in (caminhos or []) if c]
         bloqueados = self.cfg.get("vision_blocklist") or []
         if isinstance(bloqueados, list) and self._chave_visao() in bloqueados:
             # Este modelo ja recusou imagem antes: decide ANTES e avisa, em vez de
@@ -126,18 +140,19 @@ class Agent:
             self._note(t("agent.vision_blocked", model=i18n.cmd("model")))
             self.messages.append({"role": "user", "content": user_text})
             return
-        url, _tamanho, erro = image_data_url(caminho)
-        if not url:
-            self._note(erro or t("agent.image_fail"))
+        partes: list[dict] = [{"type": "text", "text": user_text}]
+        for caminho in caminhos[:MAX_IMAGENS]:
+            url, _tamanho, erro = image_data_url(caminho)
+            if not url:
+                self._note(erro or t("agent.image_fail"))
+                continue
+            partes.append({"type": "image_url", "image_url": {"url": url}})
+        if len(caminhos) > MAX_IMAGENS:
+            self._note(t("agent.image_more", n=len(caminhos) - MAX_IMAGENS))
+        if len(partes) == 1:
             self.messages.append({"role": "user", "content": user_text})
             return
-        self.messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_text},
-                {"type": "image_url", "image_url": {"url": url}},
-            ],
-        })
+        self.messages.append({"role": "user", "content": partes})
 
     def _tem_imagem(self) -> bool:
         for m in self.messages:
@@ -184,12 +199,16 @@ class Agent:
             SESSION_FILE.unlink()
 
     # ----- turno --------------------------------------------------------------
-    def run_turn(self, user_text: str, imagem: str | None = None) -> str:
+    def run_turn(self, user_text: str, imagem: str | None = None,
+                 imagens: list | None = None) -> str:
         self.last_reasoning = []
         self.last_compressed = False
         self.stop_event.clear()
+        fotos = [c for c in (imagens or []) if c]
         if imagem:
-            self._anexar_imagem(user_text, imagem)
+            fotos.insert(0, imagem)
+        if fotos:
+            self._anexar_imagens(user_text, fotos)
         else:
             self.messages.append({"role": "user", "content": user_text})
         max_rounds = max(1, int(self.cfg.get("max_tool_rounds", 20)))   # tamanho da etapa

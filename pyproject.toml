@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bgh-motor"
-version = "0.2.33"
+version = "0.2.34"
 description = "Motor (bgh) - agente CLI local para a maquina do usuario"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,6 +19,9 @@ dependencies = [
     "prompt_toolkit>=3.0",
     "vosk>=0.3.44,<0.4",
     "sounddevice>=0.4.6",
+    # Leitura de PDF anexado (clipe da tela e '@' do terminal). Puro Python, sem
+    # extensao compilada: instala nos tres sistemas. Sem ela o TEO avisa e segue.
+    "pypdf>=4.0",
 ]
 
 [project.scripts]

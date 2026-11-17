@@ -60,6 +60,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from . import __version__, i18n, tela
+from . import anexos as anexos_mod
 from .chat_core import ChatCore, build_approval_options, ctx_parts, log_error
 from .i18n import t
 
@@ -76,6 +77,10 @@ PING_S = 15
 COOKIE = "teo_app"
 BUFFER_EVENTOS = 4000
 CORPO_MAX = 1_000_000
+
+# Anexo (clipe da tela) tem corpo BINARIO e limite proprio: CORPO_MAX acima e do
+# JSON curto do turno. Base64 no JSON incharia 33% e estouraria o teto.
+ANEXO_MAX = anexos_mod.MAX_BYTES
 
 ASSETS = Path(__file__).resolve().parent / "assets"
 TIPOS = {
@@ -136,6 +141,9 @@ DOC_MAX = 200 * 1024 * 1024
 CHAVES_APP = (
     "app.enviar", "app.parar", "app.placeholder", "app.dica", "app.trabalhando",
     "app.abrir_arquivo",
+    "app.anexar", "app.anexar_dica", "app.anexo_remover", "app.anexo_falhou",
+    "app.anexo_grande", "app.anexo_limite", "app.anexos", "app.anexo_so",
+    "app.anexo_subindo",
     "app.trabalhando_curto",
     "app.ligando", "app.caiu", "app.pensamento", "app.ferramentas", "app.contexto",
     "app.licenca_titulo", "app.licenca_dica", "app.sem_resposta", "app.encerrando",
@@ -411,6 +419,11 @@ class App:
         self._fim = threading.Event()
         self.inicio = time.time()
         self.motivo = ""
+        # Anexos recebidos pela tela nesta sessao: id -> {nome, caminho, tipo,
+        # tamanho}. Vive na memoria (a pagina so manda o id no turno) e os
+        # arquivos vao para BGH_HOME/anexos, apagados no fim da sessao.
+        self.anexos: dict[str, dict] = {}
+        self._lock_anexos = threading.Lock()
         # Quando o cliente falou com o servidor pela ultima vez. E isto que
         # distingue "a pessoa esta olhando a tela" de "a aba foi fechada":
         # detectar queda de socket TCP nao e confiavel (FIN/RST podem demorar
@@ -453,24 +466,87 @@ class App:
         if pendentes:
             self.canal.emitir("linha", texto=motivo, estilo="yellow")
 
+    # ----- anexos (clipe da tela) --------------------------------------------
+    def guardar_anexo(self, nome: str, dados: bytes) -> tuple[int, dict]:
+        """Guarda um anexo recebido e devolve (codigo HTTP, corpo JSON)."""
+        with self._lock_anexos:
+            if len(self.anexos) >= anexos_mod.MAX_ANEXOS:
+                return 400, {"erro": t("anexo.limite", n=anexos_mod.MAX_ANEXOS)}
+            ident, caminho, erro = anexos_mod.salvar(nome, dados)
+            if erro or caminho is None:
+                return 400, {"erro": erro or t("anexo.falhou", nome=nome)}
+            limpo = anexos_mod.nome_seguro(nome)
+            self.anexos[ident] = {
+                "nome": limpo,
+                "caminho": str(caminho),
+                "tipo": anexos_mod.classificar(caminho),
+                "tamanho": len(dados),
+            }
+            return 200, {"ok": True, "id": ident, "nome": limpo,
+                         "tipo": self.anexos[ident]["tipo"],
+                         "tamanho": len(dados)}
+
+    def resolver_anexos(self, ids) -> tuple[list[str], bool]:
+        """Ids da pagina -> caminhos no disco. (caminhos, algum_perdido)."""
+        caminhos: list[str] = []
+        perdido = False
+        with self._lock_anexos:
+            for ident in ids or []:
+                meta = self.anexos.get(str(ident))
+                if meta is None or not Path(meta["caminho"]).is_file():
+                    perdido = True
+                    continue
+                if meta["caminho"] not in caminhos:
+                    caminhos.append(meta["caminho"])
+        return caminhos, perdido
+
+    def limpar_anexos(self) -> int:
+        """Apaga os anexos desta sessao (o arquivo do usuario nao fica para tras)."""
+        with self._lock_anexos:
+            metas = list(self.anexos.values())
+            self.anexos.clear()
+        removidos = 0
+        for meta in metas:
+            try:
+                Path(meta["caminho"]).unlink()
+                removidos += 1
+            except OSError:
+                continue
+        return removidos
+
     # ----- o turno -----------------------------------------------------------
-    def turno(self, texto: str) -> None:
+    def turno(self, texto: str, anexos_ids=None) -> None:
         texto = (texto or "").strip()
         core = self.core
-        if not texto or core is None:
+        caminhos: list[str] = []
+        if anexos_ids:
+            caminhos, perdido = self.resolver_anexos(anexos_ids)
+            if perdido:
+                self.canal.emitir("linha", texto=t("anexo.perdido"), estilo="yellow")
+        if not texto and not caminhos:
+            return
+        if core is None:
             return
         ocupado = self.pegar_busy()
         if not ocupado:
             # Aviso no meio do turno: mesmo caminho do terminal (core.steer).
-            core.steer(texto)
-            self.canal.emitir("linha", texto=t("tui.steer_hint"), estilo="dim")
+            # Anexo NAO entra agora: o turno em curso ja foi montado; o arquivo
+            # esperaria calado, entao a tela diz a verdade.
+            if caminhos:
+                self.canal.emitir("linha", texto=t("anexo.ocupado"), estilo="yellow")
+            if texto:
+                core.steer(texto)
+                self.canal.emitir("linha", texto=t("tui.steer_hint"), estilo="dim")
             return
         self.canal.emitir("estado", ocupado=True)
 
         def _roda():
             resultado = "continue"
             try:
-                resultado = core.submit(texto)
+                if caminhos:
+                    resultado = core.submit(texto, anexos=caminhos)
+                else:
+                    resultado = core.submit(texto)
             except Exception as exc:  # noqa: BLE001 - turno nunca derruba o servidor
                 log_error(exc, "turno no app")
                 self.canal.emitir("linha",
@@ -512,6 +588,11 @@ class App:
         chat_core.set_window_title = lambda *a, **k: None
 
         i18n.set_lang(self.cfg.get("lang"))
+        # Anexos de sessoes antigas (aba fechada sem /sair) nao podem ficar no disco.
+        try:
+            anexos_mod.limpar(horas=24)
+        except OSError:
+            pass
         self.core = ChatCore(self.cfg, self.sink)
         self.sink.aplicar_tema()
         self.abertura()
@@ -587,6 +668,10 @@ class App:
         except KeyboardInterrupt:
             pass
         try:
+            self.limpar_anexos()
+        except OSError:
+            pass
+        try:
             time.sleep(1.2)   # a resposta do SSE sai antes da porta fechar
         except KeyboardInterrupt:
             pass
@@ -648,6 +733,11 @@ class App:
             "strings": {chave: t(chave) for chave in CHAVES_APP},
             "dica": t("app.dica", cmd=i18n.cmd("help")),
             "ajuda": ajuda_do_app(),
+            # O clipe da tela precisa saber os limites e o accept ANTES de mandar
+            # arquivo: o servidor continua sendo quem manda (valida de novo).
+            "anexo": {"max_mb": round(ANEXO_MAX / (1024 * 1024)),
+                      "max": anexos_mod.MAX_ANEXOS,
+                      "aceita": ",".join(anexos_mod.aceitos())},
         }
         # Medidor de contexto ja na abertura (antes do primeiro turno ele mostra
         # a estimativa do orcamento; sem isso a barra ficava vazia e parecia quebrada).
@@ -969,6 +1059,10 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._token_ok():
             return self._json(401, {"erro": "sessao"})
         self.app.tocar()
+        # Anexo vai primeiro: corpo BINARIO e limite proprio (o JSON curto do
+        # turno tem outro teto). Ler como JSON aqui daria 400 mudo para a tela.
+        if caminho == "/api/anexo":
+            return self._receber_anexo()
         # POST sem corpo e legitimo (/api/parar, /api/sair): so le JSON quando
         # o cliente mandou tamanho. Sem isso o botao Parar voltava 400 mudo.
         try:
@@ -982,7 +1076,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"erro": "corpo"})
             dados = lido
         if caminho == "/api/turno":
-            self.app.turno(str(dados.get("texto") or ""))
+            ids = dados.get("anexos")
+            self.app.turno(str(dados.get("texto") or ""),
+                           anexos_ids=ids if isinstance(ids, list) else None)
             return self._json(202, {"ok": True})
         if caminho == "/api/responder":
             try:
@@ -1008,6 +1104,34 @@ class _Handler(BaseHTTPRequestHandler):
             self.app.encerrar("terminal")
             return self._json(200, {"ok": True})
         return self._json(404, {"erro": "rota"})
+
+    def _receber_anexo(self) -> None:
+        """POST /api/anexo?nome=...: corpo BINARIO do arquivo escolhido no clipe.
+
+        Nao vai em JSON de proposito: base64 incharia 33% e o teto do corpo JSON
+        (CORPO_MAX) e de 1 MB - foto de celular nunca passaria. O nome vem na
+        query porque o binario tem que ir cru.
+        """
+        nome = (self.query.get("nome") or [""])[0]
+        try:
+            tamanho = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self._json(400, {"erro": t("anexo.falhou", nome=nome or "?")})
+        if tamanho <= 0:
+            return self._json(400, {"erro": t("anexo.vazio", nome=nome or "?")})
+        if tamanho > ANEXO_MAX:
+            return self._json(413, {
+                "erro": t("anexo.grande", nome=nome or "?",
+                          size=f"{tamanho / (1024 * 1024):.1f}".replace(".", ","),
+                          max=f"{ANEXO_MAX / (1024 * 1024):.0f}")})
+        try:
+            dados = self.rfile.read(tamanho)
+        except (OSError, ValueError):
+            return self._json(400, {"erro": t("anexo.falhou", nome=nome or "?")})
+        if len(dados) != tamanho:
+            return self._json(400, {"erro": t("anexo.falhou", nome=nome or "?")})
+        codigo, corpo = self.app.guardar_anexo(nome, dados)
+        return self._json(codigo, corpo)
 
     def _corpo(self, tamanho: int):
         if tamanho <= 0 or tamanho > CORPO_MAX:

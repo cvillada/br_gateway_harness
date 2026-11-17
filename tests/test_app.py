@@ -667,5 +667,276 @@ ok("o link de documento tem estilo proprio (da para ver que e clicavel)",
 app5.encerrar("teste")
 app5.esperar_fim(5)
 
+# ---------- 17. clipe de anexo: arquivo recebido, recusado e lido -----------
+# Pedido do dono: clipe embaixo da caixa de digitar para anexar foto, PDF,
+# Word, Excel e texto. Aqui se prova o lado do SERVIDOR: o que entra, o que e
+# RECUSADO (tipo e tamanho), como o anexo chega ao core e o que a tela mostra.
+import zipfile as _zip17
+
+import bgh.app_servidor as _srv17
+from bgh import anexos as _anx17
+from bgh.anexos import ler_texto as _ler17
+
+
+class CoreFalso17(CoreFalso):
+    """Core de mentira que GUARDA os anexos recebidos do servidor."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.chamadas: list[tuple[str, list]] = []
+
+    def submit(self, texto, anexos=None):
+        self.chamadas.append((texto, list(anexos or [])))
+        self.textos.append(texto)
+        self.app.canal.emitir("linha", texto="turno:" + texto, estilo="")
+        return "continue"
+
+
+app6 = App(dict(CFG), token="tok17")
+app6.core = CoreFalso17(app6)  # type: ignore[assignment]
+app6.subir_servidor(porta=0)
+time.sleep(0.05)
+
+
+def pedir_binario17(caminho, dados, cookie=True):
+    conn = http.client.HTTPConnection("127.0.0.1", app6.porta, timeout=10)
+    cab = {"Content-Type": "application/octet-stream"}
+    if cookie:
+        cab["Cookie"] = "teo_app=tok17"
+    conn.request("POST", caminho, body=dados, headers=cab)
+    resp = conn.getresponse()
+    corpo = resp.read()
+    conn.close()
+    return resp.status, corpo
+
+
+def pedir_json17(caminho, corpo):
+    conn = http.client.HTTPConnection("127.0.0.1", app6.porta, timeout=10)
+    cab = {"Cookie": "teo_app=tok17", "Content-Type": "application/json"}
+    conn.request("POST", caminho, body=json.dumps(corpo).encode("utf-8"), headers=cab)
+    resp = conn.getresponse()
+    resp.read()
+    conn.close()
+    return resp.status
+
+
+_AB17 = b"2 ovos e 1 copo de leite"
+_st17, _cp17 = pedir_binario17("/api/anexo?nome=receita.txt", _AB17)
+_dd17 = json.loads(_cp17.decode("utf-8"))
+ok("anexo de texto entra pela tela (200)", _st17 == 200)
+ok("o anexo devolve id, nome, tipo e tamanho",
+   _dd17.get("ok") is True and bool(_dd17.get("id"))
+   and _dd17.get("nome") == "receita.txt" and _dd17.get("tipo") == "texto"
+   and _dd17.get("tamanho") == len(_AB17))
+ok("o anexo fica na pasta do TEO (nada espalhado pelo disco)",
+   bool(app6.anexos)
+   and all(str(_anx17.pasta()) in m["caminho"] for m in app6.anexos.values()))
+
+_st17, _cp17 = pedir_binario17("/api/anexo?nome=programa.exe", b"MZ")
+ok("executavel NAO entra (lista de tipos e fechada)",
+   _st17 == 400 and "exe" in _cp17.decode("utf-8"))
+_st17, _cp17 = pedir_binario17("/api/anexo?nome=vazio.txt", b"")
+ok("arquivo vazio e recusado", _st17 == 400)
+_st17, _cp17 = pedir_binario17("/api/anexo?nome=segredo.txt", b"oi", cookie=False)
+ok("anexo sem sessao = 401 (a porta nao recebe arquivo de fora)", _st17 == 401)
+
+_antes_max17 = _srv17.ANEXO_MAX
+_srv17.ANEXO_MAX = 1024
+try:
+    _st17, _cp17 = pedir_binario17("/api/anexo?nome=grande.txt", b"x" * 2000)
+    ok("arquivo acima do limite = 413 com frase para a pessoa",
+       _st17 == 413 and "MB" in _cp17.decode("utf-8"))
+finally:
+    _srv17.ANEXO_MAX = _antes_max17
+
+# --- o turno leva o anexo ao core ---
+_id17 = _dd17["id"]
+_st17 = pedir_json17("/api/turno", {"texto": "leia isso", "anexos": [_id17]})
+time.sleep(0.3)
+ok("o turno com anexo chega no core com o caminho do arquivo",
+   bool(app6.core.chamadas) and app6.core.chamadas[-1][1]
+   and app6.core.chamadas[-1][1][0].endswith(".txt"))
+ok("o texto digitado continua sendo o pedido", app6.core.chamadas[-1][0] == "leia isso")
+
+_st17 = pedir_json17("/api/turno", {"texto": "", "anexos": [_id17]})
+time.sleep(0.3)
+ok("anexo sozinho, sem texto, tambem vira turno",
+   len(app6.core.chamadas) == 2 and app6.core.chamadas[-1][0] == "")
+
+_st17 = pedir_json17("/api/turno", {"texto": "oi", "anexos": ["naoexiste1"]})
+time.sleep(0.3)
+ok("id de anexo que nao existe nao derruba o turno",
+   len(app6.core.chamadas) == 3)
+
+# --- leitura de cada tipo (o que o MODELO recebe) ---
+_p17 = Path(tempfile.mkdtemp(prefix="bgh_anx_", dir=TMP))
+
+_nota17 = _p17 / "nota.md"
+_nota17.write_text("# Contas\n\npagar luz", encoding="utf-8")
+_conteudo17, _erro17, _cortado17 = _ler17(_nota17)
+ok("texto puro entra inteiro", _erro17 is None and "pagar luz" in _conteudo17
+   and _cortado17 is False)
+
+_docx17 = _p17 / "carta.docx"
+with _zip17.ZipFile(_docx17, "w") as _z17:
+    _z17.writestr(
+        "word/document.xml",
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/'
+        '2006/main"><w:body><w:p><w:r><w:t>Prezado cliente</w:t></w:r></w:p>'
+        "<w:p><w:r><w:t>segunda linha</w:t></w:r></w:p></w:body></w:document>")
+_conteudo17, _erro17, _ = _ler17(_docx17)
+ok("Word (.docx) vira texto, paragrafo por linha",
+   _erro17 is None and "Prezado cliente" in _conteudo17
+   and "segunda linha" in _conteudo17)
+
+_xlsx17 = _p17 / "contas.xlsx"
+with _zip17.ZipFile(_xlsx17, "w") as _z17:
+    _z17.writestr(
+        "xl/sharedStrings.xml",
+        '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        "<si><t>Aluguel</t></si><si><t>1200</t></si></sst>")
+    _z17.writestr(
+        "xl/worksheets/sheet1.xml",
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/'
+        'main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c>'
+        '<c r="B1" t="s"><v>1</v></c></row></sheetData></worksheet>')
+_conteudo17, _erro17, _ = _ler17(_xlsx17)
+ok("Excel (.xlsx) vira texto com as celulas",
+   _erro17 is None and "Aluguel" in _conteudo17 and "1200" in _conteudo17)
+
+_pptx17 = _p17 / "aula.pptx"
+with _zip17.ZipFile(_pptx17, "w") as _z17:
+    _z17.writestr(
+        "ppt/slides/slide1.xml",
+        '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/'
+        'main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+        "<p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Titulo do slide</a:t>"
+        "</a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>")
+_conteudo17, _erro17, _ = _ler17(_pptx17)
+ok("PowerPoint (.pptx) vira texto com o slide",
+   _erro17 is None and "Titulo do slide" in _conteudo17)
+
+
+def _pdf_minimo17(caminho: Path, texto: str) -> None:
+    """PDF de uma pagina com texto (xref calculado): prova a leitura de PDF."""
+    corpo = b"BT /F1 12 Tf 20 100 Td (" + texto.encode("latin-1") + b") Tj ET"
+    objetos = [
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 4 0 R"
+        b"/Resources<</Font<</F1 5 0 R>>>>>>",
+        b"<</Length " + str(len(corpo)).encode() + b">>stream\n" + corpo
+        + b"\nendstream",
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+    ]
+    saida = bytearray(b"%PDF-1.4\n")
+    posicoes = []
+    for indice, objeto in enumerate(objetos, start=1):
+        posicoes.append(len(saida))
+        saida += str(indice).encode() + b" 0 obj\n" + objeto + b"\nendobj\n"
+    inicio_xref = len(saida)
+    saida += b"xref\n0 " + str(len(objetos) + 1).encode() + b"\n0000000000 65535 f \n"
+    for posicao in posicoes:
+        saida += f"{posicao:010d} 00000 n \n".encode()
+    saida += (b"trailer\n<</Size " + str(len(objetos) + 1).encode()
+              + b"/Root 1 0 R>>\nstartxref\n" + str(inicio_xref).encode()
+              + b"\n%%EOF\n")
+    caminho.write_bytes(bytes(saida))
+
+
+try:
+    import pypdf as _pypdf17  # noqa: F401
+    _tem_pypdf17 = True
+except ImportError:
+    _tem_pypdf17 = False
+
+_pdf17 = _p17 / "contrato.pdf"
+_pdf_minimo17(_pdf17, "Contrato de aluguel")
+_conteudo17, _erro17, _ = _ler17(_pdf17)
+if _tem_pypdf17:
+    ok("PDF vira texto (leitura pelo pypdf)",
+       _erro17 is None and "Contrato" in _conteudo17)
+else:
+    ok("sem pypdf o PDF tem frase propria (nao quebra a tela)",
+       _conteudo17 == "" and _erro17 == t("anexo.pdf_lib", atualizar="/atualizar"))
+ok("a frase da falta de pypdf ensina o caminho de saida",
+   t("anexo.pdf_lib").startswith("Para ler PDF"))
+
+_exe17 = _p17 / "programa.exe"
+_exe17.write_bytes(b"MZ")
+_conteudo17, _erro17, _ = _ler17(_exe17)
+ok("tipo fora da lista nao e lido como texto", _conteudo17 == "" and bool(_erro17))
+
+_grande17 = _p17 / "grande.txt"
+_grande17.write_text("a" * 50, encoding="utf-8")
+_conteudo17, _erro17, _cortado17 = _ler17(_grande17, limite=10)
+ok("arquivo grande e cortado, com aviso", _cortado17 is True
+   and len(_conteudo17) == 10 and _erro17 is None)
+
+_imagem17 = _p17 / "foto.png"
+_imagem17.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 40)
+_conteudo17, _erro17, _ = _ler17(_imagem17)
+ok("imagem nao e lida como texto (ela vai pela visao)", _conteudo17 == ""
+   and bool(_erro17) and _anx17.classificar(_imagem17) == "imagem")
+
+# --- o anexo sai do disco no fim da sessao ---
+_caminho17 = Path(next(iter(app6.anexos.values()))["caminho"])
+ok("o anexo fica no disco enquanto a sessao esta aberta", _caminho17.is_file())
+app6.limpar_anexos()
+ok("o fim da sessao apaga o anexo do usuario", not _caminho17.exists())
+app6.encerrar("teste")
+app6.esperar_fim(5)
+
+# --- o que a TELA mostra (sem navegador: HTML/JS/CSS conferidos) ---
+_html17 = (_raiz12 / "bgh" / "assets" / "app.html").read_text(encoding="utf-8")
+ok("a tela tem o clipe EMBAIXO da linha de digitar",
+   'id="clipe"' in _html17
+   and _html17.index('id="clipe"') > _html17.index('class="linha-digitar"'))
+ok("o clipe abre o seletor com varios arquivos", 'id="arquivo" type="file"' in _html17
+   and "multiple" in _html17[_html17.index('id="arquivo"'):][:60])
+ok("a tela sobe o anexo antes do turno e manda os ids",
+   '"/api/anexo?nome="' in _js12 and "anexos: ids" in _js12
+   and "function anexarArquivos" in _js12)
+ok("cola (CTRL+V) e arrastar arquivo tambem anexam",
+   'addEventListener("paste"' in _js12 and '"drop"' in _js12)
+ok("o limite e o tipo vem do servidor (a tela nao inventa)",
+   "dados.anexo.accept" in _js12 or "dados.anexo.aceita" in _js12)
+ok("o clipe tem estilo proprio e gira com o tema",
+   ".botao-clipe" in _css16 and ".anexo-item" in _css16)
+ok("o link de documento aceita caminho do Windows (bug da 0.2.33)",
+   "A-Za-z" in _regex16 and "\\\\" in _regex16)
+
+
+class _Consulta17:
+    """Acesso a /api/inicio de uma instancia so para ler o bloco do anexo."""
+
+    def __init__(self, porta: int, token: str):
+        self.porta = porta
+        self.token = token
+
+    def inicio(self) -> dict:
+        conn = http.client.HTTPConnection("127.0.0.1", self.porta, timeout=6)
+        conn.request("GET", "/api/inicio", headers={"Cookie": f"teo_app={self.token}"})
+        resp = conn.getresponse()
+        corpo = resp.read()
+        conn.close()
+        return json.loads(corpo.decode("utf-8"))
+
+
+app7 = App(dict(CFG), token="tok17b")
+app7.core = CoreFalso17(app7)  # type: ignore[assignment]
+app7.subir_servidor(porta=0)
+time.sleep(0.05)
+_inicio17 = _Consulta17(app7.porta, "tok17b").inicio()
+ok("/api/inicio leva o limite e os tipos do clipe",
+   _inicio17.get("anexo", {}).get("max_mb") == 15
+   and _inicio17.get("anexo", {}).get("max") == _anx17.MAX_ANEXOS
+   and ".pdf" in (_inicio17.get("anexo", {}).get("aceita") or ""))
+_aceitas17 = {x for x in _inicio17["anexo"]["aceita"].split(",") if x}
+ok("a lista que a tela oferece e a MESMA que o servidor aceita",
+   _aceitas17 == set(_anx17.TIPOS))
+app7.encerrar("teste")
+app7.esperar_fim(5)
+
 print()
 print(f"TODOS OS TESTES DA TELA PASSARAM ({PASS} verificacoes)")

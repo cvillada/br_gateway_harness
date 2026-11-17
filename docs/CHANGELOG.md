@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.34
+
+O TEO agora recebe arquivo pela tela, e o link de documento funciona no Windows.
+
+- CLIPE DE ANEXO na tela do navegador: botao de clipe embaixo da caixa de
+  digitar (e CTRL+V de captura de tela, e arrastar o arquivo para a janela).
+  Entram foto (png/jpg/webp/gif/bmp), PDF, Word, Excel, PowerPoint e texto
+  (txt/md/csv/tsv/json/log/codigo). Imagem vai para a visao do modelo; os
+  outros viram texto colado na mensagem. Limite de 15 MB por arquivo e 5
+  arquivos por turno - a tela avisa antes e o servidor confere de novo.
+- O arquivo sobe para ~/.bgh/anexos e e apagado no fim da sessao (e o que
+  sobrou de sessao antiga some 24h depois). Tipo fora da lista nao entra: a
+  lista e fechada, igual a dos documentos que a tela abre.
+- PDF precisa de pypdf (novo no requirements; o /atualizar instala). Sem ele o
+  TEO avisa com frase clara e segue. Word/Excel/PowerPoint sao lidos com a
+  biblioteca padrao do Python, sem dependencia nova.
+- O '@' do terminal passou a usar o MESMO leitor: PDF, Word e Excel agora
+  entram no chat de texto tambem (antes virava lixo de bytes).
+- LINK DE DOCUMENTO NO WINDOWS: o caminho C:\Users\... na resposta nao virava
+  link (o reconhecedor so entendia caminho /unix). Agora aceita /home, ~/,
+  C:\ e \\servidor.
+- Ajuda da tela: a linha do anexo agora fala do clipe (era "@arquivo", que so
+  existe no terminal).
+
 ## 0.2.33
 
 O TEO nao toma mais a tela inteira ao abrir.

@@ -13,6 +13,11 @@ var canais = {};
 var fluxo = null;
 var encerrado = false;
 var dicaTexto = "";
+var anexosPend = [];     // arquivos ja recebidos pelo servidor: {id, nome, tamanho}
+var anexoMaxMb = 15;     // limites reais vem do /api/inicio (servidor manda)
+var anexoMaxQtd = 5;
+var anexosAceitos = "";
+var anexosSubindo = 0;   // envios em curso: nao deixa mandar turno sem o arquivo
 var relogio = null;      // contador de segundos do turno em andamento
 var segundos = 0;
 var ajudaCaixa = null;   // o menu fica num cartao unico (nunca tres copias)
@@ -23,6 +28,15 @@ var versaoApp = "";      // versao mostrada ao lado do modelo, na linha de cima
 
 function $(id) { return document.getElementById(id); }
 function t(chave) { return strings[chave] || chave; }
+/* Texto com campo preenchido ({nome}, {max}): as frases chegam prontas do
+ * i18n SEM valor dentro, porque quem escolhe os valores e a tela. */
+function tCom(chave, valores) {
+  var texto = t(chave);
+  Object.keys(valores || {}).forEach(function (chave_valor) {
+    texto = texto.split("{" + chave_valor + "}").join(String(valores[chave_valor]));
+  });
+  return texto;
+}
 
 /* ---------------- inicio ---------------- */
 fetch("/api/inicio", { headers: { "Accept": "application/json" } })
@@ -57,6 +71,18 @@ function montarTextos(dados) {
   $("sair").textContent = t("app.fechar");
   $("ajuda").textContent = t("app.ajuda");
   $("terminal").textContent = t("app.terminal");
+  // Clipe: rotulo acessivel e o "accept" vem do servidor (lista fechada igual a
+  // de TIPOS em bgh/anexos.py - a tela nao inventa tipo que o servidor recusa).
+  if (dados.anexo) {
+    anexoMaxMb = Number(dados.anexo.max_mb) || anexoMaxMb;
+    anexoMaxQtd = Number(dados.anexo.max) || anexoMaxQtd;
+    anexosAceitos = dados.anexo.aceita || "";
+  }
+  if ($("clipe")) {
+    $("clipe").title = t("app.anexar_dica");
+    $("clipe").setAttribute("aria-label", t("app.anexar"));
+  }
+  if ($("arquivo") && anexosAceitos) { $("arquivo").accept = anexosAceitos; }
   if (dados.ajuda) { ajudaItens = dados.ajuda; }
   idiomaAtual = dados.lingua || "";
   dicaTexto = dados.dica || t("app.dica");
@@ -291,10 +317,22 @@ function cartaoAjuda() {
   return { raiz: el, corpo: corpo };
 }
 
-function bolha(texto, recado) {
+function bolha(texto, recado, nomes) {
   var el = document.createElement("div");
   el.className = "bolha" + (recado ? " recado" : "");
-  el.textContent = texto;
+  if (texto) {
+    var corpo = document.createElement("span");
+    corpo.textContent = texto;
+    el.appendChild(corpo);
+  }
+  // Anexos da mensagem: so os NOMES. O conteudo ja foi lido pelo servidor; a
+  // bolha serve para a pessoa conferir depois o que mandou junto.
+  if (nomes && nomes.length) {
+    var lista = document.createElement("span");
+    lista.className = "bolha-anexos";
+    lista.textContent = t("app.anexos") + ": " + nomes.join(", ");
+    el.appendChild(lista);
+  }
   acrescentar(el);
 }
 
@@ -355,9 +393,13 @@ var DOC_EXTS = ["pdf", "txt", "log", "md", "csv", "tsv", "json", "png", "jpg",
  * o candidato vai ate a extensao de documento e quem decide se existe e o
  * servidor (checar=1). Assim nao aparece link morto na tela de uma crianca ou
  * de um idoso, e caminho com espaco funciona igual ao sem espaco.
+ * Aceita os TRES jeitos de escrever caminho: /home/ana/x.pdf e ~/x.pdf
+ * (Linux/macOS), C:\Users\ana\x.pdf (Windows, a maquina do dono) e
+ * \\servidor\pasta\x.pdf (rede). Sem a parte do Windows o link nunca aparecia
+ * la - foi bug real na 0.2.33.
  * A lista de extensoes aqui tem que ser a MESMA de DOC_EXTS (a suite confere).
  */
-var DOC_RE = /(^|[\s("'`<\[])((?:~?\/)[^"'\n<>|]*?\.(?:pdf|txt|log|md|csv|tsv|json|png|jpg|jpeg|gif|webp|bmp|docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp|rtf|epub|zip))(?![A-Za-z0-9])/gi;
+var DOC_RE = /(^|[\s("'`<\[])((?:~?\/|[A-Za-z]:[\\/]|\\\\)[^"'\n<>|]*?\.(?:pdf|txt|log|md|csv|tsv|json|png|jpg|jpeg|gif|webp|bmp|docx|doc|xlsx|xls|pptx|ppt|odt|ods|odp|rtf|epub|zip))(?![A-Za-z0-9])/gi;
 
 function candidatosDeDocumento(texto) {
   var achados = [];
@@ -506,6 +548,88 @@ function fimTurno() {
   ligarCaminhos();
 }
 
+/* ---------------- anexos (clipe) ---------------- */
+/* O arquivo sobe ANTES do turno: POST /api/anexo manda o binario cru e recebe
+ * um id; o turno depois leva {texto, anexos:[id...]}. Quem abre e interpreta o
+ * arquivo e o servidor (bgh/anexos.py) - a pagina nao le disco nenhum, so
+ * segura o id. Assim PDF/Word/Excel e imagem entram pelo mesmo caminho.
+ */
+function tamanhoLegivel(n) {
+  var b = Number(n) || 0;
+  if (b < 1024) { return b + " B"; }
+  if (b < 1024 * 1024) { return (b / 1024).toFixed(0) + " KB"; }
+  return (b / (1024 * 1024)).toFixed(1).replace(".", ",") + " MB";
+}
+
+function mostrarAnexos() {
+  var lista = $("anexos");
+  if (!lista) { return; }
+  lista.textContent = "";
+  anexosPend.forEach(function (anexo, indice) {
+    var item = document.createElement("li");
+    item.className = "anexo-item";
+    var nome = document.createElement("span");
+    nome.className = "anexo-nome";
+    nome.textContent = anexo.nome;
+    nome.title = anexo.nome;
+    var tam = document.createElement("span");
+    tam.className = "anexo-tam";
+    tam.textContent = tamanhoLegivel(anexo.tamanho);
+    var tirar = document.createElement("button");
+    tirar.type = "button";
+    tirar.className = "anexo-tirar";
+    tirar.textContent = "x";
+    tirar.title = t("app.anexo_remover");
+    tirar.setAttribute("aria-label", t("app.anexo_remover") + ": " + anexo.nome);
+    tirar.addEventListener("click", function () {
+      anexosPend.splice(indice, 1);
+      mostrarAnexos();
+    });
+    item.appendChild(nome);
+    item.appendChild(tam);
+    item.appendChild(tirar);
+    lista.appendChild(item);
+  });
+  lista.hidden = anexosPend.length === 0;
+}
+
+function enviarAnexo(arquivo) {
+  anexosSubindo += 1;
+  return fetch("/api/anexo?nome=" + encodeURIComponent(arquivo.name), {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: arquivo
+  }).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (dados) {
+      if (!r.ok || !dados.ok) {
+        linha(dados.erro || tCom("app.anexo_falhou", { nome: arquivo.name }), "yellow");
+        return;
+      }
+      anexosPend.push({ id: dados.id, nome: dados.nome || arquivo.name,
+                        tamanho: dados.tamanho || 0 });
+      mostrarAnexos();
+    });
+  }).catch(function () {
+    linha(tCom("app.anexo_falhou", { nome: arquivo.name }), "yellow");
+  }).then(function () { anexosSubindo -= 1; });
+}
+
+function anexarArquivos(arquivos) {
+  var lista = Array.prototype.slice.call(arquivos || []);
+  lista.forEach(function (arquivo) {
+    if (anexosPend.length >= anexoMaxQtd) {
+      linha(tCom("app.anexo_limite", { n: anexoMaxQtd }), "yellow");
+      return;
+    }
+    if (arquivo.size > anexoMaxMb * 1024 * 1024) {
+      linha(tCom("app.anexo_grande", { nome: arquivo.name, max: anexoMaxMb }),
+            "yellow");
+      return;
+    }
+    enviarAnexo(arquivo);
+  });
+}
+
 /* ---------------- caixa de digitar ---------------- */
 function ligarBotoes() {
   $("enviar").addEventListener("click", function () {
@@ -514,8 +638,30 @@ function ligarBotoes() {
   $("sair").addEventListener("click", sair);
   $("ajuda").addEventListener("click", ajuda);
   $("terminal").addEventListener("click", irParaTerminal);
+  // Clipe: abre o seletor do sistema. O arquivo escolhido sobe na hora (o turno
+  // so leva o id) e aparece na lista ao lado do clipe, com nome e tamanho.
+  if ($("clipe")) {
+    $("clipe").addEventListener("click", function () {
+      if ($("arquivo")) { $("arquivo").click(); }
+    });
+  }
+  if ($("arquivo")) {
+    $("arquivo").addEventListener("change", function () {
+      anexarArquivos($("arquivo").files);
+      $("arquivo").value = "";   // escolher o MESMO arquivo de novo tem que valer
+    });
+  }
   var caixa = $("texto");
   caixa.addEventListener("input", ajustarAltura);
+  // CTRL+V de uma captura de tela anexa a imagem: e o jeito mais curto de
+  // mostrar uma pagina, um erro ou uma planilha para o TEO olhar.
+  caixa.addEventListener("paste", function (ev) {
+    var colados = (ev.clipboardData && ev.clipboardData.files) || [];
+    if (colados.length) {
+      ev.preventDefault();
+      anexarArquivos(colados);
+    }
+  });
   caixa.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
       ev.preventDefault();
@@ -527,6 +673,16 @@ function ligarBotoes() {
       ev.preventDefault();
       responder(perguntaAtual.padrao);
     }
+  });
+  // Arrastar arquivo para dentro da tela tambem anexa. Sem o preventDefault o
+  // navegador ABRE o arquivo e a conversa some.
+  ["dragover", "drop"].forEach(function (evento) {
+    document.addEventListener(evento, function (ev) {
+      ev.preventDefault();
+      if (evento === "drop" && ev.dataTransfer && ev.dataTransfer.files.length) {
+        anexarArquivos(ev.dataTransfer.files);
+      }
+    });
   });
   ajustarAltura();
 }
@@ -545,14 +701,25 @@ function ajustarAltura() {
 function enviar(silencioso) {
   var caixa = $("texto");
   var texto = caixa.value.trim();
-  if (!texto) { return; }
+  var nomes = anexosPend.map(function (anexo) { return anexo.nome; });
+  // Sem texto e sem anexo nao ha o que mandar. Com anexo, o texto pode ser
+  // vazio: o arquivo em si ja e o pedido.
+  if (!texto && !nomes.length) { return; }
+  if (anexosSubindo > 0) {
+    // Clicar antes do envio terminar mandaria um turno sem o arquivo.
+    linha(t("app.anexo_subindo"), "dim");
+    return;
+  }
   // Barra sozinha abre a lista de opcoes do TEO (no terminal o "/" abre a pasta;
   // aqui nao existe pasta, entao abre a lista de comandos da tela).
   if (texto === "/") {
-    caixa.value = "";
-    ajustarAltura();
-    if (!ocupado) { ajuda(); }
-    return;
+    // Com anexo escolhido a barra e o pedido (o arquivo em si), nao o menu.
+    if (!nomes.length) {
+      caixa.value = "";
+      ajustarAltura();
+      if (!ocupado) { ajuda(); }
+      return;
+    }
   }
   // /ajuda digitado a mao abre a MESMA ajuda da tela (nao o manual do terminal).
   if (/^\/(ajuda|help|ayuda)\b/i.test(texto)) {
@@ -568,13 +735,16 @@ function enviar(silencioso) {
     irParaTerminal();
     return;
   }
-  if (!silencioso) { bolha(texto, ocupado); }
+  if (!silencioso) { bolha(texto, ocupado, nomes); }
+  var ids = anexosPend.map(function (anexo) { return anexo.id; });
+  anexosPend = [];
+  mostrarAnexos();
   caixa.value = "";
   ajustarAltura();
   fetch("/api/turno", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ texto: texto })
+    body: JSON.stringify({ texto: texto, anexos: ids })
   }).catch(function () { linha(t("app.caiu"), "red"); });
 }
 
@@ -634,6 +804,7 @@ function aplicarOcupado() {
   // botao fica desligado em vez de virar um recado estranho no meio da resposta.
   $("ajuda").disabled = ocupado;
   $("terminal").disabled = ocupado;
+  if ($("clipe")) { $("clipe").disabled = ocupado; }
   $("dica").textContent = ocupado ? t("app.trabalhando") : dicaTexto;
   // Marca no corpo da pagina: o CSS pinta o campo e a dica durante o turno.
   document.body.classList.toggle("ocupado", ocupado);

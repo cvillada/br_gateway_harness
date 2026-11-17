@@ -29,6 +29,7 @@ from .llm import LLM, LLMError, LLMRateLimitError
 from .palco import abrevia
 from .setup_wizard import CHARS_POR_TOKEN, FOLGA_LEITURA
 from .tools import files as files_mod
+from . import anexos as anexos_mod
 
 LINE = "-" * 46  # separador visual (ASCII puro; nao depende de unicode no terminal)
 
@@ -911,10 +912,16 @@ class ChatCore:
             self.sink.line(t("cmd.ditar.revisar_simples"), style="dim")
         return "continue"
 
-    def submit(self, text: str) -> str:
-        """Processa uma linha digitada. Devolve 'continue' ou 'exit'."""
+    def submit(self, text: str, anexos=None) -> str:
+        """Processa uma linha digitada. Devolve 'continue' ou 'exit'.
+
+        `anexos` sao caminhos de arquivo que a TELA ja recebeu (o clipe do
+        navegador). O terminal nao usa esta via: la o caminho vem do '@' e entra
+        pelo pending_attach, como sempre.
+        """
         text = text.strip()
-        if not text:
+        anexos = [str(c) for c in (anexos or []) if str(c).strip()]
+        if not text and not anexos:
             return "continue"
 
         # Atalho @ : menu de arquivos (tela fixa) ou lista de arquivos.
@@ -944,18 +951,18 @@ class ChatCore:
                 self.sink.line(t("attach.image_ok", target=target,
                                  size=files_mod.human_size(tamanho)), style="cyan")
             elif target.is_file():
-                try:
-                    content = target.read_text(encoding="utf-8", errors="replace")[:8000]
-                except OSError as exc:
-                    log_error(exc, f"anexo de arquivo {target}")
-                    self.sink.line(t("attach.read_fail", target=target), style="yellow")
+                # PDF, Word, Excel, PowerPoint e texto passam pelo mesmo leitor do
+                # clipe da tela: um caminho so, comportamento igual nas duas telas.
+                content, erro_txt, cortado_arq = anexos_mod.ler_texto(target, limite=8000)
+                if erro_txt:
+                    self.sink.line(erro_txt, style="yellow")
                     return "continue"
                 self.pending_attach = f"[arquivo anexado: {target}]\n{content}"
                 try:
                     tamanho = files_mod.human_size(os.path.getsize(target))
                 except OSError:
                     tamanho = "?"
-                cortado = t("attach.truncated") if len(content) >= 8000 else ""
+                cortado = t("anexo.cortado") if cortado_arq else ""
                 self.sink.line(t("attach.file_ok", target=target, size=tamanho,
                                  cortado=cortado), style="cyan")
             else:
@@ -1372,11 +1379,60 @@ class ChatCore:
                                  nome=os.path.basename(citadas[0]), extra=extra),
                                style="cyan")
 
+        # Anexos que a TELA ja recebeu (clipe do navegador): imagem vai para a
+        # visao do modelo, documento vira texto colado na mensagem. A ordem das
+        # falas na tela e a mesma do terminal - confirma cada um que entrou e
+        # avisa o que ficou de fora, sem sumir calado.
+        imagens: list[str] = []
+        pedacos_anexo: list[str] = []
+        total_txt = 0
+        for caminho in anexos[:anexos_mod.MAX_ANEXOS]:
+            alvo = Path(os.path.expanduser(caminho))
+            cat = anexos_mod.classificar(alvo)
+            if cat is None:
+                self.sink.line(t("anexo.tipo", ext=alvo.suffix or "?"), style="yellow")
+                continue
+            if not alvo.is_file():
+                self.sink.line(t("anexo.nao_achei", nome=alvo.name), style="yellow")
+                continue
+            try:
+                tamanho_arq = files_mod.human_size(alvo.stat().st_size)
+            except OSError:
+                tamanho_arq = "?"
+            if cat == "imagem":
+                imagens.append(str(alvo))
+                self.sink.line(t("attach.image_ok", target=alvo, size=tamanho_arq),
+                               style="cyan")
+                continue
+            if total_txt >= anexos_mod.MAX_TEXTO_TOTAL:
+                break
+            sobra = anexos_mod.MAX_TEXTO_TOTAL - total_txt
+            texto_arq, erro_txt, cortado_arq = anexos_mod.ler_texto(
+                alvo, limite=min(anexos_mod.MAX_TEXTO, sobra))
+            if erro_txt:
+                self.sink.line(erro_txt, style="yellow")
+                continue
+            total_txt += len(texto_arq)
+            pedacos_anexo.append(
+                f"[arquivo anexado: {alvo}]\n{texto_arq}"
+                + (t("anexo.cortado") if cortado_arq else ""))
+            self.sink.line(t("attach.file_ok", target=alvo, size=tamanho_arq,
+                             cortado=t("anexo.cortado") if cortado_arq else ""),
+                           style="cyan")
+        if len(anexos) > anexos_mod.MAX_ANEXOS:
+            self.sink.line(t("anexo.limite", n=anexos_mod.MAX_ANEXOS), style="yellow")
+        if pedacos_anexo:
+            junto = "\n\n".join(pedacos_anexo)
+            self.pending_attach = (f"{junto}\n\n{self.pending_attach}"
+                                   if self.pending_attach else junto)
+
         # Turno normal do modelo (com anexo pendente, se houver).
         user_text = f"{self.pending_attach}\n\n{text}" if self.pending_attach else text
         self.pending_attach = None
         imagem = self.pending_image
         self.pending_image = None
+        if imagem:
+            imagens.insert(0, imagem)
         # Pergunta nova cala a leitura da resposta anterior (a pessoa quer a nova).
         voz.parar()
         # Continuacao estilo Hermes: mensagens digitadas durante o turno que chegaram
@@ -1387,11 +1443,16 @@ class ChatCore:
             self.st["thinking"] = False
             self.st["resposta"] = False
             self._pend = ""
+            # As imagens valem para o PRIMEIRO turno; os de continuacao
+            # (steering) seguem so com texto.
+            envio: dict = {}
+            if len(imagens) == 1:
+                envio["imagem"] = imagens[0]
+            elif imagens:
+                envio["imagens"] = list(imagens)
+            imagens = []
             try:
-                # a imagem vale para o primeiro turno; os de continuacao (steering)
-                # seguem so com texto
-                answer = self.agent.run_turn(turno, imagem=imagem)
-                imagem = None
+                answer = self.agent.run_turn(turno, **envio)
             except KeyboardInterrupt:
                 # CTRL+C no modo classico tambem para o turno (e cala a voz).
                 voz.parar()

@@ -602,6 +602,91 @@ input:focus-visible {
   color: var(--dim);
 }
 
+/* ---------- clipe de anexo (embaixo da linha de digitar) ---------- */
+.linha-anexo {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  max-width: 52rem;
+  margin: .5rem auto 0;
+  flex-wrap: wrap;
+}
+
+.botao-clipe {
+  flex: none;
+  width: 2.6rem;
+  height: 2.6rem;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--cartao);
+  border: 2px solid var(--linha);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s ease, background .15s ease, border-color .15s ease;
+}
+
+.botao-clipe:hover { background: var(--chip); border-color: var(--accent); }
+.botao-clipe:active { transform: translateY(2px); }
+.botao-clipe:disabled { opacity: .45; cursor: default; transform: none; }
+.botao-clipe svg { display: block; }
+
+/* Lista de anexos escolhidos: cresce ao lado do clipe, quebra linha quando
+   enche e nunca empurra o botao Enviar (fica fora da linha de digitar). */
+.anexos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.anexo-item {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  max-width: 22rem;
+  padding: .3rem .55rem;
+  border-radius: 14px;
+  background: var(--chip);
+  border: 1px solid var(--linha);
+  font-size: .78rem;
+  color: var(--fg);
+}
+
+.anexo-nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anexo-tam { color: var(--dim); flex: none; }
+
+.anexo-tirar {
+  flex: none;
+  font: inherit;
+  font-size: .95rem;
+  line-height: 1;
+  color: var(--dim);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0 .15rem;
+}
+
+.anexo-tirar:hover { color: var(--erro); }
+
+/* Anexos citados na bolha da pessoa (so os nomes: o arquivo ja foi lido). */
+.bolha-anexos {
+  display: block;
+  margin-top: .35rem;
+  font-size: .74rem;
+  opacity: .85;
+}
+
 /* ---------- modal ---------- */
 .veu {
   position: fixed;

@@ -624,6 +624,28 @@ CHAT = {
     "app.abrir_arquivo": ("abrir o documento em outra janela",
                           "open the document in another window",
                           "abrir el documento en otra ventana"),
+    # --- clipe de anexo da tela (v0.2.34) ---------------------------------
+    "app.anexar": ("Anexar arquivo ou foto", "Attach file or photo",
+                   "Adjuntar archivo o foto"),
+    "app.anexar_dica": ("Anexar documento ou foto (PDF, Word, Excel, texto, imagem)",
+                        "Attach a document or photo (PDF, Word, Excel, text, image)",
+                        "Adjuntar documento o foto (PDF, Word, Excel, texto, imagen)"),
+    "app.anexo_remover": ("Remover este anexo", "Remove this attachment",
+                          "Quitar este adjunto"),
+    "app.anexo_falhou": ("Nao consegui anexar {nome}", "I could not attach {nome}",
+                         "No pude adjuntar {nome}"),
+    "app.anexo_grande": ("{nome} e grande demais (o limite e {max} MB)",
+                         "{nome} is too large (the limit is {max} MB)",
+                         "{nome} es demasiado grande (el limite es {max} MB)"),
+    "app.anexo_limite": ("No maximo {n} anexos por vez.",
+                         "At most {n} attachments at a time.",
+                         "Como maximo {n} adjuntos a la vez."),
+    "app.anexos": ("anexos", "attachments", "adjuntos"),
+    "app.anexo_so": ("(so o anexo, sem texto)", "(attachment only, no text)",
+                     "(solo el adjunto, sin texto)"),
+    "app.anexo_subindo": ("Espera o anexo terminar de subir.",
+                          "Wait for the attachment to finish uploading.",
+                          "Espera que el adjunto termine de subir."),
     "cmd.new.done": ("Conversa zerada (memoria e skills preservadas).",
                      "Conversation cleared (memory and skills kept).",
                      "Conversacion reiniciada (memoria y skills conservadas)."),
@@ -854,6 +876,65 @@ CHAT = {
     "attach.not_found": ("Nao encontrei esse arquivo: {target}",
                          "I could not find that file: {target}",
                          "No encontre ese archivo: {target}"),
+    # --- anexos que a pessoa entrega (v0.2.34) ----------------------------
+    # Falam do ARQUIVO, nao da tela: servem para o clipe do navegador e para o
+    # '@' do terminal, com a mesma frase nos dois.
+    "anexo.tipo": ("Nao consigo ler arquivo {ext}. Aceito imagem, PDF, Word, "
+                   "Excel, PowerPoint e texto.",
+                   "I cannot read {ext} files. I accept image, PDF, Word, Excel, "
+                   "PowerPoint and text.",
+                   "No puedo leer archivos {ext}. Acepto imagen, PDF, Word, Excel, "
+                   "PowerPoint y texto."),
+    "anexo.grande": ("O arquivo {nome} tem {size} MB e o limite e {max} MB.",
+                     "{nome} has {size} MB and the limit is {max} MB.",
+                     "El archivo {nome} tiene {size} MB y el limite es {max} MB."),
+    "anexo.vazio": ("O arquivo {nome} esta vazio.", "{nome} is empty.",
+                    "El archivo {nome} esta vacio."),
+    "anexo.falhou": ("Nao consegui ler {nome}.", "I could not read {nome}.",
+                     "No pude leer {nome}."),
+    "anexo.nao_achei": ("O anexo {nome} nao esta mais aqui. Mande de novo.",
+                        "The attachment {nome} is no longer here. Send it again.",
+                        "El adjunto {nome} ya no esta aqui. Mandalo de nuevo."),
+    "anexo.cortado": (" (arquivo grande: mandei o comeco)",
+                      " (large file: I sent the beginning)",
+                      " (archivo grande: mande el comienzo)"),
+    "anexo.sem_texto": ("Nao achei texto em {nome} (pode ser digitalizado ou "
+                        "protegido por senha).",
+                        "I found no text in {nome} (it may be scanned or "
+                        "password protected).",
+                        "No encontre texto en {nome} (puede estar escaneado o "
+                        "protegido con contrasena)."),
+    "anexo.pdf_lib": ("Para ler PDF falta uma biblioteca (pypdf). Rode {atualizar} "
+                      "ou instale com pip install pypdf.",
+                      "Reading PDF needs a library (pypdf). Run {atualizar} or "
+                      "install it with pip install pypdf.",
+                      "Para leer PDF falta una biblioteca (pypdf). Ejecuta "
+                      "{atualizar} o instalala con pip install pypdf."),
+    "anexo.imagem": ("{nome} e imagem: vai para a visao do modelo, nao como texto.",
+                     "{nome} is an image: it goes to the model vision, not as text.",
+                     "{nome} es imagen: va a la vision del modelo, no como texto."),
+    "anexo.antigo": ("O formato {ext} e antigo e nao tem extrator aqui. Abra no "
+                     "programa e salve como .docx, .xlsx ou .pptx.",
+                     "The {ext} format is old and has no extractor here. Open it in "
+                     "the program and save as .docx, .xlsx or .pptx.",
+                     "El formato {ext} es antiguo y no tiene extractor aqui. Abrelo "
+                     "en el programa y guardalo como .docx, .xlsx o .pptx."),
+    "anexo.limite": ("Muitos anexos de uma vez: mandei os {n} primeiros.",
+                     "Too many attachments at once: I sent the first {n}.",
+                     "Demasiados adjuntos a la vez: mande los primeros {n}."),
+    "anexo.perdido": ("Um dos anexos se perdeu (a tela recarregou?). Mande de novo.",
+                      "One of the attachments was lost (page reloaded?). Send it "
+                      "again.",
+                      "Uno de los adjuntos se perdio (se recargo la pantalla?). "
+                      "Mandalo de nuevo."),
+    "anexo.ok": ("Anexo: {nome} ({size}).", "Attachment: {nome} ({size}).",
+                 "Adjunto: {nome} ({size})."),
+    "anexo.ocupado": ("O TEO esta trabalhando agora: mande o anexo junto com o "
+                      "proximo pedido.",
+                      "TEO is working right now: send the attachment with your next "
+                      "request.",
+                      "El TEO esta trabajando ahora: manda el adjunto con el proximo "
+                      "pedido."),
     "listing.file": ("arquivo: {path} ({size})", "file: {path} ({size})",
                      "archivo: {path} ({size})"),
     "listing.hint": ("(para mandar o conteudo ao TEO, digite @ e escolha o arquivo no menu)",
@@ -960,6 +1041,12 @@ AGENT = {
     "agent.image_fail": ("nao consegui preparar a imagem; seguindo so com o texto.",
                          "I could not prepare the image; going on with text only.",
                          "no pude preparar la imagen; sigo solo con el texto."),
+    "agent.image_more": ("So {n} imagem(ns) vao para o modelo por turno; as outras "
+                         "ficaram de fora.",
+                         "Only {n} image(s) go to the model per turn; the others were "
+                         "left out.",
+                         "Solo {n} imagen(es) van al modelo por turno; las otras "
+                         "quedaron fuera."),
     "agent.overflow": (
         "O servidor recusou o tamanho do contexto; vou compactar a conversa e tentar de novo.",
         "The server refused the context size; I will compact the conversation and try again.",
@@ -2035,10 +2122,13 @@ APP = {
     "app.help.escrever": ("ENTER envia. SHIFT+ENTER escreve em outra linha.",
                           "ENTER sends. SHIFT+ENTER writes on another line.",
                           "ENTER envia. SHIFT+ENTER escribe en otra linea."),
-    "app.cmd.anexar": ("@arquivo", "@file", "@archivo"),
-    "app.help.anexar": ("anexa um arquivo ou uma FOTO (png, jpg) para o TEO olhar",
-                        "attaches a file or a PHOTO (png, jpg) for TEO to look at",
-                        "adjunta un archivo o una FOTO (png, jpg) para que el TEO mire"),
+    "app.cmd.anexar": ("Clipe", "Clip", "Clip"),
+    "app.help.anexar": ("o clipe embaixo da caixa de digitar anexa foto, PDF, "
+                        "Word, Excel ou texto para o TEO ler",
+                        "the clip below the typing box attaches a photo, PDF, "
+                        "Word, Excel or text for TEO to read",
+                        "el clip debajo de la caja de escribir adjunta foto, PDF, "
+                        "Word, Excel o texto para que el TEO lea"),
     "app.cmd.parar": ("Parar", "Stop", "Parar"),
     "app.help.parar": ("durante a resposta o botao Enviar vira Parar; ele para na hora",
                        "while answering, the Send button becomes Stop; it stops right away",

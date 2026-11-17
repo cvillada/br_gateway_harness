@@ -6,3 +6,6 @@ prompt_toolkit>=3.0
 # idioma (pt/en/es, ~55 MB) e baixado na primeira vez que a pessoa dita.
 vosk>=0.3.44,<0.4
 sounddevice>=0.4.6
+# Leitura de PDF anexado (clipe da tela e '@' do terminal). Puro Python: instala
+# nos tres sistemas. Sem ela o TEO avisa na tela e segue sem o PDF.
+pypdf>=4.0

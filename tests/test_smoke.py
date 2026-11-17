@@ -3887,6 +3887,72 @@ ok("a frase da opcao existe nas tres linguas",
    all(_i18n316.TEXTS[k][i] for k in ("cfg.janela", "cli.chat.maximizar")
        for i in range(3)))
 
+# ---------- v0.2.34: anexos (clipe da tela e '@' do terminal) ----------------
+# O mesmo leitor serve as duas telas: bgh/anexos.py. Aqui se prova o que o
+# MODELO recebe: documento vira texto colado na mensagem, foto vira parte de
+# imagem - e varias fotos cabem no MESMO turno.
+import tempfile as _tmp334
+
+from bgh.anexos import ler_texto as _ler334
+
+_dir334 = Path(_tmp334.mkdtemp(prefix="anexos334_"))
+_txt334 = _dir334 / "lista.txt"
+_txt334.write_text("comprar arroz e feijao", encoding="utf-8")
+_foto334a = _dir334 / "a.png"
+_foto334a.write_bytes(b"\x89PNG\r\n\x1a\n" + b"1" * 60)
+_foto334b = _dir334 / "b.png"
+_foto334b.write_bytes(b"\x89PNG\r\n\x1a\n" + b"2" * 60)
+
+_ag334 = _Agent26(dict(_cfg299), _OkLLM26(), Gate(dict(_cfg299), ask_d))
+_ag334.run_turn("o que tem nestas fotos?", imagens=[str(_foto334a), str(_foto334b)])
+_msg334 = [m for m in _ag334.messages
+           if m.get("role") == "user" and isinstance(m.get("content"), list)]
+ok("duas fotos viram duas partes de imagem no MESMO turno",
+   bool(_msg334) and len(_msg334[-1]["content"]) == 3
+   and _msg334[-1]["content"][1]["type"] == "image_url"
+   and _msg334[-1]["content"][2]["type"] == "image_url")
+ok("o texto do pedido vem antes das imagens",
+   _msg334[-1]["content"][0]["type"] == "text"
+   and "nestas fotos" in _msg334[-1]["content"][0]["text"])
+
+_sink334 = RecSink()
+_cfg334 = dict(core_cfg)
+_core334 = ChatCore(_cfg334, _sink334, llm=_OkLLM26())
+_core334.submit("leia o anexo", anexos=[str(_txt334)])
+_user334 = [m for m in _core334.agent.messages if m.get("role") == "user"]
+ok("o texto do anexo entra na mensagem do modelo",
+   bool(_user334) and "[arquivo anexado:" in _user334[-1]["content"]
+   and "comprar arroz e feijao" in _user334[-1]["content"])
+ok("o pedido digitado continua junto do anexo",
+   "leia o anexo" in _user334[-1]["content"])
+ok("a tela confirma o anexo aceito (frase do i18n)",
+   any("Arquivo anexado" in l for l in _sink334.lines))
+
+_sink334b = RecSink()
+_core334b = ChatCore(dict(_cfg334), _sink334b, llm=_OkLLM26())
+_core334b.submit("olha as duas", anexos=[str(_txt334), str(_foto334a), str(_foto334b)])
+_lista334 = [m for m in _core334b.agent.messages
+             if m.get("role") == "user" and isinstance(m.get("content"), list)]
+ok("texto e fotos no mesmo turno: 1 parte de texto + 2 de imagem",
+   bool(_lista334) and len(_lista334[-1]["content"]) == 3
+   and "arquivo anexado" in _lista334[-1]["content"][0]["text"])
+
+_sink334c = RecSink()
+_core334c = ChatCore(dict(_cfg334), _sink334c, llm=_OkLLM26())
+_core334c.submit("oi", anexos=[str(_dir334 / "nao_existe.txt")])
+ok("anexo que sumiu nao derruba o turno (avisa e segue)",
+   any("nao esta mais aqui" in l for l in _sink334c.lines)
+   and any("oi" in m.get("content", "") for m in _core334c.agent.messages
+           if m.get("role") == "user"))
+
+_exe334 = _dir334 / "x.exe"
+_exe334.write_bytes(b"MZ")
+ok("tipo fora da lista nao vira texto", _ler334(_exe334)[0] == ""
+   and bool(_ler334(_exe334)[1]))
+ok("PDF sem pypdf tem frase de saida (nao traceback)",
+   "pypdf" in _i18n316.t("anexo.pdf_lib", atualizar="/atualizar")
+   and "{atualizar}" not in _i18n316.t("anexo.pdf_lib", atualizar="/atualizar"))
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 
