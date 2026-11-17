@@ -4053,8 +4053,9 @@ ok("ver_pagina transforma arquivo local em endereco file://",
    _url337.startswith("file://") and _alvo337 == _arquivo337 and _erro337 is None)
 ok("caminho relativo e recusado com frase clara",
    _pagina337._alvo("site.html")[2].startswith("ERRO: caminho incompleto"))
+_sumido337 = _dir334 / "nao_existe_337.html"
 ok("arquivo que nao existe e recusado",
-   "nao achei o arquivo" in (_pagina337._alvo("/nao/existe/x.html")[2] or ""))
+   "nao achei o arquivo" in (_pagina337._alvo(str(_sumido337))[2] or ""))
 
 _stderr337 = (
     "[1:1:1117/1:INFO:CONSOLE:11] \"erro de teste no console\", source: file:///x (11)\n"
@@ -4142,7 +4143,10 @@ ok("a rodada seguinte aconteceu (o modelo viu o print)",
 
 # --- execucao de verdade (se houver navegador nesta maquina) ---
 _exe337, _nome337 = _pagina337.achar_navegador()
-if _exe337 and _shutil337.which("timeout"):
+# CI (GitHub) nao tem navegador de verdade - e o dono pediu para nao travar a
+# matriz por isso. A prova real do ver_pagina/ver_tela roda na maquina de dev.
+_tem_navegador337 = bool(_exe337) and not os.environ.get("CI")
+if _tem_navegador337 and _shutil337.which("timeout"):
     _pag337 = _dir334 / "js.html"
     _pag337.write_text(
         "<!doctype html><html><head><meta charset='utf-8'><title>Painel</title>"
@@ -4360,7 +4364,7 @@ class _Ctx339:
     stop_event = None
 
 
-if _exe337:
+if _tem_navegador337:
     _primeira339 = _pagina337.run({"origem": _url339, "espera": 1}, _Ctx339())
     _segunda339 = _pagina337.run({"origem": _url339, "espera": 1}, _Ctx339())
     ok("site responde o primeiro acesso sem cookie",
@@ -4391,11 +4395,23 @@ class _Popen339:
 
 
 _original_popen339 = _pagina337.subprocess.Popen
+_original_achar339 = _pagina337.achar_navegador
 try:
+    # Fixar um Chromium: o que se testa aqui e o COMANDO, nao o que a maquina tem
+    # (no macOS do CI nao existe Chrome e o caminho seria o Safari).
+    _pagina337.achar_navegador = lambda: ("/usr/bin/google-chrome", "google-chrome")
     _pagina337.subprocess.Popen = _Popen339
     _saida_abrir339 = _pagina337.run_abrir({"url": "https://mail.exemplo.com"}, _Ctx339())
+
+    # E o caminho do Safari (Mac sem Chrome): abre janela e AVISA que nao guarda.
+    _pagina337.achar_navegador = lambda: ("", "safari")
+    _comando_safari339 = {}
+    _pagina337.subprocess.Popen = (
+        lambda comando, **k: _comando_safari339.setdefault("argv", comando))
+    _saida_safari339 = _pagina337.run_abrir({"url": "https://mail.exemplo.com"}, _Ctx339())
 finally:
     _pagina337.subprocess.Popen = _original_popen339
+    _pagina337.achar_navegador = _original_achar339
 
 ok("abrir_navegador usa o PERFIL do TEO (nao o navegador pessoal da pessoa)",
    any("--user-data-dir=" in str(arg) for arg in _comando339.get("argv") or [])
@@ -4410,6 +4426,10 @@ ok("abrir_navegador recusa endereco que nao e http(s)",
    _pagina337.run_abrir({"url": "/etc/passwd"}, _Ctx339()).startswith("ERRO"))
 ok("abrir_navegador esta registrada no ToolBox",
    "abrir_navegador" in _ag338.tools.handlers)
+ok("no Mac sem Chrome o abrir_navegador usa o Safari e avisa que nao guarda login",
+   any("Safari" in str(arg) or "safari" in str(arg).lower()
+       for arg in _comando_safari339.get("argv") or [])
+   and "NAO fica guardado" in _saida_safari339)
 
 # --- comando /site: estado, abrir e ESQUECER (a trava de privacidade) ---
 _core_site339 = ChatCore(dict(_cfg334), RecSink(), llm=_OkLLM26())
