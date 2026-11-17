@@ -339,7 +339,7 @@ usarlo:
   sesiones). El TEO nunca teclea contrasenas, nunca hace clic en "entrar" y no
   automatiza sesion: quien entra eres tu.
 - El navegador del TEO usa un perfil propio (`~/.bgh/navegador`), separado de tu
-  navegador personal - no toca tus contrasenas ni tus pestañas.
+  navegador personal - no toca tus contrasenas ni tus pestanas.
 - Las tablas de la respuesta ahora salen como tabla de verdad en la pantalla del
   navegador, y la ruta de un documento (incluido .html) se vuelve un enlace que
   abre en otra ventana.
