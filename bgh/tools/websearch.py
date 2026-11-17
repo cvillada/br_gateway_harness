@@ -147,6 +147,20 @@ class _TextExtractor(HTMLParser):
             self.parts.append(data.strip())
 
 
+def html_para_texto(html_text: str) -> str:
+    """Texto visivel de um HTML (sem tags, sem script/style), com quebras.
+
+    Usado pelo web_extract e pelo ver_pagina: as duas telas leem a pagina do
+    mesmo jeito, e o teste da extracao vale para as duas.
+    """
+    parser = _TextExtractor()
+    try:
+        parser.feed(html_text or "")
+    except Exception:  # noqa: BLE001 - HTML quebrado nao pode derrubar a ferramenta
+        pass
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(parser.parts)).strip()
+
+
 def web_extract(args: dict, ctx) -> str:
     url = str(args.get("url", "")).strip()
     if not url.startswith(("http://", "https://")):

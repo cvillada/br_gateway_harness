@@ -4035,6 +4035,143 @@ ok("cartilha .html entra na lista de documentos clicaveis",
 ok("JS e SVG continuam fora da lista (nunca sao documento)",
    ".js" not in _DOC336 and ".svg" not in _DOC336)
 
+# ---------- v0.2.37: ver_pagina (navegador de verdade) -----------------------
+# O TEO abre o arquivo/URL num navegador: DOM depois do JavaScript, erros do
+# console e print. E o mesmo primitivo que evita o modelo improvisar scraping.
+import shutil as _shutil337
+
+from bgh.tools import pagina as _pagina337
+
+_url337, _alvo337, _erro337 = _pagina337._alvo("https://exemplo.com/a?b=1")
+ok("ver_pagina aceita endereco http(s) sem tocar no disco",
+   _url337 == "https://exemplo.com/a?b=1" and _alvo337 is None and _erro337 is None)
+
+_arquivo337 = _dir334 / "site.html"
+_arquivo337.write_text("<h1>oi</h1>", encoding="utf-8")
+_url337, _alvo337, _erro337 = _pagina337._alvo(str(_arquivo337))
+ok("ver_pagina transforma arquivo local em endereco file://",
+   _url337.startswith("file://") and _alvo337 == _arquivo337 and _erro337 is None)
+ok("caminho relativo e recusado com frase clara",
+   _pagina337._alvo("site.html")[2].startswith("ERRO: caminho incompleto"))
+ok("arquivo que nao existe e recusado",
+   "nao achei o arquivo" in (_pagina337._alvo("/nao/existe/x.html")[2] or ""))
+
+_stderr337 = (
+    "[1:1:1117/1:INFO:CONSOLE:11] \"erro de teste no console\", source: file:///x (11)\n"
+    "[1:1:1117/1:INFO:CONSOLE:13] \"Uncaught ReferenceError: x is not defined\", "
+    "source: file:///x (13)\n"
+    "[1:1:1117/1:VERBOSE1:components/x.cc:1] ruido que nao e console\n")
+_erros337 = _pagina337._erros_console(_stderr337)
+ok("erros do console sao extraidos com a linha",
+   len(_erros337) == 2 and "linha 13" in _erros337[1]
+   and "naoExiste" not in _erros337[1] and "x is not defined" in _erros337[1])
+ok("ruido do log do navegador nao entra no resultado",
+   not any("ruido" in e for e in _erros337))
+ok("mensagem interna do Chrome (WebGL/sem login) nao vira erro da pagina",
+   _pagina337._erros_console(
+       "[1:1:x:INFO:CONSOLE:0] \"No available adapters.\", source: x (0)\n"
+   ) == [])
+ok("falha de carga do navegador e reconhecida (nao vira 'pagina vazia')",
+   _pagina337._falha_carga(
+       "[1:1:x:ERROR:components/headless/x.cc:403] Page load failed: "
+       "net::ERR_HTTP_RESPONSE_CODE_FAILURE\n")
+   == "net::ERR_HTTP_RESPONSE_CODE_FAILURE")
+ok("pagina que carregou bem nao tem falha", _pagina337._falha_carga("tudo certo") is None)
+_ua337 = _pagina337._user_agent(_pagina337.achar_navegador()[0] or "google-chrome")
+ok("o navegador e chamado com UA normal (site grande recusa HeadlessChrome)",
+   "Chrome/" in _ua337 and "HeadlessChrome" not in _ua337)
+
+_saida337 = _pagina337._montar("file:///tmp/x.html", "google-chrome",
+                               "<html><head><title>Relatorio</title></head><body>"
+                               "<p>total 42</p></body></html>", _erros337,
+                               Path("/tmp/nao_existe.png"))
+ok("o resultado diz pagina, navegador, titulo, erros e texto",
+   "PAGINA ABERTA: file:///tmp/x.html" in _saida337
+   and "TITULO: Relatorio" in _saida337 and "ERROS DO CONSOLE (2)" in _saida337
+   and "total 42" in _saida337)
+ok("print inexistente nao vira marca IMAGEM (nada de imagem fantasma)",
+   "IMAGEM: " not in _saida337)
+ok("pagina sem texto avisa que ficou vazia (JS nao montou nada)",
+   "ficou VAZIA" in _pagina337._montar("x", "chrome", "<html></html>", [], None))
+
+ok("a ferramenta esta registrada no ToolBox",
+   "ver_pagina" in _Agent26(dict(_cfg299), _OkLLM26(),
+                            Gate(dict(_cfg299), ask_d)).tools.handlers)
+ok("a descricao da ferramenta existe nas tres linguas",
+   all(_i18n316.TEXTS["tool.ver_pagina.desc"][i] for i in range(3)))
+
+# --- o print volta para o modelo como IMAGEM (resultado de ferramenta nao pode) ---
+from bgh.agent import _imagens_do_resultado as _prints337
+
+ok("a marca IMAGEM do resultado vira caminho de print",
+   _prints337("PAGINA OK\nIMAGEM: " + str(_foto334a)) == [str(_foto334a)])
+ok("marca com arquivo que nao existe e ignorada",
+   _prints337("IMAGEM: /nao/existe.png") == [])
+
+
+class _LLMFerramenta337:
+    """Primeira rodada pede ver_pagina; a segunda responde."""
+
+    def __init__(self):
+        self.rodadas = 0
+
+    def chat(self, messages, tools=None):
+        self.rodadas += 1
+        if self.rodadas == 1:
+            return {"role": "assistant", "content": "", "tool_calls": [
+                {"id": "c1", "type": "function",
+                 "function": {"name": "ver_pagina",
+                              "arguments": "{\"origem\": \"/tmp/x.html\"}"}}]}
+        return {"role": "assistant", "content": "olhei a pagina"}
+
+    def summarize(self, text):
+        return ""
+
+
+_ag337 = _Agent26(dict(_cfg299), _LLMFerramenta337(), Gate(dict(_cfg299), ask_d))
+_ag337.tools.dispatch = lambda nome, args: ("PAGINA ABERTA: x\nERROS DO CONSOLE: nenhum\n"
+                                            "IMAGEM: " + str(_foto334a))
+_resp337 = _ag337.run_turn("confere a pagina que voce fez")
+_msg_print337 = [m for m in _ag337.messages
+                 if m.get("role") == "user" and isinstance(m.get("content"), list)]
+ok("depois da ferramenta, o print entra como imagem para o modelo",
+   bool(_msg_print337)
+   and _msg_print337[-1]["content"][1]["type"] == "image_url")
+ok("a rodada seguinte aconteceu (o modelo viu o print)",
+   _resp337 == "olhei a pagina")
+
+# --- execucao de verdade (se houver navegador nesta maquina) ---
+_exe337, _nome337 = _pagina337.achar_navegador()
+if _exe337 and _shutil337.which("timeout"):
+    _pag337 = _dir334 / "js.html"
+    _pag337.write_text(
+        "<!doctype html><html><head><meta charset='utf-8'><title>Painel</title>"
+        "</head><body><p id='a'>carregando</p><script>"
+        "document.getElementById('a').textContent = 'total de 42 pedidos';"
+        "console.error('falha simulada');"
+        "</script></body></html>", encoding="utf-8")
+
+    class _Ctx337:
+        class gate:
+            @staticmethod
+            def path_ok(caminho):
+                return True, None
+
+        stop_event = None
+
+    _saida_real337 = _pagina337.run({"origem": str(_pag337)}, _Ctx337())
+    ok("ver_pagina roda o JavaScript da pagina (DOM renderizado)",
+       "total de 42 pedidos" in _saida_real337 and "Painel" in _saida_real337)
+    ok("ver_pagina traz o erro do console da pagina",
+       "falha simulada" in _saida_real337)
+    _print337 = [l[len("IMAGEM: "):] for l in _saida_real337.splitlines()
+                 if l.startswith("IMAGEM: ")]
+    ok("ver_pagina tira o print da tela",
+       bool(_print337) and Path(_print337[0]).is_file()
+       and Path(_print337[0]).stat().st_size > 1000)
+else:
+    print("AVISO - sem navegador nesta maquina: o teste real do ver_pagina foi pulado")
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

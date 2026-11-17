@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..i18n import t
-from . import documents, files, memory, packages, python_exec, skills, terminal, websearch
+from . import (documents, files, memory, packages, pagina, python_exec, skills,
+               terminal, websearch)
 
 
 def localize_specs(specs: list) -> list:
@@ -65,6 +66,7 @@ class ToolBox:
             "search_files": files.search_files,
             "web_search": websearch.web_search,
             "web_extract": websearch.web_extract,
+            "ver_pagina": pagina.run,
             "memory": memory.run,
             "skill": skills.load_skill_tool,
             "make_document": documents.make_document,
@@ -81,6 +83,7 @@ class ToolBox:
             files.SEARCH_SPEC,
             websearch.SEARCH_SPEC,
             websearch.EXTRACT_SPEC,
+            pagina.SPEC,
             memory.SPEC,
             skills.SPEC,
             documents.SPEC,

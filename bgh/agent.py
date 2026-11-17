@@ -6,6 +6,7 @@ persistencia da conversa em ~/.bgh/session.json (retoma de onde parou).
 
 import json
 import threading
+from pathlib import Path
 from typing import Callable
 
 from . import i18n
@@ -28,6 +29,29 @@ VISION_MARKERS = ("image", "vision", "multimodal", "image_url", "media type",
 # Teto de fotos por turno: cada uma vira base64 no pedido (33% maior) e o
 # contexto do modelo local e curto. Acima disso a tela avisa que ficaram de fora.
 MAX_IMAGENS = 4
+
+# Linha que uma FERRAMENTA usa para dizer "olhei e tirei este print". O resultado
+# de ferramenta nao carrega imagem (servidor local recusa): o agent le esta marca
+# e manda o print como mensagem do usuario, que e o unico jeito que funciona em
+# qualquer provedor. Usada pelo ver_pagina (bgh/tools/pagina.py).
+MARCA_IMAGEM = "IMAGEM: "
+# Prints por rodada: dois bastam para "gerou, abriu, olhou" e nao incham o contexto.
+MAX_PRINTS_RODADA = 2
+
+
+def _imagens_do_resultado(resultado: str) -> list[str]:
+    """Caminhos de print que uma ferramenta devolveu, na ordem."""
+    achados: list[str] = []
+    for linha in str(resultado or "").splitlines():
+        if not linha.startswith(MARCA_IMAGEM):
+            continue
+        caminho = linha[len(MARCA_IMAGEM):].strip()
+        try:
+            if caminho and Path(caminho).is_file():
+                achados.append(caminho)
+        except OSError:
+            continue
+    return achados
 
 
 def _parece_falta_de_visao(exc: BaseException) -> bool:
@@ -275,6 +299,7 @@ class Agent:
                 self._save_session()
                 return msg.get("content", "")
             user_stopped = False
+            prints: list[str] = []
             for tc in tool_calls:
                 fn = tc["function"]
                 if self.stop_event.is_set():
@@ -294,6 +319,7 @@ class Agent:
                     if self.on_event:
                         self.on_event(fn["name"], fn.get("arguments", "")[:120])
                     result = self.tools.dispatch(fn["name"], fn.get("arguments", ""))
+                    prints.extend(_imagens_do_resultado(result))
                 fail_streak = (
                     fail_streak + 1
                     if result.startswith(("ERRO", "BLOQUEADO", "FALHOU", "LOOP"))
@@ -309,6 +335,12 @@ class Agent:
             if user_stopped:
                 self._save_session()
                 return STOPPED_NOTE
+            if prints:
+                # Ferramenta que OLHOU uma tela: o print entra como imagem para o
+                # modelo (resultado de ferramenta nao carrega imagem). Sem visao do
+                # modelo, _anexar_imagens avisa e segue so com o texto.
+                self._anexar_imagens(t("agent.tool_image", n=len(prints)),
+                                     prints[:MAX_PRINTS_RODADA])
             self._drain_steers()  # steering do meio do turno chega entre as rodadas
             rounds += 1
             if self._compress_if_needed():

@@ -1041,6 +1041,12 @@ AGENT = {
     "agent.image_fail": ("nao consegui preparar a imagem; seguindo so com o texto.",
                          "I could not prepare the image; going on with text only.",
                          "no pude preparar la imagen; sigo solo con el texto."),
+    "agent.tool_image": ("Print da tela que a ferramenta acabou de tirar ({n}). "
+                         "Olhe a imagem junto com o texto da pagina.",
+                         "Screenshot just taken by the tool ({n}). Look at the image "
+                         "together with the page text.",
+                         "Captura que la herramienta acaba de hacer ({n}). Mira la "
+                         "imagen junto con el texto de la pagina."),
     "agent.image_more": ("So {n} imagem(ns) vao para o modelo por turno; as outras "
                          "ficaram de fora.",
                          "Only {n} image(s) go to the model per turn; the others were "
@@ -1752,6 +1758,37 @@ TOOLS = {
     "tool.web_search.arg.top_k": ("Quantidade de resultados (padrao 6, max 10)",
                                   "Number of results (default 6, max 10)",
                                   "Cantidad de resultados (predeterminado 6, max 10)"),
+    "tool.ver_pagina.desc": (
+        "Abre uma pagina num navegador de verdade (arquivo .html local ou endereco "
+        "http/https) e devolve o texto que aparece DEPOIS do JavaScript rodar, os "
+        "erros do console e um print da tela. Use para conferir o que voce mesmo "
+        "construiu ou para ler pagina que monta o conteudo por JavaScript.",
+        "Opens a page in a real browser (local .html file or http/https address) and "
+        "returns the text that appears AFTER JavaScript runs, the console errors and a "
+        "screenshot. Use it to check what you built or to read a page that builds its "
+        "content with JavaScript.",
+        "Abre una pagina en un navegador de verdad (archivo .html local o direccion "
+        "http/https) y devuelve el texto que aparece DESPUES de que corre el "
+        "JavaScript, los errores de consola y una captura de pantalla. Usalo para "
+        "revisar lo que construiste o para leer pagina que arma el contenido con "
+        "JavaScript."),
+    "tool.ver_pagina.arg.origem": (
+        "Caminho completo de um arquivo .html (ex.: /home/ana/site/index.html) ou "
+        "endereco http(s)",
+        "Full path of an .html file (e.g. /home/ana/site/index.html) or an http(s) "
+        "address",
+        "Ruta completa de un archivo .html (ej.: /home/ana/site/index.html) o "
+        "direccion http(s)"),
+    "tool.ver_pagina.arg.largura": ("Largura da janela em pixels (padrao 1280)",
+                                    "Window width in pixels (default 1280)",
+                                    "Ancho de la ventana en pixels (predeterminado 1280)"),
+    "tool.ver_pagina.arg.altura": ("Altura da janela em pixels (padrao 800)",
+                                   "Window height in pixels (default 800)",
+                                   "Alto de la ventana en pixels (predeterminado 800)"),
+    "tool.ver_pagina.arg.espera": (
+        "Segundos para o JavaScript rodar antes de olhar (padrao 3, maximo 15)",
+        "Seconds for JavaScript to run before looking (default 3, max 15)",
+        "Segundos para que corra el JavaScript antes de mirar (predeterminado 3, max 15)"),
     "tool.web_extract.desc": (
         "Baixa uma pagina web e devolve o texto do conteudo (para confirmar informacao da "
         "busca).",

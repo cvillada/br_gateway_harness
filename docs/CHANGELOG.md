@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.37
+
+O TEO abre a pagina num navegador de verdade e OLHA o que apareceu.
+
+- Ferramenta nova `ver_pagina`: recebe o caminho de um .html local ou um endereco
+  http(s), abre no Chrome/Chromium/Edge/Brave em modo headless e devolve:
+  o texto que so existe DEPOIS do JavaScript rodar, os erros do console (com a
+  linha) e um print da tela.
+- O print entra no turno como IMAGEM para o modelo (resultado de ferramenta nao
+  carrega imagem): e o mesmo caminho da foto anexada, com aviso quando o modelo
+  nao tem visao. Serve para o TEO conferir o que ele mesmo construiu e para ler
+  pagina que monta o conteudo por JavaScript - sem o modelo improvisar scraping.
+- Sem visao tambem vale: DOM em texto + erros de console provam o que a pagina
+  mostra ("o botao existe", "deu ReferenceError na linha 13", "a pagina ficou
+  vazia").
+- Windows usa o Edge que ja existe; Linux usa o Chrome/Chromium do PATH. No macOS
+  sem Chrome/Edge o TEO usa o SAFARI (janela visivel + print da regiao da janela)
+  e diz no resultado o que ele NAO consegue ler (console e JS de pagina remota).
+- Print vai para ~/.bgh/paginas, apagado 24h depois; navegador tem teto de 60s e
+  e morto com os filhos (nada de processo orfao no cliente).
+
 ## 0.2.36
 
 Tabela de verdade na tela e cartilha .html clicavel (achados testando a 0.2.35).
