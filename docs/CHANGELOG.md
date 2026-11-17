@@ -16,6 +16,10 @@ No Mac o navegador e o Safari - e o TEO agora le a pagina de verdade nele.
 - `/site` no Mac passa a explicar essa rota, em vez de mandar instalar Chrome.
 - O print continua sendo o da REGIAO da janela do Safari (nao da tela inteira).
 
+Suite local: 623 verificacoes gerais + 181 da tela. O Safari foi provado com
+osascript falso (texto da aba, titulo e a permissao desligada); o Safari REAL so
+se prova no Mac.
+
 ## 0.2.40
 
 Tela do navegador no tamanho que cabe no seu notebook - ja na abertura.

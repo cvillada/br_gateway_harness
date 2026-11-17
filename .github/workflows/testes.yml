@@ -32,6 +32,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Job travado nao pode segurar slot de fila ate o limite do repositorio.
     timeout-minutes: 20
+    # macOS: o runner arm64 do GitHub e cancelado por falta de maquina com
+    # frequencia ("job was not acquired by Runner ... capacity constraints").
+    # Nao bloqueia o run - o job continua VISIVEL e vermelho quando falha de
+    # verdade, e a conferencia antes de publicar e job por job (acordo 17/11).
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
