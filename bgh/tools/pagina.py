@@ -66,6 +66,27 @@ SPEC = {
     },
 }
 
+SPEC_ABRIR = {
+    "type": "function",
+    "function": {
+        "name": "abrir_navegador",
+        "description": (
+            "Abre uma janela do navegador DO TEO para a PESSOA fazer login num site "
+            "(so quando ela pede para o TEO ler uma pagina que exige conta). O TEO nao "
+            "digita senha e nao clica em entrar: quem entra e a pessoa. Depois de "
+            "entrar ela FECHA a janela e o ver_pagina le o site logado pelo texto."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string",
+                        "description": "Endereco http(s) do site onde a pessoa vai entrar"},
+            },
+            "required": ["url"],
+        },
+    },
+}
+
 MAX_TEXTO = 8000
 TIMEOUT_S = 60          # navegador travado nao pode segurar o turno para sempre
 MAX_ESPERA_S = 15
@@ -108,6 +129,87 @@ def pasta() -> Path:
     alvo = BGH_HOME / "paginas"
     alvo.mkdir(parents=True, exist_ok=True)
     return alvo
+
+
+def perfil() -> Path:
+    """Perfil PROPRIO do navegador do TEO (cookies de login ficam aqui).
+
+    Fica separado do navegador da pessoa de proposito: o TEO nunca entra no perfil
+    pessoal (que tem banco, e-mail, tudo). A pessoa loga UMA vez numa janela do
+    TEO (`abrir_navegador`) e a partir dali o `ver_pagina` le a pagina logada como
+    TEXTO, sem imagem e sem depender de a tela estar na frente.
+    """
+    alvo = BGH_HOME / "navegador" / "perfil"
+    alvo.mkdir(parents=True, exist_ok=True)
+    return alvo
+
+
+def esquecer_logins() -> int:
+    """Apaga o perfil (cookies, sessoes). Devolve quantos arquivos saiu.
+
+    Usado pelo comando /site esquecer: quem decide apagar e a PESSOA, nunca o
+    modelo - por isso e comando, nao ferramenta.
+    """
+    import shutil
+
+    alvo = BGH_HOME / "navegador"
+    if not alvo.exists():
+        return 0
+    total = sum(1 for item in alvo.rglob("*") if item.is_file())
+    try:
+        shutil.rmtree(alvo)
+    except OSError:
+        return 0
+    return total
+
+
+def perfil_em_uso(erro: str) -> bool:
+    """True quando o Chrome recusou por ja existir outra janela com o perfil."""
+    texto = (erro or "").lower()
+    return ("processsingleton" in texto or "profile appears to be in use" in texto
+            or "singletonlock" in texto)
+
+
+def _url_usa_perfil(url: str) -> bool:
+    """Perfil so vale para site (http/https). Arquivo local (TDD) fica de fora:
+    nao precisa de cookie e nao corre risco de travar com a janela de login aberta.
+    """
+    return url.lower().startswith(("http://", "https://"))
+
+
+def abrir_janela(url: str) -> tuple[bool, str]:
+    """Abre uma janela VISIVEL do navegador do TEO para a pessoa fazer login.
+
+    Nao espera nada: o turno continua. Quem digita a senha e a pessoa, na janela
+    do TEO - o agente nao ve, nao digita e nao automatiza login.
+    """
+    exe, nome = achar_navegador()
+    if not exe:
+        if nome == "safari":
+            try:
+                subprocess.Popen(["open", "-a", "Safari", url], start_new_session=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True, ("safari: janela aberta no Safari (sem perfil proprio do "
+                              "TEO neste sistema - o login NAO fica guardado).")
+            except OSError as exc:
+                return False, f"nao consegui abrir o Safari: {exc}"
+        return False, "nao achei navegador nesta maquina (Chrome, Chromium, Edge ou Brave)"
+    comando = [
+        exe,
+        f"--user-data-dir={perfil()}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        f"--window-size=1280,900",
+        url,
+    ]
+    try:
+        subprocess.Popen(comando, start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+                            if os.name == "nt" else {}))
+    except OSError as exc:
+        return False, f"nao consegui abrir o navegador: {exc}"
+    return True, nome
 
 
 def limpar(horas: float = 24.0) -> int:
@@ -186,6 +288,35 @@ def _clamp(valor: int, minimo: int, maximo: int) -> int:
     return max(minimo, min(int(valor), maximo))
 
 
+def run_abrir(args: dict, ctx) -> str:
+    """Ferramenta abrir_navegador: janela visivel para a pessoa entrar no site."""
+    if stopped(ctx):
+        return STOPPED_NOTE
+    url = str(args.get("url") or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return "ERRO: informe o endereco do site comecando com http:// ou https://."
+    ok, detalhe = abrir_janela(url)
+    if not ok:
+        return f"ERRO: {detalhe}"
+    linhas = [
+        f"JANELA ABERTA: {url}",
+        f"NAVEGADOR: {detalhe}",
+        "",
+        "PASSOS PARA A PESSOA (repita isso em palavras simples):",
+        "1. Na janela que abriu, entre no site com a conta dela. A senha e dela - "
+        "eu nao vejo, nao digito e nao guardo. Se o site oferecer \"manter "
+        "conectado\", ela deve marcar (cookie de sessao sozinho nao fica guardado).",
+        "2. Quando aparecer a pagina que ela quer mostrar, FECHAR a janela.",
+        "3. Depois pedir de novo para eu ler a pagina, que eu leio o texto ja logado.",
+        "",
+        "Enquanto a janela estiver aberta eu NAO consigo ler o site (o perfil fica "
+        "em uso) - o passo 2 e obrigatorio.",
+    ]
+    if detalhe.startswith("safari"):
+        linhas.append("ATENCAO: neste Mac o login NAO fica guardado no perfil do TEO.")
+    return "\n".join(linhas)
+
+
 def _alvo(origem: str) -> tuple[str, Path | None, str | None]:
     """(url para o navegador, arquivo local ou None, erro em texto)."""
     bruto = (origem or "").strip()
@@ -239,8 +370,12 @@ def _chromium(exe: str, url: str, png: Path, largura: int, altura: int,
         f"--virtual-time-budget={espera_ms}",
         "--dump-dom",
         f"--screenshot={png}",
-        url,
     ]
+    if _url_usa_perfil(url):
+        # Perfil proprio do TEO: site que a pessoa logou em abrir_navegador abre
+        # aqui JA logado (cookie guardado no disco). Arquivo local nao usa perfil.
+        comando.append(f"--user-data-dir={perfil()}")
+    comando.append(url)
     try:
         proc = subprocess.Popen(
             comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -404,6 +539,10 @@ def run(args: dict, ctx) -> str:
                                            espera * 1000)
         if erro_exec:
             return erro_exec
+        if perfil_em_uso(stderr) and not (html or "").strip():
+            return ("ERRO: a janela do navegador do TEO esta aberta com o login. "
+                    "Peca para a pessoa FECHAR essa janela e depois abrir a pagina de "
+                    "novo - enquanto ela estiver aberta eu nao consigo ler o site.")
         falha = _falha_carga(stderr)
         if falha and not (html or "").strip():
             return (f"ERRO: o navegador nao conseguiu carregar {origem} ({falha}). "

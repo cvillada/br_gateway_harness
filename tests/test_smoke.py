@@ -4314,6 +4314,158 @@ ok("o ciclo de TDD (ver_pagina) nao pede licenca nenhuma",
 ok("...e a pagina (ou o motivo de nao abrir) veio no resultado",
    "ciclo de TDD" in _saida_tdd338 or _saida_tdd338.startswith("ERRO"))
 
+# ---------- v0.2.39: navegador proprio do TEO (site com login) ---------------
+# A pessoa loga UMA vez numa janela do TEO; depois o ver_pagina le o site logado
+# como TEXTO (sem imagem). A prova que importa: o cookie continua valendo de uma
+# execucao para outra (DUAS rodadas de navegador, processo novo cada uma).
+import http.server as _http339
+import threading as _th339
+
+
+class _Cozinha339(_http339.BaseHTTPRequestHandler):
+    """Servidor de teste: na primeira visita MANDA o cookie; depois COBRA."""
+
+    def do_GET(self):
+        cookie = self.headers.get("Cookie") or ""
+        corpo = ("<html><head><title>Areado</title></head><body><p>cookie: "
+                 + (cookie or "nenhum") + "</p></body></html>").encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        if "sessao=abc123" not in cookie:
+            # Max-Age = cookie PERSISTENTE (o "manter conectado" dos sites).
+            # Cookie de sessao (sem validade) o Chrome joga fora ao fechar - por
+            # isso a mensagem do TEO pede para marcar "manter conectado".
+            self.send_header("Set-Cookie", "sessao=abc123; Max-Age=3600; Path=/")
+        self.send_header("Content-Length", str(len(corpo)))
+        self.end_headers()
+        self.wfile.write(corpo)
+
+    def log_message(self, *args):   # sem barulho no log do teste
+        pass
+
+
+_servidor339 = _http339.ThreadingHTTPServer(("127.0.0.1", 0), _Cozinha339)
+_th339.Thread(target=_servidor339.serve_forever, daemon=True).start()
+_porta339 = _servidor339.server_address[1]
+_url339 = f"http://127.0.0.1:{_porta339}/"
+
+
+class _Ctx339:
+    class gate:
+        @staticmethod
+        def path_ok(caminho):
+            return True, None
+
+    stop_event = None
+
+
+if _exe337:
+    _primeira339 = _pagina337.run({"origem": _url339, "espera": 1}, _Ctx339())
+    _segunda339 = _pagina337.run({"origem": _url339, "espera": 1}, _Ctx339())
+    ok("site responde o primeiro acesso sem cookie",
+       "cookie: nenhum" in _primeira339)
+    ok("o cookie do login SOBREVIVE de uma execucao para outra (perfil do TEO)",
+       "sessao=abc123" in _segunda339)
+    ok("o perfil do navegador do TEO fica dentro do BGH_HOME",
+       str(_pagina337.perfil()).startswith(str(_pagina337.BGH_HOME))
+       and _pagina337.perfil().is_dir())
+    ok("arquivo local (TDD) NAO usa o perfil do navegador",
+       _pagina337._url_usa_perfil("file:///tmp/x.html") is False
+       and _pagina337._url_usa_perfil("https://exemplo.com") is True)
+else:
+    print("AVISO - sem navegador: a prova de cookie do perfil foi pulada")
+_servidor339.shutdown()
+_servidor339.server_close()
+
+# --- ferramenta abrir_navegador (janela para a pessoa entrar) ---
+_comando339 = {}
+
+
+class _Popen339:
+    """Captura o comando em vez de abrir navegador de verdade no teste."""
+
+    def __init__(self, comando, **kwargs):
+        _comando339["argv"] = comando
+        _comando339["kwargs"] = kwargs
+
+
+_original_popen339 = _pagina337.subprocess.Popen
+try:
+    _pagina337.subprocess.Popen = _Popen339
+    _saida_abrir339 = _pagina337.run_abrir({"url": "https://mail.exemplo.com"}, _Ctx339())
+finally:
+    _pagina337.subprocess.Popen = _original_popen339
+
+ok("abrir_navegador usa o PERFIL do TEO (nao o navegador pessoal da pessoa)",
+   any("--user-data-dir=" in str(arg) for arg in _comando339.get("argv") or [])
+   and str(_pagina337.perfil()) in " ".join(_comando339.get("argv") or []))
+ok("abrir_navegador abre janela VISIVEL (sem --headless)",
+   not any("--headless" in str(arg) for arg in _comando339.get("argv") or []))
+ok("abrir_navegador entrega os passos para a pessoa",
+   "PASSOS PARA A PESSOA" in _saida_abrir339 and "FECHAR a janela" in _saida_abrir339)
+ok("abrir_navegador avisa que a janela aberta impede a leitura",
+   "NAO consigo ler" in _saida_abrir339)
+ok("abrir_navegador recusa endereco que nao e http(s)",
+   _pagina337.run_abrir({"url": "/etc/passwd"}, _Ctx339()).startswith("ERRO"))
+ok("abrir_navegador esta registrada no ToolBox",
+   "abrir_navegador" in _ag338.tools.handlers)
+
+# --- comando /site: estado, abrir e ESQUECER (a trava de privacidade) ---
+_core_site339 = ChatCore(dict(_cfg334), RecSink(), llm=_OkLLM26())
+
+_linhas339: list[str] = []
+_core_site339.sink.line = lambda texto, style=None: _linhas339.append(str(texto))
+
+_pagina337.perfil().joinpath("Default").mkdir(parents=True, exist_ok=True)
+_pagina337.perfil().joinpath("Default", "Cookies").write_bytes(b"cookie falso")
+_core_site339.submit("/site")
+ok("/site mostra que ha sessao guardada",
+   any("sessao guardados" in linha or "arquivo(s) de sessao" in linha
+       for linha in _linhas339))
+
+_linhas339.clear()
+_core_site339.submit("/site esquecer")
+ok("/site esquecer apaga o perfil e diz quantos arquivos saiu",
+   any("Sessoes apagadas" in linha for linha in _linhas339)
+   and not (_pagina337.BGH_HOME / "navegador").exists())
+
+_linhas339.clear()
+_core_site339.submit("/site")
+ok("/site sem nada guardado ensina o passo a passo",
+   any("Nenhum login guardado" in linha for linha in _linhas339)
+   and any("abrir <endereco>" in linha for linha in _linhas339))
+
+_linhas339.clear()
+_original_abrir339 = _pagina337.abrir_janela
+try:
+    # Abrir navegador de verdade aqui abriria uma janela na cara do dono.
+    _pagina337.abrir_janela = lambda url: (True, "google-chrome")
+    _core_site339.submit("/site abrir https://mail.exemplo.com")
+    ok("/site abrir entrega o passo a passo do login",
+       any("Abri uma janela" in linha and "FECHE a janela" in linha
+           for linha in _linhas339))
+    _pagina337.abrir_janela = lambda url: (False, "sem navegador")
+    _linhas339.clear()
+    _core_site339.submit("/site abrir https://mail.exemplo.com")
+    ok("/site abrir avisa quando NAO deu para abrir (nao finge sucesso)",
+       any("Nao consegui abrir" in linha for linha in _linhas339))
+finally:
+    _pagina337.abrir_janela = _original_abrir339
+
+_linhas339.clear()
+_core_site339.submit("/site xyz")
+ok("/site com argumento estranho mostra o uso",
+   any("Use:" in linha for linha in _linhas339))
+
+# --- o prompt das ferramentas nao muda o resto (pesquisa/programacao) ---
+_specs339 = {spec["function"]["name"] for spec in _ag338.tools.specs}
+ok("as ferramentas de sempre continuam todas registradas",
+   {"run_command", "run_python", "read_file", "write_file", "search_files",
+    "web_search", "web_extract", "memory", "skill", "make_document",
+    "instalar_pacote", "limpar_apoio", "ver_pagina", "ver_tela",
+    "abrir_navegador"} <= _specs339)
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

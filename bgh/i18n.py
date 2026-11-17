@@ -57,6 +57,7 @@ ALIASES = {
     "new": ("nova", "nov", "new", "nuevo"),
     "mem": ("mem", "memory", "memoria"),
     "skills": ("skills", "habilidades"),
+    "site": ("site", "sites", "logins"),
     "model": ("modelo", "modelos", "model", "models"),
     "provider": ("provedor", "provedores", "provider", "providers",
                  "proveedor", "proveedores"),
@@ -104,6 +105,7 @@ CMD = {
     "dictate": ("/ditar", "/dictate", "/dictar"),
     "about": ("/sobre", "/about", "/acerca"),
     "screen": ("/tela", "/screen", "/pantalla"),
+    "site": ("/site", "/site", "/site"),
 }
 
 
@@ -295,6 +297,14 @@ HELP_SECTIONS = [
         ("/skills", "/skills", "/habilidades",
          "lista as skills conhecidas", "lists the known skills",
          "lista las skills conocidas"),
+        ("/site", "/site", "/site",
+         "sites com login: /site mostra o estado, /site abrir <endereco> abre uma "
+         "janela do navegador do TEO para VOCE entrar, /site esquecer apaga as sessoes",
+         "login sites: /site shows the state, /site open <address> opens a TEO "
+         "browser window for YOU to log in, /site forget erases the sessions",
+         "sitios con login: /site muestra el estado, /site abrir <direccion> abre "
+         "una ventana del navegador del TEO para que TU entres, /site esquecer "
+         "borra las sesiones"),
         ("/lingua", "/language", "/idioma",
          "troca o idioma da tela: Portugues, English ou Espanol",
          "switches the screen language: Portugues, English or Espanol",
@@ -651,6 +661,69 @@ CHAT = {
                      "Conversacion reiniciada (memoria y skills conservadas)."),
     "cmd.skills.empty": ("(nenhuma skill ainda)", "(no skills yet)",
                          "(ninguna skill todavia)"),
+    # /site: navegador proprio do TEO para site com login (v0.2.39).
+    "cmd.site.status_vazio": (
+        "Nenhum login guardado no navegador do TEO. Para entrar num site: {cmd} "
+        "abrir <endereco> - a janela abre, VOCE entra com a sua conta e fecha; "
+        "depois eu leio a pagina logada.",
+        "No login stored in the TEO browser. To log in to a site: {cmd} open "
+        "<address> - the window opens, YOU sign in with your account and close it; "
+        "then I read the logged-in page.",
+        "Ningun inicio de sesion guardado en el navegador del TEO. Para entrar en un "
+        "sitio: {cmd} abrir <direccion> - la ventana se abre, TU entras con tu cuenta "
+        "y la cierras; luego leo la pagina con sesion."),
+    "cmd.site.status": (
+        "O navegador do TEO tem {n} arquivo(s) de sessao guardados. Isso permite ler "
+        "os sites em que voce entrou, sem precisar da tela aberta. Para apagar tudo: "
+        "{cmd} esquecer.",
+        "The TEO browser has {n} session file(s) stored. That lets me read the sites "
+        "you logged in to without the screen being open. To erase everything: "
+        "{cmd} forget.",
+        "El navegador del TEO tiene {n} archivo(s) de sesion guardados. Eso permite "
+        "leer los sitios en los que entraste sin necesitar la pantalla abierta. Para "
+        "borrar todo: {cmd} esquecer."),
+    "cmd.site.esquecer_ok": (
+        "Sessoes apagadas ({n} arquivo(s)). O TEO nao abre mais nenhum site logado "
+        "ate voce entrar de novo.",
+        "Sessions erased ({n} file(s)). TEO will not open any logged-in site until "
+        "you sign in again.",
+        "Sesiones borradas ({n} archivo(s)). El TEO no abre mas ningun sitio con "
+        "sesion hasta que entres de nuevo."),
+    "cmd.site.nada": ("Nao havia sessao guardada para apagar.",
+                      "There was no stored session to erase.",
+                      "No habia sesion guardada para borrar."),
+    "cmd.site.abrir": (
+        "Abri uma janela do navegador do TEO em {url}. Entre na sua conta (a senha e "
+        "sua) e, se o site oferecer \"manter conectado\", marque essa opcao. Depois "
+        "FECHE a janela e me peca para ler a pagina - eu leio o texto ja logado.",
+        "I opened a TEO browser window at {url}. Sign in with your account (the "
+        "password is yours) and, if the site offers \"keep me signed in\", tick it. "
+        "Then CLOSE the window and ask me to read the page - I read the logged-in "
+        "text.",
+        "Abri una ventana del navegador del TEO en {url}. Entra con tu cuenta (la "
+        "contrasena es tuya) y, si el sitio ofrece \"mantener la sesion\", marcalo. "
+        "Luego CIERRA la ventana y pide que lea la pagina - leo el texto con sesion."),
+    "cmd.site.abrir_falhou": (
+        "Nao consegui abrir a janela do navegador: {erro}",
+        "I could not open the browser window: {erro}",
+        "No pude abrir la ventana del navegador: {erro}"),
+    "cmd.site.safari": (
+        "No Mac sem Chrome/Edge o login NAO fica guardado no navegador do TEO: o "
+        "Safari abriu, mas depois eu nao consigo ler o site. Para esse recurso "
+        "funcionar no Mac, instale o Chrome.",
+        "On a Mac without Chrome/Edge the login is NOT stored in the TEO browser: "
+        "Safari opened, but afterwards I cannot read the site. To use this on the "
+        "Mac, install Chrome.",
+        "En Mac sin Chrome/Edge el inicio de sesion NO se guarda en el navegador del "
+        "TEO: Safari se abrio, pero despues no puedo leer el sitio. Para usar esto en "
+        "el Mac, instala Chrome."),
+    "cmd.site.uso": (
+        "Use: {cmd} (estado do navegador), {cmd} abrir <endereco do site>, "
+        "{cmd} esquecer (apaga as sessoes guardadas).",
+        "Use: {cmd} (browser state), {cmd} open <site address>, {cmd} forget "
+        "(erases the stored sessions).",
+        "Usa: {cmd} (estado del navegador), {cmd} abrir <direccion del sitio>, "
+        "{cmd} esquecer (borra las sesiones guardadas)."),
     "cmd.model.no_list": ("O servidor nao publica lista de modelos.",
                           "The server does not publish a model list.",
                           "El servidor no publica lista de modelos."),
@@ -2282,6 +2355,13 @@ APP = {
     "app.help.pensamento": ("mostra ou esconde o rascunho do modelo na resposta",
                             "shows or hides the model draft in the answer",
                             "muestra u oculta el borrador del modelo en la respuesta"),
+    "app.cmd.site": ("/site", "/site", "/site"),
+    "app.help.site": ("sites com login: /site abrir <endereco> abre uma janela para "
+                      "VOCE entrar; /site esquecer apaga as sessoes",
+                      "login sites: /site open <address> opens a window for YOU to "
+                      "sign in; /site forget erases the sessions",
+                      "sitios con login: /site abrir <direccion> abre una ventana para "
+                      "que TU entres; /site esquecer borra las sesiones"),
     "app.cmd.skills": ("/skills", "/skills", "/habilidades"),
     "app.help.skills": ("lista as habilidades que o TEO ja aprendeu",
                         "lists the skills TEO has already learned",

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.39
+
+Site com login: o TEO tem o navegador DELE, e quem entra e a pessoa.
+
+- O `ver_pagina` passou a usar um perfil proprio do navegador do TEO
+  (~/.bgh/navegador/perfil) para endereco http(s). Consequencia: site em que a
+  pessoa entrou uma vez abre JA logado, e o TEO le o TEXTO da pagina - sem print,
+  sem depender da tela estar na frente, funcionando tambem com modelo sem visao.
+  Arquivo local (o ciclo de TDD) NAO usa esse perfil.
+- Ferramenta `abrir_navegador(url)`: abre uma janela visivel do navegador do TEO
+  para a PESSOA entrar na conta. O TEO nao digita senha, nao clica em "entrar" e
+  nao automatiza sessao. O resultado traz os passos: entrar, FECHAR a janela e
+  pedir a leitura (com a janela aberta o perfil fica em uso e a leitura recusa,
+  com frase clara).
+- Comando `/site`: sem argumento mostra o estado; `/site abrir <endereco>` faz o
+  mesmo da ferramenta pelo teclado; `/site esquecer` APAGA o perfil inteiro
+  (cookies e sessoes) - a trava de privacidade, e e comando (a pessoa digita),
+  nunca ferramenta que o modelo possa chamar sozinho.
+- Nada muda no resto: pesquisa, programacao, documentos, memoria, skills e as
+  ferramentas de antes continuam iguais (ha teste listando todas).
+- macOS: sem Chrome/Edge o Safari abre a janela, mas o login NAO fica guardado -
+  o TEO avisa isso em vez de prometer o que nao entrega.
+
 ## 0.2.38
 
 O TEO pode OLHAR a tela da pessoa - com licenca.

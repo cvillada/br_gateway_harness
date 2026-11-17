@@ -1033,6 +1033,44 @@ class ChatCore:
                 from .tools import memory
 
                 self.sink.line(memory.add(rest, target="user"))
+            elif what == "site":
+                # Navegador proprio do TEO para site com login. Quem entra no site e
+                # a PESSOA (na janela que este comando abre); o TEO so le depois.
+                from .tools import pagina as pagina_mod
+
+                pedaco = rest.strip()
+                pedaco_l = pedaco.lower()
+                cmd_site = i18n.cmd("site")
+                if pedaco_l in ("esquecer", "limpar", "apagar", "forget"):
+                    total = pagina_mod.esquecer_logins()
+                    self.sink.line(t("cmd.site.esquecer_ok", n=total) if total
+                                   else t("cmd.site.nada"),
+                                   style="cyan" if total else "dim")
+                elif pedaco_l.startswith(("abrir", "open")):
+                    alvo_site = pedaco.split(maxsplit=1)[1].strip() if " " in pedaco else ""
+                    if not alvo_site.startswith(("http://", "https://")):
+                        self.sink.line(t("cmd.site.uso", cmd=cmd_site), style="yellow")
+                    else:
+                        ok_abrir, detalhe = pagina_mod.abrir_janela(alvo_site)
+                        if ok_abrir:
+                            self.sink.line(t("cmd.site.abrir", url=alvo_site), style="cyan")
+                            if detalhe.startswith("safari"):
+                                self.sink.line(t("cmd.site.safari"), style="yellow")
+                        else:
+                            self.sink.line(t("cmd.site.abrir_falhou", erro=detalhe),
+                                           style="yellow")
+                elif not pedaco:
+                    casa = pagina_mod.BGH_HOME / "navegador"
+                    total = (sum(1 for item in casa.rglob("*") if item.is_file())
+                             if casa.exists() else 0)
+                    if total:
+                        self.sink.line(t("cmd.site.status", n=total, cmd=cmd_site),
+                                       style="cyan")
+                    else:
+                        self.sink.line(t("cmd.site.status_vazio", cmd=cmd_site),
+                                       style="dim")
+                else:
+                    self.sink.line(t("cmd.site.uso", cmd=cmd_site), style="yellow")
             elif what == "skills":
                 from .tools.skills import discover, index_lines
 

@@ -180,6 +180,7 @@ HELP_APP = (
     ("item", "pensamento"),
     ("sec", "quando"),
     ("item", "skills"),
+    ("item", "site"),
     ("item", "doctor"),
     ("item", "atualizar"),
     ("item", "limpar"),
