@@ -301,12 +301,12 @@ HELP_SECTIONS = [
          "lista las skills conocidas"),
         ("/zoom [75|90|100|110|125|auto]", "/zoom [75|90|100|110|125|auto]",
          "/zoom [75|90|100|110|125|auto]",
-         "tamanho da tela do navegador; no automatico abre a 75% em janela baixa "
-         "(notebook) e 100% em tela grande",
-         "browser screen size; on automatic it opens at 75% on a short window "
-         "(notebook) and 100% on a large screen",
-         "tamano de la pantalla del navegador; en automatico abre al 75% en ventana "
-         "baja (portatil) y 100% en pantalla grande"),
+         "tamanho da tela do navegador; abre a 75% (cabe no notebook) - use "
+         "/zoom 100 em tela grande ou /zoom auto",
+         "browser screen size; opens at 75% (fits a notebook) - use /zoom 100 "
+         "on a large screen or /zoom auto",
+         "tamano de la pantalla del navegador; abre al 75% (cabe en el portatil) - "
+         "usa /zoom 100 en pantalla grande o /zoom auto"),
         ("/site", "/site", "/site",
          "sites com login: /site mostra o estado, /site abrir <endereco> abre uma "
          "janela do navegador do TEO para VOCE entrar, /site esquecer apaga as sessoes",

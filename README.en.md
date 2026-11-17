@@ -318,9 +318,9 @@ Whoever opens TEO - from the desktop icon or typing `bgh` - chooses how to use i
   a port on the router.
 - Shortcuts: `bgh app` (straight to the browser), `bgh chat` (straight to the
   terminal).
-- Screen size: automatic - opens at 75% on a short window (14 inch notebook)
-  and 100% on a large screen. `/zoom 75|90|100|110|125` fixes a size and
-  `/zoom auto` goes back to automatic. In the terminal the letter size is `/font`.
+- Screen size: opens at 75% (fits a notebook window, with the footer and the
+  hint visible). `/zoom 100` (or 90/110/125) makes it bigger; `/zoom auto` lets
+  the screen choose. In the terminal the letter size is `/font`.
 
 ## Seeing the screen and reading sites with login (0.2.37 to 0.2.39)
 

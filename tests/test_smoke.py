@@ -4491,8 +4491,8 @@ ok("as ferramentas de sempre continuam todas registradas",
 # tamanho fica guardado no config e a tela obedece ao abrir.
 from bgh.config import DEFAULTS as _DEF340
 
-ok("zoom da tela vem de fabrica em AUTOMATICO (75% no notebook, 100% em tela grande)",
-   _DEF340.get("zoom_web") == "auto")
+ok("zoom da tela vem de fabrica em 75% (cabe numa janela de notebook)",
+   _DEF340.get("zoom_web") == 75)
 
 _linhas340: list[str] = []
 
@@ -4505,8 +4505,8 @@ def _core340():
 
 _c340 = _core340()
 _c340.submit("/zoom")
-ok("/zoom sozinho diz que esta no automatico e mostra as opcoes",
-   any("AUTOMATICO" in linha and "75" in linha for linha in _linhas340))
+ok("/zoom sozinho mostra o tamanho atual e as opcoes",
+   any("75%" in linha and "100" in linha for linha in _linhas340))
 
 _linhas340.clear()
 _c340.submit("/zoom 75")

@@ -786,7 +786,7 @@ def ip_lan() -> str | None:
 
 def zoom_da_tela(cfg: dict):
     """Zoom guardado: numero (75/90/100/110/125) ou "auto" (a tela decide)."""
-    valor = cfg.get("zoom_web", "auto")
+    valor = cfg.get("zoom_web", 75)
     if isinstance(valor, (int, float)) and valor > 0:
         return int(valor)
     if str(valor).strip().isdigit():

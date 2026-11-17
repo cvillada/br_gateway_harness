@@ -86,8 +86,9 @@ function montarTextos(dados) {
   }
   if ($("arquivo") && anexosAceitos) { $("arquivo").accept = anexosAceitos; }
   if (dados.ajuda) { ajudaItens = dados.ajuda; }
-  // "auto" e o padrao de fabrica: abre em 75% no notebook e 100% em tela grande.
-  aplicarZoom(dados.zoom === undefined ? "auto" : dados.zoom);
+  // Sem valor no servidor, o padrao de fabrica e 75% (cabe numa janela de
+  // notebook); "auto" tambem e aceito e a tela decide pela altura.
+  aplicarZoom(dados.zoom === undefined ? 75 : dados.zoom);
   idiomaAtual = dados.lingua || "";
   dicaTexto = dados.dica || t("app.dica");
   $("dica").textContent = dicaTexto;

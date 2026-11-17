@@ -320,10 +320,9 @@ usarlo:
   el router.
 - Atajos: `bgh app` (va directo al navegador), `bgh chat` (va directo al
   terminal).
-- Tamano de pantalla: automatico - abre al 75% en ventana baja (portatil de 14
-  pulgadas) y 100% en pantalla grande. `/zoom 75|90|100|110|125` fija un tamano y
-  `/zoom auto` vuelve al automatico. En el terminal el tamano de la letra es
-  `/fonte`.
+- Tamano de pantalla: abre al 75% (cabe en una ventana de portatil, con el pie
+  y la dica a la vista). `/zoom 100` (o 90/110/125) lo agranda; `/zoom auto` deja
+  que la pantalla elija. En el terminal el tamano de la letra es `/fonte`.
 
 ## Ver la pantalla y leer sitios con login (0.2.37 a 0.2.39)
 

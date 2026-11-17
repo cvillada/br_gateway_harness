@@ -310,9 +310,9 @@ quer usar:
   roteador.
 - Atalhos: `bgh app` (vai direto ao navegador), `bgh chat` (vai direto ao
   terminal).
-- Tamanho da tela: automatico - abre a 75% em janela baixa (notebook de 14
-  polegadas) e 100% em tela grande. `/zoom 75|90|100|110|125` fixa um tamanho e
-  `/zoom auto` volta ao automatico. No terminal o tamanho da letra e o `/fonte`.
+- Tamanho da tela: abre a 75% (cabe numa janela de notebook, com o rodape e a
+  dica a vista). `/zoom 100` (ou 90/110/125) aumenta; `/zoom auto` deixa a tela
+  escolher. No terminal o tamanho da letra e o `/fonte`.
 
 ## Ver a tela e ler sites com login (0.2.37 a 0.2.39)
 

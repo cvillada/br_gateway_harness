@@ -57,11 +57,12 @@ DEFAULTS = {
     # inteira atrapalha quem usa o TEO ao lado de outro programa (reclamacao de
     # cliente); quem gosta liga em /configurar ou roda `bgh chat --maximizar`.
     "maximizar": False,
-    # Tamanho da TELA DO NAVEGADOR (o /zoom). "auto" = a PROPRIA tela escolhe:
-    # 75% quando a janela e baixa (notebook de 14" cortava o rodape em 100%) e
-    # 100% em tela grande, onde 75% ficaria pequeno demais para o publico do TEO.
-    # /zoom <numero> fixa um valor; /zoom auto volta para automatico.
-    "zoom_web": "auto",
+    # Tamanho da TELA DO NAVEGADOR (o /zoom). 75% de fabrica: e o que cabe numa
+    # janela de notebook sem o rodape sair da tela (decisao do dono, 17/11 - "que
+    # ja abra em 75"). Em monitor grande quem quiser aumenta com /zoom 100.
+    # "auto" tambem e aceito: a tela escolhe (75% se a janela for baixa, 100% se
+    # for alta).
+    "zoom_web": 75,
     # Acessibilidade (/voz): le cada resposta em voz alta com a voz do SISTEMA
     # (spd-say/espeak-ng, SAPI do Windows, say do Mac). Desligado por padrao.
     "voz": False,

@@ -4,10 +4,10 @@
 
 Tela do navegador no tamanho que cabe no seu notebook - ja na abertura.
 
-- AUTOMATICO (padrao de fabrica): a propria tela escolhe o tamanho ao abrir -
-  75% quando a janela e baixa (notebook de 14", onde 100% empurrava o rodape
-  para fora e sumia com a dica) e 100% em tela grande, onde 75% ficaria pequeno
-  demais para o publico do TEO. Nada a digitar: ja abre certo.
+- 75% POR PADRAO: a tela do navegador ja abre reduzida a 75%, que e o tamanho
+  que cabe numa janela de notebook sem o rodape sair da tela nem sumir com a
+  dica. Nada a digitar. Em monitor grande quem preferir letra maior digita
+  `/zoom 100` (ou 110/125).
 - `/zoom 75|90|100|110|125` fixa um tamanho (fica guardado no config) e
   `/zoom auto` volta ao automatico; se a tela ja estiver aberta, o ajuste chega
   em ate 12 segundos pelo sinal de vida, sem recarregar.

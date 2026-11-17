@@ -920,7 +920,7 @@ ok("tela baixa encolhe a dica e o campo (e NAO esconde a dica - 0.2.40)",
    "@media (max-height: 720px)" in _css16 and ".dica { font-size: .66rem; }" in _css16
    and ".dica { display: none; }" not in _css16)
 ok("a tela aplica o tamanho guardado (/zoom) ao abrir",
-   'aplicarZoom(dados.zoom === undefined ? "auto" : dados.zoom)' in _js12
+   "aplicarZoom(dados.zoom === undefined ? 75 : dados.zoom)" in _js12
    and 'document.documentElement.style.zoom' in _js12)
 ok("o /zoom tambem chega pelo sinal de vida (muda sem recarregar)",
    'String(d.zoom) !== String(zoomPedido)' in _js12)
@@ -956,8 +956,8 @@ app7.core = CoreFalso17(app7)  # type: ignore[assignment]
 app7.subir_servidor(porta=0)
 time.sleep(0.05)
 _inicio17 = _Consulta17(app7.porta, "tok17b").inicio()
-ok("/api/inicio leva o zoom da tela (padrao automatico)",
-   _inicio17.get("zoom") == "auto")
+ok("/api/inicio leva o zoom da tela (padrao 75%)",
+   _inicio17.get("zoom") == 75)
 ok("a pagina decide o zoom automatico pela altura da janela",
    "function zoomAutomatico" in _js12 and "window.innerHeight < 760" in _js12)
 ok("/api/inicio leva o limite e os tipos do clipe",
