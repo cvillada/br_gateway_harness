@@ -8,7 +8,7 @@ from typing import Callable
 
 from ..i18n import t
 from . import (documents, files, memory, packages, pagina, python_exec, skills,
-               terminal, websearch)
+               terminal, ver_tela, websearch)
 
 
 def localize_specs(specs: list) -> list:
@@ -67,6 +67,7 @@ class ToolBox:
             "web_search": websearch.web_search,
             "web_extract": websearch.web_extract,
             "ver_pagina": pagina.run,
+            "ver_tela": ver_tela.run,
             "memory": memory.run,
             "skill": skills.load_skill_tool,
             "make_document": documents.make_document,
@@ -84,6 +85,7 @@ class ToolBox:
             websearch.SEARCH_SPEC,
             websearch.EXTRACT_SPEC,
             pagina.SPEC,
+            ver_tela.SPEC,
             memory.SPEC,
             skills.SPEC,
             documents.SPEC,

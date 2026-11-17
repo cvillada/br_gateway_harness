@@ -62,6 +62,8 @@ DANGEROUS_RULES = [
 RULE_LABELS = {key: label for key, _, label in DANGEROUS_RULES}
 # Regra que nao vem da lista de shell (codigo Python que apaga arquivo).
 RULE_LABELS["python delete"] = "gate.py_delete_label"
+# Print da tela: acao mais invasiva do TEO - licenca propria (ver_tela).
+RULE_LABELS["print da tela"] = "gate.tela_label"
 
 
 def rule_label(key: str) -> str:
@@ -221,6 +223,28 @@ class Gate:
             self.session_rules.add(key)
             return True, None
         return False, t("gate.install_denied", pacote=pacote)
+
+    def print_screen_ok(self) -> tuple[bool, str | None]:
+        """Licenca para TIRAR UM PRINT da tela (leva tudo que estiver aberto).
+
+        Unica ferramenta cujo resultado e a tela inteira da pessoa: por isso
+        pergunta antes, com "sempre" guardado no allowlist. O ver_pagina
+        (arquivo/URL) NAO passa por aqui - o laco de TDD tem que ser silencioso.
+        """
+        key = "print da tela"
+        if key in self.session_rules or key in self.allowlist:
+            return True, None
+        choice = self.ask(rule_label(key), t("gate.tela_detail"), allow_always=True)
+        if choice == "o":
+            return True, None
+        if choice == "s":
+            self.session_rules.add(key)
+            return True, None
+        if choice == "a":
+            self._remember_always(key)
+            self.session_rules.add(key)
+            return True, None
+        return False, t("gate.tela_denied")
 
     def python_code_ok(self, code: str) -> tuple[bool, str | None]:
         """Codigo Python roda direto, exceto quando apaga arquivos - ai pede licenca."""

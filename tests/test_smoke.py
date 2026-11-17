@@ -4172,6 +4172,148 @@ if _exe337 and _shutil337.which("timeout"):
 else:
     print("AVISO - sem navegador nesta maquina: o teste real do ver_pagina foi pulado")
 
+# ---------- v0.2.38: ver_tela (print da tela COM licenca) --------------------
+# A pessoa loga no site, deixa aberto e pede "olha a minha tela". E a acao mais
+# invasiva do TEO: o print leva tudo que estiver aberto, entao pergunta antes.
+from bgh.tools import ver_tela as _tela338
+from bgh.approvals import Gate as _Gate338
+
+
+class _Ask338:
+    """Fake do menu de licenca: devolve a resposta da vez e conta as perguntas."""
+
+    def __init__(self, resposta="d"):
+        self.resposta = resposta
+        self.perguntas = []
+
+    def __call__(self, label, detail, allow_always=True):
+        self.perguntas.append((label, detail, allow_always))
+        return self.resposta
+
+
+_cfg338 = dict(_cfg299)
+_cfg338["command_allowlist"] = []
+
+_ped338 = _Ask338("d")
+_gate338 = _Gate338(dict(_cfg338), _ped338)
+_ok338, _bloq338 = _gate338.print_screen_ok()
+ok("print da tela PEDE licenca e 'nao' bloqueia", _ok338 is False and bool(_bloq338))
+ok("a pergunta diz que o print leva TUDO que esta aberto",
+   bool(_ped338.perguntas) and "TUDO" in _ped338.perguntas[0][1])
+ok("a licenca do print oferece 'sempre' (allow_always=True)",
+   bool(_ped338.perguntas) and _ped338.perguntas[0][2] is True)
+
+_ped338 = _Ask338("o")
+_gate338 = _Gate338(dict(_cfg338), _ped338)
+ok("'desta vez' libera o print", _gate338.print_screen_ok()[0] is True)
+_gate338.print_screen_ok()
+ok("'desta vez' nao vira permissao permanente",
+   len(_ped338.perguntas) == 2)
+
+_ped338 = _Ask338("s")
+_gate338 = _Gate338(dict(_cfg338), _ped338)
+_gate338.print_screen_ok()
+_gate338.print_screen_ok()
+ok("'nesta conversa' pergunta UMA vez", len(_ped338.perguntas) == 1)
+
+_cfg338b = dict(_cfg299)
+_cfg338b["command_allowlist"] = []
+_ped338 = _Ask338("a")
+_gate338 = _Gate338(_cfg338b, _ped338)
+_gate338.print_screen_ok()
+ok("'sempre' grava no allowlist (e o /approvals mostra)",
+   "print da tela" in (_cfg338b.get("command_allowlist") or []))
+_ped338.resposta = "d"
+_gate3382 = _Gate338(dict(_cfg338b), _ped338)
+ok("com 'sempre' gravado, a proxima vez nao pergunta",
+   _gate3382.print_screen_ok()[0] is True)
+
+
+class _Ctx338:
+    """Contexto de teste: licenca concedida e captura trocada por uma de mentira."""
+
+    def __init__(self, liberado=True):
+        class _Gate:
+            def print_screen_ok(_self):
+                return (liberado, None if liberado else "BLOQUEADO: teste")
+
+        self.gate = _Gate()
+        self.stop_event = None
+
+
+def _png338(caminho: Path, largura=8, altura=8):
+    import struct as _st
+    import zlib as _zl
+
+    def chunk(tipo, dados):
+        return (_st.pack(">I", len(dados)) + tipo + dados
+                + _st.pack(">I", _zl.crc32(tipo + dados) & 0xffffffff))
+
+    cru = b"".join(b"\x00" + b"\x11\x22\x33" * largura for _ in range(altura))
+    Path(caminho).write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", _st.pack(">IIBBBBB", largura, altura, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", _zl.compress(cru)) + chunk(b"IEND", b""))
+
+
+_original338 = _tela338._capturar
+try:
+    _tela338._capturar = lambda png: (_png338(png, 64, 48) or (True, "scrot"))
+    _saida338 = _tela338.run({"espera": 0}, _Ctx338())
+    ok("ver_tela devolve o print como IMAGEM para o modelo",
+       "IMAGEM: " in _saida338 and "PRINT DA TELA INTEIRA" in _saida338)
+    ok("ver_tela diz a resolucao da tela (modelo sabe o tamanho)",
+       "RESOLUCAO: 64x48" in _saida338)
+    ok("ver_tela avisa que a imagem tem TODAS as janelas",
+       "TODAS as janelas" in _saida338)
+    _png338(_dir334 / "tela338.png", 64, 48)
+    ok("o tamanho e lido do proprio PNG (sem Pillow)",
+       _tela338._tamanho_png(_dir334 / "tela338.png") == (64, 48))
+
+    _saida338b = _tela338.run({"espera": 0}, _Ctx338(liberado=False))
+    ok("sem licenca o ver_tela nao fotografa nada", _saida338b.startswith("BLOQUEADO"))
+
+    _tela338._capturar = lambda png: (False, "sem display")
+    _saida338c = _tela338.run({"espera": 0}, _Ctx338())
+    ok("falha de captura explica o caminho alternativo (print + clipe)",
+       _saida338c.startswith("ERRO") and "clipe" in _saida338c)
+finally:
+    _tela338._capturar = _original338
+
+_ag338 = _Agent26(dict(_cfg299), _OkLLM26(), Gate(dict(_cfg299), ask_d))
+ok("ver_tela esta registrada no ToolBox", "ver_tela" in _ag338.tools.handlers)
+ok("a descricao do ver_tela existe nas tres linguas",
+   all(_i18n316.TEXTS["tool.ver_tela.desc"][i] for i in range(3)))
+
+
+class _CtxSemLicenca338:
+    """Gate que EXPLODE se alguem pedir licenca: prova que o TDD e silencioso."""
+
+    class gate:
+        perguntas = 0
+
+        @staticmethod
+        def path_ok(caminho):
+            return True, None
+
+        @staticmethod
+        def ask(*a, **k):
+            _CtxSemLicenca338.gate.perguntas += 1
+            raise AssertionError("ver_pagina nao pode pedir licenca")
+
+    stop_event = None
+
+
+_pagina_site338 = _dir334 / "site338.html"
+_pagina_site338.write_text("<html><body><h1>ciclo de TDD</h1></body></html>",
+                           encoding="utf-8")
+_saida_tdd338 = _pagina337.run({"origem": str(_pagina_site338), "espera": 0},
+                               _CtxSemLicenca338())
+ok("o ciclo de TDD (ver_pagina) nao pede licenca nenhuma",
+   _CtxSemLicenca338.gate.perguntas == 0)
+ok("...e a pagina (ou o motivo de nao abrir) veio no resultado",
+   "ciclo de TDD" in _saida_tdd338 or _saida_tdd338.startswith("ERRO"))
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

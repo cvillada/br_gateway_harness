@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.38
+
+O TEO pode OLHAR a tela da pessoa - com licenca.
+
+- Ferramenta nova `ver_tela`: tira um print da tela inteira e devolve a imagem
+  para o modelo com visao. Serve para o caso mais comum de site com login: a
+  pessoa loga no navegador dela, deixa a pagina aberta e pede "olha a minha
+  tela". O TEO nao digita senha, nao clica em "entrar" e nao automatiza sessao -
+  ele so olha os pixels.
+- LICENCA: e a acao mais invasiva do TEO (o print leva tudo que estiver aberto,
+  inclusive o que nao tem a ver com o pedido). Antes de fotografar aparece o
+  menu de sempre - desta vez / nesta conversa / sempre / nao - com a frase
+  dizendo exatamente o risco. "Sempre" fica no allowlist (o /approvals mostra e
+  permite remover).
+- O `ver_pagina` (arquivo/URL) continua SEM licenca: o ciclo de TDD tem que ser
+  silencioso. So o print da tela pergunta.
+- Captura por sistema: scrot / gnome-screenshot / grim / import no Linux,
+  PowerShell no Windows, screencapture no macOS. Quando a sessao nao herdou
+  DISPLAY (SSH/servico), tenta :0 com ~/.Xauthority - sem isso o print falhava
+  com "Can't open X display" mesmo com a pessoa na frente do micro.
+- O resultado diz a resolucao, avisa que a imagem tem TODAS as janelas e lembra
+  que tela bloqueada aparece so como tela de bloqueio.
+- Falha de captura explica o caminho alternativo: a pessoa tira o print e anexa
+  no clipe. Prints em ~/.bgh/telas, apagados em 2h.
+
 ## 0.2.37
 
 O TEO abre a pagina num navegador de verdade e OLHA o que apareceu.

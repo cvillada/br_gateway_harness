@@ -1294,6 +1294,30 @@ GATE = {
     "gate.py_delete_label": ("apagar arquivos com um programa Python",
                              "deleting files with a Python program",
                              "borrar archivos con un programa Python"),
+    # Print da tela (ver_tela): a frase tem que dizer o risco em linguagem de gente.
+    "gate.tela_label": ("Tirar um print da sua tela", "Take a screenshot of your screen",
+                        "Tomar una captura de tu pantalla"),
+    "gate.tela_detail": (
+        "O TEO vai fotografar TUDO o que estiver aberto na sua tela agora - pode "
+        "aparecer e-mail, conversa ou documento que voce nao quer mostrar. A imagem "
+        "vai junto do seu pedido para o modelo ler.\n"
+        "Mostre so o que quiser: feche o resto ou clique na janela certa e peca de novo.",
+        "TEO will capture EVERYTHING open on your screen right now - email, chats or "
+        "documents you may not want to show could appear. The image goes with your "
+        "request for the model to read.\n"
+        "Show only what you want: close the rest or click the right window and ask again.",
+        "El TEO va a capturar TODO lo que este abierto en tu pantalla ahora - puede "
+        "aparecer correo, conversacion o documento que no quieres mostrar. La imagen "
+        "va con tu pedido para que el modelo la lea.\n"
+        "Muestra solo lo que quieras: cierra el resto o haz clic en la ventana correcta "
+        "y pide de nuevo."),
+    "gate.tela_denied": (
+        "BLOQUEADO: a pessoa nao autorizou o print da tela. Sem a imagem, peca para ela "
+        "tirar um print e anexar no clipe, ou descrever o que aparece.",
+        "BLOCKED: the person did not allow the screenshot. Without the image, ask them to "
+        "take a screenshot and attach it, or describe what is on screen.",
+        "BLOQUEADO: la persona no autorizo la captura. Sin la imagen, pide que haga una "
+        "captura y la adjunte, o que describa lo que aparece."),
     "gate.py_delete_detail": (
         "O programa Python vai apagar arquivos (usa '{hit}').\nCodigo:\n{preview}",
         "The Python program will delete files (uses '{hit}').\nCode:\n{preview}",
@@ -1755,6 +1779,26 @@ TOOLS = {
         "Busca en internet (DuckDuckGo, sin clave de API). Devuelve titulo, URL y resumen "
         "de los resultados."),
     "tool.web_search.arg.query": ("Termos da busca", "Search terms", "Terminos de la busqueda"),
+    "tool.ver_tela.desc": (
+        "Tira um print da TELA da pessoa (todas as janelas visiveis) e devolve a "
+        "imagem para voce olhar. Use quando a pessoa pedir para ver algo que esta na "
+        "tela dela e que exige login (caixa de e-mail, painel, conversa): ela loga, "
+        "deixa aberto e pede. Pede licenca antes de fotografar.",
+        "Takes a screenshot of the person's SCREEN (all visible windows) and returns "
+        "the image for you to look at. Use it when the person asks you to see something "
+        "on their screen that requires a login (mailbox, dashboard, chat): they log in, "
+        "leave it open and ask. It asks permission before capturing.",
+        "Toma una captura de la PANTALLA de la persona (todas las ventanas visibles) y "
+        "devuelve la imagen para que la mires. Usalo cuando la persona pida ver algo que "
+        "esta en su pantalla y que exige inicio de sesion (correo, panel, conversacion): "
+        "ella entra, lo deja abierto y pide. Pide permiso antes de capturar."),
+    "tool.ver_tela.arg.espera": (
+        "Segundos antes de fotografar (padrao 1, maximo 10), para a pessoa clicar na "
+        "janela que quer mostrar",
+        "Seconds before capturing (default 1, max 10), so the person can click the "
+        "window to show",
+        "Segundos antes de capturar (predeterminado 1, max 10), para que la persona "
+        "haga clic en la ventana que quiere mostrar"),
     "tool.web_search.arg.top_k": ("Quantidade de resultados (padrao 6, max 10)",
                                   "Number of results (default 6, max 10)",
                                   "Cantidad de resultados (predeterminado 6, max 10)"),
