@@ -34,6 +34,11 @@ com a janela aberta.
 
 Suite local: 658 verificacoes gerais + 181 da tela.
 
+CI: testes verdes em ubuntu e windows (Python 3.11 e 3.12) e os executaveis
+(windows-exe e macos-binary) gerados. O job de TESTES do macOS ainda estava na
+fila do runner na hora da publicacao - ele nao bloqueia o run (mesma regra da
+0.2.41).
+
 ## 0.2.41
 
 No Mac o navegador e o Safari - e o TEO agora le a pagina de verdade nele.
