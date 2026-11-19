@@ -179,7 +179,7 @@ to the URL the user registered.
 | other    | any OpenAI-compatible endpoint | (you type it) |
 
 Ready for 27B and larger models: configurable context budget
-(`context_budget_chars`, default 156000), automatic conversation compression and a
+(`context_budget_chars`, default 250000), automatic conversation compression and a
 tolerant dispatch for malformed JSON from quantized models. The setup assistant
 inherits the server limit in three ways: a llama.cpp engine publishes `n_ctx`
 (`props`), OpenRouter-style APIs publish `context_length`, and APIs that publish
@@ -280,7 +280,7 @@ without reinstalling.
 - Model thinking: if the server returns `reasoning_content`/`reasoning` (llama.cpp
   with Qwen thinking, DeepSeek-R1 etc.), it appears as `thinking> ...` before the
   answer.
-- Context: after each answer comes `context: NN% of 156000 chars`
+- Context: after each answer comes `context: NN% of 250000 chars`
   (green/yellow/red); at 85% the bottom bar turns to the alert color and the next
   heavy round compacts the conversation into a summary by itself (TEO says so on
   screen while compacting). If the server refuses the size, it compacts and tries

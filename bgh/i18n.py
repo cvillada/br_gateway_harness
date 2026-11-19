@@ -714,14 +714,29 @@ CHAT = {
     # /site: navegador proprio do TEO para site com login (v0.2.39).
     "cmd.site.status_vazio": (
         "Nenhum login guardado no navegador do TEO. Para entrar num site: {cmd} "
-        "abrir <endereco> - a janela abre, VOCE entra com a sua conta e fecha; "
-        "depois eu leio a pagina logada.",
+        "abrir <endereco> - a janela abre, VOCE entra com a sua conta e DEIXA a janela "
+        "aberta; eu leio a aba ja logada.",
         "No login stored in the TEO browser. To log in to a site: {cmd} open "
-        "<address> - the window opens, YOU sign in with your account and close it; "
-        "then I read the logged-in page.",
+        "<address> - the window opens, YOU sign in with your account and LEAVE it open; "
+        "I read the logged-in tab.",
         "Ningun inicio de sesion guardado en el navegador del TEO. Para entrar en un "
-        "sitio: {cmd} abrir <direccion> - la ventana se abre, TU entras con tu cuenta "
-        "y la cierras; luego leo la pagina con sesion."),
+        "sitio: {cmd} abrir <direccion> - la ventana se abre, TU entras con tu cuenta y "
+        "DEJAS la ventana abierta; yo leo la pestana con sesion."),
+    "cmd.site.status_janela": (
+        "A janela do navegador do TEO esta ABERTA com {n} aba(s): {urls}. Eu leio a aba "
+        "logada quando voce pedir. Para fechar: {cmd} fechar.",
+        "The TEO browser window is OPEN with {n} tab(s): {urls}. I read the logged-in tab "
+        "when you ask. To close it: {cmd} close.",
+        "La ventana del navegador del TEO esta ABIERTA con {n} pestana(s): {urls}. Leo la "
+        "pestana con sesion cuando lo pidas. Para cerrar: {cmd} cerrar."),
+    "cmd.site.fechar_ok": (
+        "Fechei a janela do navegador do TEO.",
+        "I closed the TEO browser window.",
+        "Cerre la ventana del navegador del TEO."),
+    "cmd.site.fechar_nada": (
+        "Nao havia janela do TEO aberta.",
+        "There was no TEO window open.",
+        "No habia ninguna ventana del TEO abierta."),
     "cmd.site.status": (
         "O navegador do TEO tem {n} arquivo(s) de sessao guardados. Isso permite ler "
         "os sites em que voce entrou, sem precisar da tela aberta. Para apagar tudo: "
@@ -744,15 +759,14 @@ CHAT = {
                       "No habia sesion guardada para borrar."),
     "cmd.site.abrir": (
         "Abri uma janela do navegador do TEO em {url}. Entre na sua conta (a senha e "
-        "sua) e, se o site oferecer \"manter conectado\", marque essa opcao. Depois "
-        "FECHE a janela e me peca para ler a pagina - eu leio o texto ja logado.",
+        "sua) e DEIXE A JANELA ABERTA - eu leio a aba ja logada, sem precisar fechar "
+        "nada. Se o site oferecer \"manter conectado\", marque tambem.",
         "I opened a TEO browser window at {url}. Sign in with your account (the "
-        "password is yours) and, if the site offers \"keep me signed in\", tick it. "
-        "Then CLOSE the window and ask me to read the page - I read the logged-in "
-        "text.",
+        "password is yours) and LEAVE THE WINDOW OPEN - I read the logged-in tab, no "
+        "need to close anything. If the site offers \"keep me signed in\", tick it too.",
         "Abri una ventana del navegador del TEO en {url}. Entra con tu cuenta (la "
-        "contrasena es tuya) y, si el sitio ofrece \"mantener la sesion\", marcalo. "
-        "Luego CIERRA la ventana y pide que lea la pagina - leo el texto con sesion."),
+        "contrasena es tuya) y DEJA LA VENTANA ABIERTA - leo la pestana con sesion, sin "
+        "cerrar nada. Si el sitio ofrece \"mantener la sesion\", marcalo tambien."),
     "cmd.site.abrir_falhou": (
         "Nao consegui abrir a janela do navegador: {erro}",
         "I could not open the browser window: {erro}",
@@ -776,11 +790,13 @@ CHAT = {
         "el menu Desarrollo, 'Permitir JavaScript de eventos de Apple'."),
     "cmd.site.uso": (
         "Use: {cmd} (estado do navegador), {cmd} abrir <endereco do site>, "
-        "{cmd} esquecer (apaga as sessoes guardadas).",
-        "Use: {cmd} (browser state), {cmd} open <site address>, {cmd} forget "
-        "(erases the stored sessions).",
+        "{cmd} fechar (fecha a janela do TEO), {cmd} esquecer (apaga as sessoes "
+        "guardadas).",
+        "Use: {cmd} (browser state), {cmd} open <site address>, {cmd} close (closes "
+        "the TEO window), {cmd} forget (erases the stored sessions).",
         "Usa: {cmd} (estado del navegador), {cmd} abrir <direccion del sitio>, "
-        "{cmd} esquecer (borra las sesiones guardadas)."),
+        "{cmd} cerrar (cierra la ventana del TEO), {cmd} esquecer (borra las sesiones "
+        "guardadas)."),
     "cmd.model.no_list": ("O servidor nao publica lista de modelos.",
                           "The server does not publish a model list.",
                           "El servidor no publica lista de modelos."),
@@ -1280,7 +1296,7 @@ AGENT = {
                          "extra wait)...",
                          "Compactando la conversacion en un resumen (el resumen cuesta una "
                          "espera extra)..."),
-    # Caso real (Nei, 17/11): conversa com 150+ mensagens e uma foto. A foto FOI
+    # Caso real medido (17/11): conversa com 150+ mensagens e uma foto. A foto FOI
     # enviada (o session.json prova), mas o servidor local descartou a imagem e o
     # modelo respondeu "nao chegou imagem". Duas medidas: compactar antes de mandar
     # foto (agent._abrir_espaco_para_imagem) e dizer a verdade quando isso escapar.

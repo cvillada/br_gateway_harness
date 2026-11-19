@@ -416,7 +416,7 @@ class Agent:
         por token (a tela marca a estimativa com '~').
         """
         chars = self._estimate_chars()
-        budget = int(self.cfg.get("context_budget_chars", 156000))
+        budget = int(self.cfg.get("context_budget_chars", 250000))
         pct = min(int(100 * chars / max(budget, 1)), 999)
         uso = self.last_usage or {}
         reais = uso.get("entrada") if isinstance(uso, dict) else None
@@ -527,7 +527,7 @@ class Agent:
 
     def _compress_if_needed(self) -> bool:
         """Compacta ANTES de esbarrar no teto: comeca no % configurado (85%)."""
-        budget = int(self.cfg.get("context_budget_chars", 156000))
+        budget = int(self.cfg.get("context_budget_chars", 250000))
         threshold = int(budget * self._compress_pct() / 100)
         if self._estimate_chars() <= threshold:
             return False
@@ -543,12 +543,12 @@ class Agent:
     def _abrir_espaco_para_imagem(self, pct: float = 0.55) -> bool:
         """Compacta ANTES de mandar foto quando a conversa ja encheu o contexto.
 
-        Caso real (Nei, 17/11): conversa com 150+ mensagens e uma foto. A foto foi
+        Caso real medido (17/11): conversa com 150+ mensagens e uma foto. A foto foi
         enviada (o session.json guarda o marcador), mas o servidor local cortou a
         imagem para caber no contexto e o modelo respondeu "nao chegou imagem".
         Com 55% do orcamento livre a foto (que consome muitos tokens) cabe.
         """
-        budget = int(self.cfg.get("context_budget_chars", 156000))
+        budget = int(self.cfg.get("context_budget_chars", 250000))
         if self._estimate_chars() <= int(budget * pct):
             return False
         did = self._force_compress(pct)
@@ -559,7 +559,7 @@ class Agent:
 
     def _force_compress(self, pct: float = 0.70) -> bool:
         """Compactacao depois que o servidor ja recusou: baixa ate pct do orcamento."""
-        budget = int(self.cfg.get("context_budget_chars", 156000))
+        budget = int(self.cfg.get("context_budget_chars", 250000))
         target = int(budget * pct)
         did = False
         for _ in range(4):

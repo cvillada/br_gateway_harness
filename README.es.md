@@ -179,7 +179,7 @@ URL que el propio usuario registro.
 | otro    | cualquier endpoint compatible con OpenAI | (lo escribes tu) |
 
 Preparado para modelos de 27B para arriba: presupuesto de contexto configurable
-(`context_budget_chars`, predeterminado 156000), compresion automatica de la
+(`context_budget_chars`, predeterminado 250000), compresion automatica de la
 conversacion y dispatch tolerante a JSON malformado de modelo cuantizado. El
 asistente de setup hereda el limite del servidor por tres caminos: el motor
 llama.cpp publica `n_ctx` (`props`), las APIs estilo OpenRouter publican
@@ -280,7 +280,7 @@ arregla sin reinstalar.
 - Pensamiento del modelo: si el servidor devuelve `reasoning_content`/`reasoning`
   (llama.cpp con Qwen thinking, DeepSeek-R1 etc.), aparece como `pensamiento> ...`
   antes de la respuesta.
-- Contexto: despues de cada respuesta sale `contexto: NN% de 156000 chars`
+- Contexto: despues de cada respuesta sale `contexto: NN% de 250000 chars`
   (verde/amarillo/rojo); al 85% la barra de abajo entra en el color de alerta y la
   siguiente ronda pesada compacta sola en resumen (el TEO avisa en pantalla mientras
   compacta). Si el servidor rechaza el tamano, compacta e intenta de nuevo en vez de

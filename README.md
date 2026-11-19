@@ -172,7 +172,7 @@ so e enviada para a URL que o proprio usuario cadastrou.
 | outro    | qualquer endpoint OpenAI-compativel | (voce digita) |
 
 Preparado para modelos de 27B para cima: orcamento de contexto configuravel
-(`context_budget_chars`, padrao 156000), compressao automatica da conversa e
+(`context_budget_chars`, padrao 250000), compressao automatica da conversa e
 dispatch tolerante a JSON malformado de modelo quantizado. O assistente de setup
 herda o limite do servidor em tres caminhos: motor llama.cpp publica `n_ctx`
 (`props`), APIs estilo OpenRouter publicam `context_length`, e APIs que nada
@@ -272,7 +272,7 @@ antiga), rode `scripts/consertar_icone_mac.sh`: conserta sem reinstalar.
 - Pensamento do modelo: se o servidor devolve `reasoning_content`/`reasoning`
   (llama.cpp com Qwen thinking, DeepSeek-R1 etc.), aparece como
   `pensamento> ...` antes da resposta.
-- Contexto: apos cada resposta sai `contexto: NN% de 156000 chars` (verde/amarelo/
+- Contexto: apos cada resposta sai `contexto: NN% de 250000 chars` (verde/amarelo/
   vermelho); aos 85% a barra de baixo entra na cor de alerta e a proxima rodada
   compacta sozinha em resumo (o TEO avisa na tela enquanto compacta). Se o servidor
   recusar o tamanho, ele compacta e tenta de novo em vez de parar. O ponto de

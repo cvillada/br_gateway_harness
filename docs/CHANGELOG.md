@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.42
+
+Tabela desenhada no terminal, mais contexto por padrao e site com login lido
+com a janela aberta.
+
+- TABELA NO TERMINAL: quando a resposta traz tabela (| nome | tamanho |), o TEO
+  desenha a grade em caixa ASCII (+---+), com as colunas alinhadas, em vez de
+  mostrar os "|" crus que a quebra de linha da tela partia em pedacos. A tela do
+  navegador continua com a grade em HTML. Janela estreita: a coluna comprida
+  encurta com "~" e, se nem assim couber, cada item sai como "campo: valor".
+- CONTEXTO PADRAO DE 250000 caracteres (~71 mil tokens) em instalacao nova, com
+  o teto da descoberta automatica em 260000. A compressao passa a comecar por
+  volta de 212 mil caracteres em vez de 132 mil: menos compactacao no meio de
+  uma tarefa longa. Config que ja tem o numero salvo nao muda.
+- O teto de leitura tambem fica salvo no config: uma migracao sobe o valor
+  antigo (160000) para o novo UMA vez, senao o assistente de setup derrubaria o
+  orcamento de quem ja tinha ajustado com `/ctx`.
+- SITE COM LOGIN lido na ABA ABERTA (Linux e Windows): a janela do navegador do
+  TEO abre, a pessoa entra com a conta dela e DEIXA ABERTA - o TEO le o texto da
+  aba por dentro do navegador. Nao precisa mais fechar a janela para ler; fechar
+  cedo perdia o login (o navegador grava cookie em lote, com 10 a 40 segundos de
+  atraso - medido).
+- `ver_pagina(origem="aba")` passa a valer nos tres sistemas; no Mac continua
+  sendo a aba do Safari.
+- `/site` mostra a janela aberta e as abas; `/site fechar` fecha a janela do
+  TEO; `/site esquecer` fecha antes de apagar o perfil.
+- O TEO nao repete o login quando a leitura falha, e a descricao do `ver_tela`
+  avisa: para site que o proprio TEO abriu, use `ver_pagina` (nao fotografe a
+  tela inteira).
+- Assistente de setup: local, custom e deepseek com 120000 de orcamento quando o
+  servidor nao publica o proprio teto (nubesbr continua com o valor medido).
+
+Suite local: 658 verificacoes gerais + 181 da tela.
+
 ## 0.2.41
 
 No Mac o navegador e o Safari - e o TEO agora le a pagina de verdade nele.

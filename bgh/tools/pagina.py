@@ -22,6 +22,7 @@ Navegador, por sistema (sem dependencia Python nova):
 from __future__ import annotations
 
 import html as htmllib
+import json
 import os
 import re
 import secrets
@@ -31,6 +32,7 @@ import sys
 import time
 from pathlib import Path
 
+from .. import cdp
 from ..config import BGH_HOME
 from .guard import STOPPED_NOTE, stopped
 from .websearch import html_para_texto
@@ -43,7 +45,9 @@ SPEC = {
             "Abre uma pagina num navegador de verdade (arquivo .html local ou endereco "
             "http/https) e devolve o texto que aparece DEPOIS do JavaScript rodar, os "
             "erros do console e um print da tela. Use para conferir o que voce mesmo "
-            "construiu ou para ler pagina que monta o conteudo por JavaScript."
+            "construiu ou para ler pagina que monta o conteudo por JavaScript. Se a "
+            "janela do TEO estiver aberta (site com login), o texto vem da ABA ABERTA, "
+            "ja logada, e nao precisa fechar nada."
         ),
         "parameters": {
             "type": "object",
@@ -52,9 +56,12 @@ SPEC = {
                     "type": "string",
                     "description": ("Caminho completo de um arquivo .html (ex.: "
                                     "/home/ana/site/index.html) ou endereco http(s). "
-                                    "No macOS, use \"aba\" para ler a aba ABERTA do "
-                                    "Safari (pagina que a pessoa ja logou e deixou "
-                                    "aberta)"),
+                                    "Para site com login que voce abriu com "
+                                    "abrir_navegador, passe o endereco do site (ou "
+                                    "aba): eu leio a ABA ABERTA, ja logada, com a "
+                                    "janela aberta - vale em Linux, Windows e macOS. "
+                                    "Nao precisa fechar a janela e NAO tire print da "
+                                    "tela para isso."),
                 },
                 "largura": {"type": "integer",
                             "description": "Largura da janela em pixels (padrao 1280)"},
@@ -76,8 +83,9 @@ SPEC_ABRIR = {
         "description": (
             "Abre uma janela do navegador DO TEO para a PESSOA fazer login num site "
             "(so quando ela pede para o TEO ler uma pagina que exige conta). O TEO nao "
-            "digita senha e nao clica em entrar: quem entra e a pessoa. Depois de "
-            "entrar ela FECHA a janela e o ver_pagina le o site logado pelo texto."
+            "digita senha e nao clica em entrar: quem entra e a pessoa. A janela fica "
+            "ABERTA e o ver_pagina le a aba aberta, ja logada, pelo protocolo do "
+            "navegador - nao peca para fechar e nao recomece o login."
         ),
         "parameters": {
             "type": "object",
@@ -147,6 +155,31 @@ def perfil() -> Path:
     return alvo
 
 
+def fechar_janela() -> bool:
+    """Fecha a janela do TEO. True quando ela nao existe mais."""
+    atual = janela_aberta()
+    if not atual:
+        _apagar_estado()
+        return True
+    porta, estado = atual
+    if cdp.fechar(porta):
+        _apagar_estado()
+        return True
+    pid = estado.get("pid")
+    try:
+        if pid:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(int(pid))],
+                               capture_output=True, timeout=10)
+            else:
+                os.killpg(os.getpgid(int(pid)), 15)
+            time.sleep(0.6)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
+    _apagar_estado()
+    return janela_aberta() is None
+
+
 def esquecer_logins() -> int:
     """Apaga o perfil (cookies, sessoes). Devolve quantos arquivos saiu.
 
@@ -155,6 +188,7 @@ def esquecer_logins() -> int:
     """
     import shutil
 
+    fechar_janela()   # o navegador aberto continua escrevendo no perfil
     alvo = BGH_HOME / "navegador"
     if not alvo.exists():
         return 0
@@ -173,6 +207,76 @@ def perfil_em_uso(erro: str) -> bool:
             or "singletonlock" in texto)
 
 
+def _estado_janela() -> Path:
+    alvo = BGH_HOME / "navegador"
+    alvo.mkdir(parents=True, exist_ok=True)
+    return alvo / "janela.json"
+
+
+def _ler_estado() -> dict:
+    try:
+        dado = json.loads(_estado_janela().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return dado if isinstance(dado, dict) else {}
+
+
+def _gravar_estado(dado: dict) -> None:
+    try:
+        _estado_janela().write_text(json.dumps(dado), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _apagar_estado() -> None:
+    try:
+        _estado_janela().unlink()
+    except OSError:
+        pass
+
+
+def _pid_vivo(pid) -> bool:
+    """O processo do navegador ainda existe? (no Windows quem decide e a porta)"""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        return True     # os.kill(pid, 0) nao e confiavel no Windows: fica a porta
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def janela_aberta() -> tuple | None:
+    """(porta do CDP, estado) da janela do TEO, ou None quando nao ha nenhuma.
+
+    Duas pistas: o `janela.json` que a gente grava ao abrir e o arquivo
+    DevToolsActivePort do proprio perfil (assim uma janela aberta antes de o
+    TEO reiniciar tambem e encontrada, sem abrir uma segunda - que o Chrome
+    recusaria com "ProcessSingleton").
+    """
+    estado = _ler_estado()
+    porta = estado.get("porta")
+    if porta and str(porta).isdigit():
+        porta = int(porta)
+        if _pid_vivo(estado.get("pid")) and cdp.vivo(porta):
+            return porta, estado
+    _apagar_estado()
+    achada = cdp.porta_ativa(perfil())
+    if achada and cdp.vivo(achada):
+        estado = {"porta": achada, "url": "", "adotada": True}
+        _gravar_estado(estado)
+        return achada, estado
+    return None
+
+
 def _url_usa_perfil(url: str) -> bool:
     """Perfil so vale para site (http/https). Arquivo local (TDD) fica de fora:
     nao precisa de cookie e nao corre risco de travar com a janela de login aberta.
@@ -180,11 +284,27 @@ def _url_usa_perfil(url: str) -> bool:
     return url.lower().startswith(("http://", "https://"))
 
 
-def abrir_janela(url: str) -> tuple[bool, str]:
-    """Abre uma janela VISIVEL do navegador do TEO para a pessoa fazer login.
+def _espera_porta(proc, segundos: float = 6.0) -> int | None:
+    """Espera o navegador publicar a porta do CDP; None se morreu ou nao publicou."""
+    fim = time.time() + segundos
+    while time.time() < fim:
+        if proc is not None and proc.poll() is not None:
+            return None
+        porta = cdp.porta_ativa(perfil())
+        if porta and cdp.vivo(porta):
+            return porta
+        time.sleep(0.2)
+    return None
 
-    Nao espera nada: o turno continua. Quem digita a senha e a pessoa, na janela
-    do TEO - o agente nao ve, nao digita e nao automatiza login.
+
+def abrir_janela(url: str) -> tuple[bool, str]:
+    """Abre (ou reaproveita) a janela do TEO e CONFIRMA que ela subiu.
+
+    A janela fica ABERTA enquanto a pessoa navega: o ver_pagina le a aba por CDP,
+    sem fechar nada. Fechar a janela era o defeito antigo - o Chrome grava cookie
+    em lote (medido: 10-40 s de atraso) e quem fechava antes perdia o login.
+
+    Devolve (True, nome) so quando existe uma janela viva respondendo ao CDP.
     """
     exe, nome = achar_navegador()
     if not exe:
@@ -192,27 +312,57 @@ def abrir_janela(url: str) -> tuple[bool, str]:
             try:
                 subprocess.Popen(["open", "-a", "Safari", url], start_new_session=True,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return True, ("safari: janela aberta no Safari (sem perfil proprio do "
-                              "TEO neste sistema - o login NAO fica guardado).")
+                return True, ("safari: janela aberta no Safari (o TEO le a ABA aberta, "
+                              "com ver_pagina origem=aba; nao precisa fechar nada)")
             except OSError as exc:
                 return False, f"nao consegui abrir o Safari: {exc}"
         return False, "nao achei navegador nesta maquina (Chrome, Chromium, Edge ou Brave)"
+
+    atual = janela_aberta()
+    if atual:
+        porta, _estado = atual
+        if cdp.escolher(cdp.abas(porta), url):
+            return True, f"{nome} (essa pagina ja estava aberta na janela do TEO)"
+        if cdp.nova_aba(porta, url):
+            return True, f"{nome} (aba nova na janela que ja estava aberta)"
+        return False, ("a janela do navegador do TEO ja esta aberta, mas eu nao consegui "
+                       "abrir uma aba nova nela")
     comando = [
         exe,
         f"--user-data-dir={perfil()}",
         "--no-first-run",
         "--no-default-browser-check",
-        f"--window-size=1280,900",
+        # Porta aleatoria do CDP: e por ela que o TEO le a aba aberta.
+        "--remote-debugging-port=0",
+        "--window-size=1280,900",
         url,
     ]
-    try:
-        subprocess.Popen(comando, start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-                            if os.name == "nt" else {}))
-    except OSError as exc:
-        return False, f"nao consegui abrir o navegador: {exc}"
-    return True, nome
+    detalhe = "o navegador nao publicou a porta de leitura"
+    for _tentativa in (1, 2):
+        try:
+            proc = subprocess.Popen(
+                comando, start_new_session=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+                   if os.name == "nt" else {}))
+        except OSError as exc:
+            return False, f"nao consegui abrir o navegador: {exc}"
+        porta = _espera_porta(proc)
+        if porta:
+            _gravar_estado({"pid": proc.pid, "porta": porta, "url": url,
+                            "aberto_em": time.time()})
+            return True, nome
+        # Nao subiu. Quando a janela anterior esta terminando de fechar o Chrome
+        # sai na hora (ProcessSingleton) - espera e tenta mais uma vez.
+        detalhe = ("a janela anterior do TEO ainda estava fechando; esperei e tentei "
+                   "de novo, mas o navegador nao abriu")
+        try:
+            if proc.poll() is None:
+                _matar(proc)
+        except OSError:
+            pass
+        time.sleep(1.0)
+    return False, detalhe
 
 
 def limpar(horas: float = 24.0) -> int:
@@ -309,16 +459,19 @@ def run_abrir(args: dict, ctx) -> str:
         "1. Na janela que abriu, entre no site com a conta dela. A senha e dela - "
         "eu nao vejo, nao digito e nao guardo. Se o site oferecer \"manter "
         "conectado\", ela deve marcar (cookie de sessao sozinho nao fica guardado).",
-        "2. Quando aparecer a pagina que ela quer mostrar, FECHAR a janela.",
-        "3. Depois pedir de novo para eu ler a pagina, que eu leio o texto ja logado.",
-        "   (No macOS, com Safari: nao precisa fechar nada - eu leio a ABA aberta, "
-        "com ver_pagina origem=aba.)",
+        "2. DEIXE A JANELA ABERTA. Eu leio a aba aberta, ja logada: nao precisa "
+        "fechar nada, e fechar cedo atrapalha (o navegador grava o login devagar).",
+        "3. Ela navega ate a pagina que quer mostrar e me pede para ler.",
         "",
-        "Enquanto a janela estiver aberta eu NAO consigo ler o site (o perfil fica "
-        "em uso) - o passo 2 e obrigatorio.",
+        "IMPORTANTE: o login vive na janela aberta. Se a leitura falhar, NAO recomece "
+        "o processo e NAO peca a senha de novo - tente ler outra vez e, se continuar "
+        "falhando, pergunte se a janela do TEO ainda esta aberta.",
+        f"PARA LER AGORA: ver_pagina com origem={url} (ou origem=aba). Nao use ver_tela "
+        "para isso: ver_tela fotografa a tela inteira.",
+        "Quando nao precisar mais: /site fechar (fecha a janela do TEO).",
     ]
     if detalhe.startswith("safari"):
-        linhas.append("ATENCAO: neste Mac o login NAO fica guardado no perfil do TEO.")
+        linhas.append("ATENCAO: neste Mac o TEO le a ABA do Safari (origem=aba).")
     return "\n".join(linhas)
 
 
@@ -566,24 +719,99 @@ def _safari(origem: str, url: str, png: Path, espera_s: int, alvo: Path | None,
                          png if Path(png).is_file() else None, nota=nota)
 
 
+def _nota_janela() -> str:
+    return ("texto lido da JANELA ABERTA do navegador do TEO: e a mesma aba que a pessoa "
+            "esta vendo, com o login dela. NAO peca para fechar nada e NAO recomece o "
+            "login - se a pagina for a tela de entrada do site, a sessao expirou; peca "
+            "para a pessoa entrar de novo NA MESMA janela e mande ler outra vez.")
+
+
+def _ler_aba(aba: dict, png: Path, extra: str = "") -> str:
+    """Le UMA aba (texto + print) e monta o resultado para o modelo."""
+    ws_url = str(aba.get("webSocketDebuggerUrl") or "")
+    if not ws_url:
+        return ("ERRO: encontrei a aba, mas ela nao publicou o endereco de leitura. "
+                "NAO peca login de novo: mande ler outra vez.")
+    try:
+        cdp.pronta(ws_url)          # aba nova comeca em 'loading': espera montar
+        texto = cdp.texto_da_aba(ws_url)
+    except OSError as exc:
+        return (f"ERRO: a janela do TEO esta aberta, mas nao consegui ler a aba ({exc}). "
+                "NAO peca login de novo: tente ler outra vez em alguns segundos.")
+    dados = None
+    try:
+        dados = cdp.print_da_aba(ws_url)
+    except OSError:
+        dados = None
+    if dados:
+        try:
+            png.write_bytes(dados)
+        except OSError:
+            pass
+    nota = _nota_janela() + extra
+    achada = str(aba.get("url") or "")
+    titulo = str(aba.get("title") or "")
+    return _montar_texto(achada, "janela do TEO (aba aberta)", titulo,
+                         texto, [], png if Path(png).is_file() else None, nota=nota)
+
+
+def _ler_pela_janela(origem: str, url: str, png: Path) -> str | None:
+    """Le a aba da janela aberta por CDP. None = nao ha janela (segue o headless)."""
+    atual = janela_aberta()
+    if not atual:
+        return None
+    porta, _estado = atual
+    lista = cdp.abas(porta)
+    aba = cdp.escolher(lista, url)
+    if aba is None:
+        aba = cdp.nova_aba(porta, url)
+    if aba is None:
+        return (f"ERRO: a janela do navegador do TEO esta aberta, mas eu nao consegui achar "
+                f"nem abrir a aba {url} nela. NAO peca login de novo: peca para a pessoa "
+                "abrir essa pagina na janela do TEO e mande ler outra vez.")
+    extra = ""
+    if aba.get("url") and str(aba.get("url")) != url:
+        extra = f" (a aba esta em {aba.get('url')}: o site pode ter redirecionado.)"
+    return _ler_aba(aba, png, extra)
+
+
 def run(args: dict, ctx) -> str:
     origem = str(args.get("origem") or "").strip()
     if not origem:
         return "ERRO: informe o caminho do arquivo ou o endereco http(s)."
     if stopped(ctx):
         return STOPPED_NOTE
-    if origem.lower() in ("aba", "aba aberta", "aba do safari"):
-        if not _e_mac():
-            return ("ERRO: 'aba' e do macOS com Safari (le a aba que a pessoa deixou "
-                    "aberta, ja logada). No Linux/Windows use ver_tela, ou informe o "
-                    "caminho/URL.")
+    if origem.lower() in ("aba", "aba aberta", "aba do teo", "aba do tela", "aba do safari"):
+        if _e_mac():
+            try:
+                limpar(horas=24)
+            except OSError:
+                pass
+            png = pasta() / f"pagina-{secrets.token_hex(4)}.png"
+            espera = _clamp(int(args.get("espera") or 1), 0, MAX_ESPERA_S)
+            return _safari(origem, "", png, espera, None, ler_aba=True)
+        # Linux/Windows: a aba da JANELA do TEO (a que abrir_navegador abriu).
+        atual = janela_aberta()
+        if not atual:
+            return ("ERRO: nao ha janela do navegador do TEO aberta. Para site com login: "
+                    "abrir_navegador <endereco>, a pessoa entra, e depois ver_pagina com o "
+                    "endereco do site (ou 'aba'). NAO tire print da tela para ler site: "
+                    "ver_tela e para o que esta FORA do navegador do TEO.")
+        porta, _estado = atual
+        abas = cdp.abas(porta)
+        if not abas:
+            return ("ERRO: a janela do TEO esta aberta, mas sem pagina carregada. Peca para "
+                    "a pessoa abrir a pagina nela e mande ler outra vez.")
         try:
             limpar(horas=24)
         except OSError:
             pass
         png = pasta() / f"pagina-{secrets.token_hex(4)}.png"
-        espera = _clamp(int(args.get("espera") or 1), 0, MAX_ESPERA_S)
-        return _safari(origem, "", png, espera, None, ler_aba=True)
+        extra = ""
+        if len(abas) > 1:
+            outras = ", ".join(str(a.get("url") or "?") for a in abas[1:4])
+            extra = (f" A janela tem {len(abas)} abas: li a primeira. As outras sao {outras}.")
+        return _ler_aba(abas[0], png, extra)
     url, alvo, erro = _alvo(origem)
     if erro:
         return erro
@@ -604,15 +832,21 @@ def run(args: dict, ctx) -> str:
     png = pasta() / f"pagina-{secrets.token_hex(4)}.png"
 
     exe, nome = achar_navegador()
+    if exe and _url_usa_perfil(url):
+        # Janela do TEO aberta: le a ABA por CDP (login vivo, sem fechar nada).
+        lido = _ler_pela_janela(origem, url, png)
+        if lido is not None:
+            return lido
     if exe:
         html, stderr, erro_exec = _chromium(exe, url, png, largura, altura,
                                            espera * 1000)
         if erro_exec:
             return erro_exec
         if perfil_em_uso(stderr) and not (html or "").strip():
-            return ("ERRO: a janela do navegador do TEO esta aberta com o login. "
-                    "Peca para a pessoa FECHAR essa janela e depois abrir a pagina de "
-                    "novo - enquanto ela estiver aberta eu nao consigo ler o site.")
+            return ("ERRO: existe uma janela do navegador do TEO aberta e eu nao consegui "
+                    "falar com ela pelo protocolo de leitura. NAO peca login de novo: peca "
+                    "para a pessoa FECHAR a janela do TEO e mande ler outra vez - se o site "
+                    "pedir a senha depois disso, ai sim ela entra de novo.")
         falha = _falha_carga(stderr)
         if falha and not (html or "").strip():
             return (f"ERRO: o navegador nao conseguiu carregar {origem} ({falha}). "

@@ -37,7 +37,10 @@ SPEC = {
             "Tira um print da TELA da pessoa (todas as janelas visiveis) e devolve a "
             "imagem para voce olhar. Use quando a pessoa pedir para ver algo que esta "
             "na tela dela e que exige login (caixa de e-mail, painel, conversa): ela "
-            "loga, deixa aberto e pede. Pede licenca antes de fotografar."
+            "loga, deixa aberto e pede. Pede licenca antes de fotografar. NAO use para "
+            "site que voce mesmo abriu com abrir_navegador - nesse caso use ver_pagina "
+            "com o endereco do site (ou origem=aba): a janela do TEO pode ficar aberta e "
+            "a leitura sai do texto da pagina, sem print de tela."
         ),
         "parameters": {
             "type": "object",

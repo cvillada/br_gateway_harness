@@ -87,17 +87,22 @@ DEFAULTS = {
     "search_time_limit_s": 20,
     "search_max_files": 20000,
     # Orcamento de contexto em caracteres (~3.5 chars/token em pt+codigo).
-    # 156000 chars ~= 45 mil tokens: cabe com folga no servidor hospedado (motor
-    # la aceita 262144 tokens; leitura medida: 125 mil chars custam ~77 s).
-    # Modelo local (llama.cpp) paga contexto grande em VRAM: baixe com /ctx 60000
-    # se o servidor da propria maquina reclamar.
-    "context_budget_chars": 156000,
+    # 250000 chars ~= 71 mil tokens. No servidor hospedado (motor de la aceita
+    # 262144 tokens) isso custa leitura longa com cache FRIO: medido na P40,
+    # 30 mil tokens = 60 s, entao 71 mil ficam perto de 143 s (dentro dos 300 s
+    # do timeout remoto). Com cache quente o KV e reaproveitado e o turno fica
+    # barato. Modelo local pequeno paga isso em espera: baixe com /ctx 60000 se
+    # o servidor da propria maquina reclamar - e, quando o servidor publica o
+    # n_ctx, o assistente de setup ja herda o teto real sozinho.
+    "context_budget_chars": 250000,
     # Compactar comecando aqui (% do orcamento), ANTES de esbarrar no teto.
     "context_compress_pct": 85,
     # Teto da descoberta automatica: por mais que o servidor entregue (ex.: motor
     # com 262144 tokens), o TEO limita o proprio uso para a leitura nao virar espera
-    # de minutos na maquina do usuario. Ajustavel; /ctx subiu alem daqui por escolha.
-    "context_auto_cap_chars": 160000,
+    # de minutos na maquina do usuario. Fica ACIMA do orcamento padrao de proposito:
+    # se fosse menor, um servidor que publica contexto puxaria o budget para baixo
+    # e o padrao novo nunca valeria. Ajustavel; /ctx subiu alem daqui por escolha.
+    "context_auto_cap_chars": 260000,
     # Rodadas de ferramenta por ETAPA do turno. 12 deixava pesquisa/redacao longa
     # cair no fechamento no meio do trabalho; 20 comporta sessao pesada. Ao chegar
     # na etapa, se o turno esta progredindo o TEO prorroga sozinho ate o teto
@@ -247,6 +252,34 @@ def _migra_max_tokens(cfg: dict, gravado: dict | None) -> bool:
     return True
 
 
+# Carimbo da migracao do teto de leitura da descoberta (0.2.42).
+CAP_CONTEXTO_MIGRADA = "cap_contexto_migrado"
+
+
+def _migra_cap_contexto(cfg: dict, gravado: dict | None) -> bool:
+    """Sobe uma vez o teto de leitura antigo (160000) para o padrao atual.
+
+    O teto da descoberta automatica ficava GRAVADO no config.json de quem ja
+    rodou o assistente. Com o orcamento padrao subindo para 250000, esse numero
+    velho passaria a puxar o budget PARA BAIXO na proxima vez que o assistente
+    herdasse o contexto do servidor - um downgrade que ninguem pediu (caso real:
+    o dono tem budget 350000 e cap 160000 no arquivo). Aqui o valor antigo sobe
+    para o padrao uma vez e o arquivo ganha carimbo; ajuste manual depois do
+    carimbo e sempre respeitado.
+    """
+    if gravado is None or gravado.get(CAP_CONTEXTO_MIGRADA):
+        return False
+    padrao = int(DEFAULTS["context_auto_cap_chars"])
+    try:
+        valor = int(gravado.get("context_auto_cap_chars", padrao))
+    except (TypeError, ValueError):
+        valor = padrao
+    if valor < padrao:
+        cfg["context_auto_cap_chars"] = padrao
+    cfg[CAP_CONTEXTO_MIGRADA] = True
+    return True
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
     gravado: dict | None = None
@@ -268,7 +301,10 @@ def load_config() -> dict:
         if val:
             cfg[field] = val
     ensure_profiles(cfg)
-    if _migra_max_tokens(cfg, gravado):
+    migrou = _migra_max_tokens(cfg, gravado)
+    if _migra_cap_contexto(cfg, gravado):
+        migrou = True
+    if migrou:
         save_config(cfg)
     if not cfg.get("base_url") or not cfg.get("model"):
         raise ConfigError(

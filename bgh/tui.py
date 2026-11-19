@@ -248,6 +248,15 @@ class TuiSink:
         width = max(20, (self.width_fn() if self.width_fn else 46) - 2)
         self.emit("=" * width, style="class:rule")
 
+    def largura(self) -> int | None:
+        """Largura util da janela: a tabela da resposta precisa caber inteira."""
+        if not self.width_fn:
+            return None
+        try:
+            return max(20, int(self.width_fn()) - 2)
+        except Exception:  # noqa: BLE001 - janela sem medida: caixa no tamanho natural
+            return None
+
     def thinking(self, text: str) -> None:
         self.state["fase"] = "modelo"   # palco: o pedido chegou no modelo
         self.emit(text, newline=False, style="th")

@@ -275,6 +275,10 @@ class AppSink:
     # O menu numerado de pastas do terminal nao existe aqui: com False o core
     # cai na listagem em texto, que ja funciona e nao precisa de codigo novo.
     menu_arquivos = False
+    # Tabela aqui e desenhada em HTML pelo app.js (montarTabela). Se o core
+    # convertesse a tabela em caixa ASCII antes de mandar, a pagina receberia
+    # linhas com "|" e "----" e remontaria a tabela em cima da caixa.
+    tabela_ascii = False
     # Esta tela ENTENDE o /zoom (o terminal nao: la o tamanho da letra e /fonte).
     tela_navegador = True
 

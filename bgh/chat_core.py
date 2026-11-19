@@ -20,7 +20,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from . import i18n, limpeza, tela, voz
+from . import i18n, limpeza, tabela, tela, voz
 from .agent import Agent, STOPPED_NOTE
 from .i18n import t
 from .approvals import Gate
@@ -379,6 +379,10 @@ class ConsoleSink:
         width = max(20, int(getattr(self.console, "width", 0) or 46))
         self.console.print("=" * width, style="dim", markup=False)
 
+    def largura(self) -> int | None:
+        """Largura do console: a tabela da resposta precisa caber inteira."""
+        return max(20, int(getattr(self.console, "width", 0) or 78) - 1)
+
     def thinking(self, text: str) -> None:
         self.console.print(text, end="", style="#808080 italic", markup=False)
 
@@ -477,6 +481,12 @@ class ChatCore:
         # Estado do streaming: pensamento e resposta em blocos separados.
         self.st = {"thinking": False, "resposta": False}
         self._pend = ""  # '*' do fim de um pedaco aguarda o proximo ('**' dividido)
+        # Tabela do modelo ("| a | b |") e desenhada aqui como caixa ASCII: no
+        # terminal ela chegava crua e a quebra de linha da tela partia os pipes.
+        # A tela do navegador desenha a grade em HTML (app.js): la a caixa ASCII
+        # atrapalharia, e a tela avisa isso com tabela_ascii = False.
+        self._tab_ligada = bool(getattr(sink, "tabela_ascii", True))
+        self._tab = tabela.FiltroTabela()
         self.agent.on_reasoning_delta = self._on_reasoning
         self.agent.on_text_delta = self._on_text
         # Avisos do cliente (espera longa, fallback sem streaming) viram linha na tela:
@@ -544,7 +554,7 @@ class ChatCore:
             self.cfg["server_context_tokens"] = int(tokens)
             self.cfg["server_context_key"] = chave_atual
             entrega = int(int(tokens) * CHARS_POR_TOKEN * FOLGA_LEITURA)
-            budget = int(self.cfg.get("context_budget_chars", 156000))
+            budget = int(self.cfg.get("context_budget_chars", 250000))
             if entrega < budget:
                 # Teto real menor que o orcamento: comprimir mais cedo evita turno
                 # quebrando no meio por contexto (mesma conta do assistente de setup).
@@ -581,12 +591,39 @@ class ChatCore:
         self._pend = buf[len(buf) - trail:] if 0 < trail <= 2 else ""
         body = buf[:len(buf) - len(self._pend)]
         if body:
-            self.sink.answer(md_clean(body))
+            pronto = md_clean(body)
+            if self._tab_ligada:
+                pronto = self._tab.feed(pronto, self._largura_tela())
+            if pronto:
+                self.sink.answer(pronto)
 
     def _flush_pend(self) -> None:
         if self._pend:
             self.sink.answer(md_clean(self._pend))
             self._pend = ""
+        if not self._tab_ligada:
+            return
+        # Tabela que estava sendo segurada aparece aqui: fim do turno, parada do
+        # usuario e fechamento por limite passam todos por este ponto.
+        resto = self._tab.flush(self._largura_tela())
+        if resto:
+            self.sink.answer(resto)
+
+    def _largura_tela(self) -> int | None:
+        """Largura util da tela, quando ela sabe (a caixa da tabela precisa caber).
+
+        A tela fixa devolve a largura da janela; o modo classico, a do console.
+        Tela que nao implementa `largura` fica sem teto e a caixa sai no tamanho
+        natural do conteudo.
+        """
+        fn = getattr(self.sink, "largura", None)
+        if fn is None:
+            return None
+        try:
+            valor = int(fn())
+        except Exception:  # noqa: BLE001 - largura desconhecida nao derruba a resposta
+            return None
+        return valor if valor >= 20 else None
 
     # ----- janela de contexto ---------------------------------------------------
     def print_ctx(self) -> None:
@@ -1075,6 +1112,12 @@ class ChatCore:
                     self.sink.line(t("cmd.site.esquecer_ok", n=total) if total
                                    else t("cmd.site.nada"),
                                    style="cyan" if total else "dim")
+                elif pedaco_l in ("fechar", "close", "cerrar"):
+                    # Fecha a janela do TEO (o login vivo some junto, de proposito).
+                    if pagina_mod.fechar_janela():
+                        self.sink.line(t("cmd.site.fechar_ok"), style="cyan")
+                    else:
+                        self.sink.line(t("cmd.site.fechar_nada"), style="dim")
                 elif pedaco_l.startswith(("abrir", "open")):
                     alvo_site = pedaco.split(maxsplit=1)[1].strip() if " " in pedaco else ""
                     if not alvo_site.startswith(("http://", "https://")):
@@ -1092,7 +1135,14 @@ class ChatCore:
                     casa = pagina_mod.BGH_HOME / "navegador"
                     total = (sum(1 for item in casa.rglob("*") if item.is_file())
                              if casa.exists() else 0)
-                    if total:
+                    atual = pagina_mod.janela_aberta()
+                    if atual:
+                        porta, _estado = atual
+                        abas = pagina_mod.cdp.abas(porta)
+                        lista = ", ".join(str(a.get("url") or "?") for a in abas[:3]) or "-"
+                        self.sink.line(t("cmd.site.status_janela", n=len(abas),
+                                         urls=lista, cmd=cmd_site), style="cyan")
+                    elif total:
                         self.sink.line(t("cmd.site.status", n=total, cmd=cmd_site),
                                        style="cyan")
                     else:
@@ -1533,6 +1583,7 @@ class ChatCore:
             self.st["thinking"] = False
             self.st["resposta"] = False
             self._pend = ""
+            self._tab = tabela.FiltroTabela()   # tabela nao atravessa de um turno para o outro
             # As imagens valem para o PRIMEIRO turno; os de continuacao
             # (steering) seguem so com texto.
             envio: dict = {}
@@ -1588,7 +1639,10 @@ class ChatCore:
                     self.sink.sep(t("turn.sep.answer"))
                 elif not self.st["resposta"]:
                     self.sink.sep(t("turn.sep.answer"))
-                self.sink.line(md_clean(answer))
+                texto_final = md_clean(answer)
+                if self._tab_ligada:
+                    texto_final = tabela.preparar(texto_final, self._largura_tela())
+                self.sink.line(texto_final)
             if (not answer.strip() and answer != STOPPED_NOTE and not self.st["resposta"]):
                 # Caso medido em maquina de cliente (Windows, streaming ligado): o
                 # modelo gastou todo o max_tokens pensando e voltou sem texto. O aviso

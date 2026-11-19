@@ -225,7 +225,7 @@ answer = agent.run_turn("rode um echo ai")
 ok("loop ferramenta->resposta", "ola_mundo" in answer or "certo" in answer)
 ok("reasoning do modelo capturado", agent.last_reasoning and "listar" in agent.last_reasoning[0])
 usage = agent.ctx_usage()
-ok("medidor de contexto funciona", usage["pct"] >= 0 and usage["budget"] == 156000 and usage["messages"] > 2)
+ok("medidor de contexto funciona", usage["pct"] >= 0 and usage["budget"] == 250000 and usage["messages"] > 2)
 tool_msgs = [m for m in agent.messages if m.get("role") == "tool"]
 ok("resultado da ferramenta voltou ao modelo", tool_msgs and "ola_mundo" in tool_msgs[0]["content"])
 ok("sessao persistida", Path(os.environ["BGH_HOME"], "session.json").is_file())
@@ -457,7 +457,7 @@ saved = json.loads((TMP / "config.json").read_text(encoding="utf-8"))
 ok("wizard acumula provedores", set(saved["profiles"]) == {"local", "deepseek"} and saved["active_profile"] == "deepseek")
 ok("load ativa o ultimo salvo", load_config()["model"] == "deepseek-v4-flash")
 ok("wizard define o orcamento sem perguntar numero ao usuario",
-   saved["context_budget_chars"] == 60000)
+   saved["context_budget_chars"] == 120000)
 
 # ---------- parada do usuario + nucleo compartilhado -----------------------------
 import threading
@@ -811,6 +811,9 @@ from bgh.setup_wizard import BUDGET_SUGESTAO, MAX_TOKENS_PRESET
 
 ok("assistente sugere budget maior para o servidor hospedado (cabem 45 mil tokens)",
    BUDGET_SUGESTAO["nubesbr"] == "156000")
+ok("sem prova do servidor, preset local/custom/deepseek ficam em 120000",
+   BUDGET_SUGESTAO["local"] == "120000" and BUDGET_SUGESTAO["custom"] == "120000"
+   and BUDGET_SUGESTAO["deepseek"] == "120000")
 ok("perfil remoto vem com saida maior que o pensamento do modelo",
    MAX_TOKENS_PRESET["nubesbr"] == 3072)
 ok("config novo traz teto de busca e timeout automatico",
@@ -873,9 +876,9 @@ from bgh.llm import ContextOverflowError as _COE26
 from bgh.llm import LLM as _LLM26
 
 ok("config novo ja nasce com orcamento grande e compactacao antecipada",
-   DEFAULTS.get("context_budget_chars") == 156000
+   DEFAULTS.get("context_budget_chars") == 250000
    and DEFAULTS.get("context_compress_pct") == 85
-   and DEFAULTS.get("context_auto_cap_chars") == 160000)
+   and DEFAULTS.get("context_auto_cap_chars") == 260000)
 
 
 class _OkLLM26:
@@ -1235,7 +1238,7 @@ finally:
     wiz_mod._probe_context_tokens = _orig_probe26
 _salvo26 = json.loads((TMP / "config.json").read_text(encoding="utf-8"))
 ok("orcamento herdado do servidor sem pergunta de numero (com teto de leitura)",
-   _salvo26["context_budget_chars"] == 160000
+   _salvo26["context_budget_chars"] == 260000
    and _salvo26.get("server_context_tokens") == 262144
    and any("herdado do servidor" in d and "262144" in d for d in _ditos26)
    and not any("Orcamento de contexto em caracteres" in p for p in _perguntas26))
@@ -4392,15 +4395,26 @@ class _Popen339:
     def __init__(self, comando, **kwargs):
         _comando339["argv"] = comando
         _comando339["kwargs"] = kwargs
+        self.pid = 4321
+
+    def poll(self):
+        return None
 
 
 _original_popen339 = _pagina337.subprocess.Popen
 _original_achar339 = _pagina337.achar_navegador
+_original_janela339 = _pagina337.janela_aberta
+_original_porta339 = _pagina337._espera_porta
+_original_estado339 = _pagina337._gravar_estado
 try:
     # Fixar um Chromium: o que se testa aqui e o COMANDO, nao o que a maquina tem
     # (no macOS do CI nao existe Chrome e o caminho seria o Safari).
     _pagina337.achar_navegador = lambda: ("/usr/bin/google-chrome", "google-chrome")
     _pagina337.subprocess.Popen = _Popen339
+    # Janela nao existe ainda; e a espera pela porta do CDP responde na hora.
+    _pagina337.janela_aberta = lambda: None
+    _pagina337._espera_porta = lambda proc, segundos=6.0: 43210
+    _pagina337._gravar_estado = lambda dado: _comando339.setdefault("estado", dado)
     _saida_abrir339 = _pagina337.run_abrir({"url": "https://mail.exemplo.com"}, _Ctx339())
 
     # E o caminho do Safari (Mac sem Chrome): abre janela e AVISA que nao guarda.
@@ -4412,24 +4426,32 @@ try:
 finally:
     _pagina337.subprocess.Popen = _original_popen339
     _pagina337.achar_navegador = _original_achar339
+    _pagina337.janela_aberta = _original_janela339
+    _pagina337._espera_porta = _original_porta339
+    _pagina337._gravar_estado = _original_estado339
 
 ok("abrir_navegador usa o PERFIL do TEO (nao o navegador pessoal da pessoa)",
    any("--user-data-dir=" in str(arg) for arg in _comando339.get("argv") or [])
    and str(_pagina337.perfil()) in " ".join(_comando339.get("argv") or []))
 ok("abrir_navegador abre janela VISIVEL (sem --headless)",
    not any("--headless" in str(arg) for arg in _comando339.get("argv") or []))
-ok("abrir_navegador entrega os passos para a pessoa",
-   "PASSOS PARA A PESSOA" in _saida_abrir339 and "FECHAR a janela" in _saida_abrir339)
-ok("abrir_navegador avisa que a janela aberta impede a leitura",
-   "NAO consigo ler" in _saida_abrir339)
+ok("abrir_navegador abre com a porta do CDP (para ler a aba aberta)",
+   any("--remote-debugging-port=0" in str(arg)
+       for arg in _comando339.get("argv") or [])
+   and _comando339.get("estado", {}).get("porta") == 43210)
+ok("abrir_navegador entrega os passos para a pessoa (janela FICA aberta)",
+   "PASSOS PARA A PESSOA" in _saida_abrir339
+   and "DEIXE A JANELA ABERTA" in _saida_abrir339)
+ok("abrir_navegador proibe recomecar o login quando a leitura falhar",
+   "NAO recomece" in _saida_abrir339 and "NAO peca a senha de novo" in _saida_abrir339)
 ok("abrir_navegador recusa endereco que nao e http(s)",
    _pagina337.run_abrir({"url": "/etc/passwd"}, _Ctx339()).startswith("ERRO"))
 ok("abrir_navegador esta registrada no ToolBox",
    "abrir_navegador" in _ag338.tools.handlers)
-ok("no Mac sem Chrome o abrir_navegador usa o Safari e avisa que nao guarda login",
+ok("no Mac sem Chrome o abrir_navegador usa o Safari e manda ler a ABA",
    any("Safari" in str(arg) or "safari" in str(arg).lower()
        for arg in _comando_safari339.get("argv") or [])
-   and "NAO fica guardado" in _saida_safari339)
+   and "ABA" in _saida_safari339)
 
 # --- comando /site: estado, abrir e ESQUECER (a trava de privacidade) ---
 _core_site339 = ChatCore(dict(_cfg334), RecSink(), llm=_OkLLM26())
@@ -4462,8 +4484,8 @@ try:
     # Abrir navegador de verdade aqui abriria uma janela na cara do dono.
     _pagina337.abrir_janela = lambda url: (True, "google-chrome")
     _core_site339.submit("/site abrir https://mail.exemplo.com")
-    ok("/site abrir entrega o passo a passo do login",
-       any("Abri uma janela" in linha and "FECHE a janela" in linha
+    ok("/site abrir entrega o passo a passo do login (janela fica aberta)",
+       any("Abri uma janela" in linha and "DEIXE A JANELA ABERTA" in linha
            for linha in _linhas339))
     _pagina337.abrir_janela = lambda url: (False, "sem navegador")
     _linhas339.clear()
@@ -4472,6 +4494,21 @@ try:
        any("Nao consegui abrir" in linha for linha in _linhas339))
 finally:
     _pagina337.abrir_janela = _original_abrir339
+
+_linhas339.clear()
+_original_fechar339 = _pagina337.fechar_janela
+try:
+    _pagina337.fechar_janela = lambda: True
+    _core_site339.submit("/site fechar")
+    ok("/site fechar fecha a janela do TEO e confirma",
+       any("Fechei a janela do navegador do TEO" in linha for linha in _linhas339))
+    _pagina337.fechar_janela = lambda: False
+    _linhas339.clear()
+    _core_site339.submit("/site fechar")
+    ok("/site fechar sem janela aberta nao inventa sucesso",
+       any("Nao havia janela do TEO aberta" in linha for linha in _linhas339))
+finally:
+    _pagina337.fechar_janela = _original_fechar339
 
 _linhas339.clear()
 _core_site339.submit("/site xyz")
@@ -4568,8 +4605,9 @@ finally:
     _pag340._e_mac = _orig_e_mac340
     _pag340._safari = _orig_safari340
 
-ok("'aba' fora do macOS explica o caminho certo (ver_tela / caminho ou URL)",
-   _saida_aba_linux.startswith("ERRO") and "macOS" in _saida_aba_linux)
+ok("'aba' no Linux sem janela do TEO ensina abrir_navegador/ver_pagina (nao ver_tela)",
+   _saida_aba_linux.startswith("ERRO") and "abrir_navegador" in _saida_aba_linux
+   and "NAO tire print da tela" in _saida_aba_linux)
 ok("no macOS, 'aba' entrega a leitura para o Safari", _saida_aba_mac == "SAFARI_LEU_ABA")
 
 _safari_epoch = {"n": 0}
@@ -4628,6 +4666,291 @@ ok("Safari sem 'JavaScript de eventos da Apple': ensina a ligar a opcao",
    "Permitir JavaScript de eventos da Apple" in _saida_semjs340)
 ok("...e nao mente: avisa que o texto veio do HTML servido",
    "HTML servido" in _saida_semjs340)
+
+# ---------- v0.2.42: tabela do modelo vira caixa ASCII na tela de texto ------
+from bgh import tabela as _tab42
+from bgh.tui import LineBoard as _LB42, TuiSink as _TS42
+
+_linhas42 = ["| arquivo | tamanho |", "|---|---|",
+             "| vendas_outubro.xlsx | 248 KB |", "| foto_natal.jpeg | 3 MB |"]
+_caixa42 = _tab42.montar(_linhas42)
+ok("tabela do modelo vira caixa com borda ASCII (estilo DOS)",
+   _caixa42[0].startswith("+-") and _caixa42[-1].startswith("+-")
+   and all(l[:1] in ("+", "|") and l[-1:] in ("+", "|") for l in _caixa42))
+ok("a caixa alinha as colunas pela celula mais larga",
+   len({len(l) for l in _caixa42}) == 1 and "arquivo" in _caixa42[1])
+ok("separador torto '||||' tambem conta como cabecalho",
+   any("nome" in l for l in _tab42.montar(["| nome | valor", "||||", "| a | 1", "| b | 2"])))
+ok("janela estreita demais cai no formato vertical (nada quebrado no meio)",
+   "arquivo: vendas_outubro.xlsx" in _tab42.montar(_linhas42, 16))
+ok("uma linha so com '|' nao e tabela (volta como texto)",
+   _tab42.preparar("| so isso\nprossegue", 80) == "| so isso\nprossegue")
+
+_board42 = _LB42()
+
+
+def _emit42(text, newline=True, style=None):
+    _board42.add(str(text), style, newline)
+
+
+_sink42 = _TS42(_emit42, lambda: None, {}, width_fn=lambda: 80)
+_cfg42 = dict(core_cfg)
+_cfg42["server_context_key"] = _cfg42["base_url"] + "|" + _cfg42["model"]
+_core42 = ChatCore(_cfg42, _sink42, llm=FakeLLM([{"role": "assistant", "content": ""}]))
+_texto42 = ("Segue:\n| arquivo | tamanho |\n|---|---|\n"
+            "| vendas_outubro_vendas_2026_final.xlsx | 248 KB |\nfim\n")
+for _i42 in range(0, len(_texto42), 6):   # streaming curto: quebra no meio das linhas
+    _core42._on_text(_texto42[_i42:_i42 + 6])
+_core42._flush_pend()
+_rows42 = ["".join(texto for _, texto in r) for r in _board42.rows(80)]
+ok("na tela do terminal a tabela sai desenhada (nenhum '|---|' cru)",
+   any(l.startswith("+---") for l in _rows42)
+   and not any("|---|" in l or "|--" == l for l in _rows42))
+ok("...e a caixa cabe na janela (nada quebrado no meio)",
+   all(len(l) <= 78 for l in _rows42 if l.startswith(("|", "+"))))
+_fim42 = _tab42.preparar("antes\n| a | b |\n|---|---|\n| 1 | 2 |", 80)
+ok("tabela no FIM da resposta tambem aparece (flush do turno)",
+   "| 1   | 2   |" in _fim42 and "+---" in _fim42)
+from bgh.app_servidor import AppSink as _AppSink42
+ok("a tela do navegador NAO recebe a caixa ASCII (la a grade e HTML)",
+   getattr(_AppSink42, "tabela_ascii", True) is False)
+
+# teto de leitura da descoberta: valor antigo gravado nao pode derrubar o budget
+import bgh.config as _cfgmod42
+from bgh.config import load_config as _load42
+
+_arq42 = _cfgmod42.CONFIG_PATH
+_dados42 = json.loads(_arq42.read_text(encoding="utf-8"))
+_dados42["context_auto_cap_chars"] = 160000
+_dados42["context_budget_chars"] = 300000
+_dados42.pop("cap_contexto_migrado", None)
+_arq42.write_text(json.dumps(_dados42), encoding="utf-8")
+_cfg_teto42 = _load42()
+_gravado42 = json.loads(_arq42.read_text(encoding="utf-8"))
+ok("teto de leitura antigo (160000) sobe uma vez e NAO derruba o budget do usuario",
+   _cfg_teto42["context_auto_cap_chars"] == 260000
+   and _gravado42.get("cap_contexto_migrado") is True
+   and _gravado42["context_budget_chars"] == 300000)
+_gravado42["context_auto_cap_chars"] = 50000
+_arq42.write_text(json.dumps(_gravado42), encoding="utf-8")
+ok("depois do carimbo, teto ajustado a mao continua valendo",
+   _load42()["context_auto_cap_chars"] == 50000)
+
+# ---------- v0.2.42: /site le a ABA ABERTA pelo protocolo do navegador --------
+import base64 as _b64_42
+import hashlib as _hash_42
+import re as _re_42
+import socket as _sock_42
+import threading as _thr_42
+
+from bgh import cdp as _cdp42
+
+_ws42 = _sock_42.socketpair()
+try:
+    _cliente42 = _cdp42._Ligacao(_ws42[0])
+    _cliente42.envia_texto("oi daqui")
+    _fin42, _op42, _dados42 = _cdp42._Ligacao(_ws42[1])._frame()
+    ok("frame do CDP: o cliente mascara igual ao protocolo e o texto volta certo",
+       _fin42 and _op42 == 0x1 and _dados42 == b"oi daqui")
+    # frame do SERVIDOR (sem mascara, como o Chrome manda)
+    _ws42[1].sendall(bytes([0x81, 4]) + b"ok!!")
+    ok("frame do CDP: resposta do navegador (sem mascara) e lida certo",
+       _cliente42.mensagem(2.0) == "ok!!")
+finally:
+    _ws42[0].close()
+    _ws42[1].close()
+
+_perfil42 = _pagina337.pasta().parent / "navegador" / "perfil"
+_perfil42.mkdir(parents=True, exist_ok=True)
+(_perfil42 / "DevToolsActivePort").write_text("45678\n/devtools/browser/abc\n", encoding="utf-8")
+ok("porta do CDP e lida do DevToolsActivePort do perfil",
+   _cdp42.porta_ativa(_perfil42) == 45678)
+ok("porta do CDP ausente/invalida nao derruba nada",
+   _cdp42.porta_ativa(_pagina337.pasta() / "nao-existe") is None)
+
+_abas42 = [
+    {"url": "https://mail.exemplo.com/caixa", "title": "Caixa"},
+    {"url": "https://mail.exemplo.com/login", "title": "Entrar"},
+    {"url": "https://outro.com/x", "title": "Outro"},
+]
+ok("escolher acha a aba EXATA antes das outras do mesmo site",
+   (_cdp42.escolher(_abas42, "https://mail.exemplo.com/login") or {}).get("title") == "Entrar")
+ok("escolher cai na MESMA pagina quando muda so a query",
+   (_cdp42.escolher(_abas42, "https://mail.exemplo.com/caixa?pagina=2") or {}
+    ).get("title") == "Caixa")
+ok("escolher nao le pagina diferente da pedida (nem do mesmo site)",
+   _cdp42.escolher(_abas42, "https://mail.exemplo.com/envio") is None)
+ok("escolher nao pega aba de outro site",
+   _cdp42.escolher(_abas42, "https://terceiro.com/") is None)
+
+
+def _servidor_cdp_falso42(resposta: str):
+    """Servidor WebSocket de mentira que responde UM metodo do CDP."""
+    servidor = _sock_42.socket()
+    servidor.bind(("127.0.0.1", 0))
+    servidor.listen(1)
+    porta = servidor.getsockname()[1]
+
+    def atende():
+        con, _ = servidor.accept()
+        con.settimeout(5)
+        pedido = b""
+        while b"\r\n\r\n" not in pedido:
+            pedaco = con.recv(4096)
+            if not pedaco:
+                return
+            pedido += pedaco
+        chave = _re_42.search(rb"Sec-WebSocket-Key: (\S+)", pedido).group(1)
+        aceite = _b64_42.b64encode(
+            _hash_42.sha1(chave + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest()).decode()
+        con.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                     "Connection: Upgrade\r\n"
+                     f"Sec-WebSocket-Accept: {aceite}\r\n\r\n").encode())
+        cabeca = con.recv(2)
+        tamanho = cabeca[1] & 0x7F
+        if tamanho == 126:
+            tamanho = int.from_bytes(con.recv(2), "big")
+        mascara = con.recv(4)
+        corpo = b""
+        while len(corpo) < tamanho:
+            corpo += con.recv(tamanho - len(corpo))
+        _ = bytes(b ^ mascara[i % 4] for i, b in enumerate(corpo))   # pedido do cliente
+        dados = resposta.encode()
+        con.sendall(bytes([0x81, len(dados)]) + dados)
+        con.close()
+
+    _thr_42.Thread(target=atende, daemon=True).start()
+    return porta, servidor
+
+
+_porta42, _srv42 = _servidor_cdp_falso42(
+    '{"id": 1, "result": {"result": {"type": "string", "value": "AREA LOGADA"}}}')
+try:
+    _texto42b = _cdp42.texto_da_aba(f"ws://127.0.0.1:{_porta42}/devtools/page/xyz")
+finally:
+    _srv42.close()
+ok("texto_da_aba le o texto da aba pelo CDP (fala WebSocket de verdade)",
+   _texto42b == "AREA LOGADA")
+
+# abrir_janela: navegador que nao sobe NAO pode ser anunciado como aberto
+_original_popen42 = _pagina337.subprocess.Popen
+_original_achar42 = _pagina337.achar_navegador
+_original_janela42 = _pagina337.janela_aberta
+_original_porta42 = _pagina337._espera_porta
+_original_estado42 = _pagina337._gravar_estado
+_original_sleep42 = _pagina337.time.sleep
+
+
+class _PopenMorto42:
+    """Processo que morre na hora, como o Chrome quando o perfil esta em uso."""
+
+    def __init__(self, comando, **kwargs):
+        self.pid = 999999
+
+    def poll(self):
+        return 21
+
+
+try:
+    _pagina337.achar_navegador = lambda: ("/usr/bin/google-chrome", "google-chrome")
+    _pagina337.janela_aberta = lambda: None
+    _pagina337._espera_porta = lambda proc, segundos=6.0: None
+    _pagina337._gravar_estado = lambda dado: None
+    _pagina337.time.sleep = lambda s: None
+    _pagina337.subprocess.Popen = _PopenMorto42
+    _ok42, _detalhe42 = _pagina337.abrir_janela("https://mail.exemplo.com")
+finally:
+    _pagina337.subprocess.Popen = _original_popen42
+    _pagina337.achar_navegador = _original_achar42
+    _pagina337.janela_aberta = _original_janela42
+    _pagina337._espera_porta = _original_porta42
+    _pagina337._gravar_estado = _original_estado42
+    _pagina337.time.sleep = _original_sleep42
+ok("abrir_janela NAO mente quando o navegador nao sobe (defeito antigo)",
+   _ok42 is False and "nao abriu" in _detalhe42)
+
+# abrir_janela reaproveita a janela ja aberta em vez de tentar uma segunda
+_original_janela42b = _pagina337.janela_aberta
+_original_abas42 = _cdp42.abas
+_original_nova42 = _cdp42.nova_aba
+try:
+    _pagina337.achar_navegador = lambda: ("/usr/bin/google-chrome", "google-chrome")
+    _pagina337.janela_aberta = lambda: (43210, {"porta": 43210})
+    _cdp42.abas = lambda porta, timeout=2.0: []
+    _cdp42.nova_aba = lambda porta, url, timeout=4.0: {"url": url, "title": "nova"}
+    _ok42b, _det42b = _pagina337.abrir_janela("https://mail.exemplo.com")
+finally:
+    _pagina337.janela_aberta = _original_janela42b
+    _pagina337.achar_navegador = _original_achar42
+    _cdp42.abas = _original_abas42
+    _cdp42.nova_aba = _original_nova42
+ok("abrir_janela reusa a janela aberta (abre aba nova em vez de segunda janela)",
+   _ok42b is True and "aba nova" in _det42b)
+
+# ver_pagina com janela aberta: le a aba e NAO manda recomecar o login
+_original_texto42 = _cdp42.texto_da_aba
+_original_print42 = _cdp42.print_da_aba
+try:
+    _pagina337.janela_aberta = lambda: (43210, {"porta": 43210})
+    _cdp42.abas = lambda porta, timeout=2.0: [
+        {"url": "https://mail.exemplo.com/caixa", "title": "Caixa",
+         "webSocketDebuggerUrl": "ws://127.0.0.1:1/devtools/page/x"}]
+    _cdp42.texto_da_aba = lambda ws_url, timeout=8.0: "AREA LOGADA\ncliente: Maria"
+    _cdp42.print_da_aba = lambda ws_url, timeout=15.0: None
+    _saida42 = _pagina337.run({"origem": "https://mail.exemplo.com/caixa"}, _Ctx339())
+finally:
+    _pagina337.janela_aberta = _original_janela42b
+    _cdp42.abas = _original_abas42
+    _cdp42.texto_da_aba = _original_texto42
+    _cdp42.print_da_aba = _original_print42
+ok("ver_pagina le a ABA ABERTA (site logado) quando a janela do TEO esta de pe",
+   "AREA LOGADA" in _saida42 and "cliente: Maria" in _saida42
+   and "janela do TEO" in _saida42)
+ok("...e a nota proibe fechar a janela e recomecar o login",
+   "NAO peca para fechar" in _saida42 and "NAO recomece o login" in _saida42)
+
+from bgh.i18n import t as _t42
+ok("os textos novos do /site existem nas tres linguas",
+   all(_t42(chave) for chave in ("cmd.site.status_janela", "cmd.site.fechar_ok",
+                                 "cmd.site.fechar_nada")))
+ok("o texto de /site abrir nao manda mais fechar a janela",
+   "FECHE" not in _t42("cmd.site.abrir") and "DEIXE A JANELA ABERTA" in _t42("cmd.site.abrir"))
+
+# 'aba' no Linux/Windows: le a aba da janela do TEO (antes so existia no macOS)
+_original_e_mac42 = _pagina337._e_mac
+_original_janela42c = _pagina337.janela_aberta
+_original_texto42c = _cdp42.texto_da_aba
+_original_abas42c = _cdp42.abas
+try:
+    _pagina337._e_mac = lambda: False
+    _pagina337.janela_aberta = lambda: (43210, {"porta": 43210})
+    _cdp42.abas = lambda porta, timeout=2.0: [
+        {"url": "https://console.exemplo.com/chat", "title": "Console",
+         "webSocketDebuggerUrl": "ws://127.0.0.1:1/devtools/page/y"},
+        {"url": "https://outro.com/x", "title": "Outro"}]
+    _cdp42.texto_da_aba = lambda ws_url, timeout=8.0: "SALDO: 12.345 micros"
+    _saida_aba42 = _pagina337.run({"origem": "aba"}, _Ctx339())
+finally:
+    _pagina337._e_mac = _original_e_mac42
+    _pagina337.janela_aberta = _original_janela42c
+    _cdp42.texto_da_aba = _original_texto42c
+    _cdp42.abas = _original_abas42c
+ok("'aba' no Linux le a aba da janela do TEO (sem print da tela)",
+   "SALDO: 12.345 micros" in _saida_aba42 and "janela do TEO" in _saida_aba42)
+ok("com mais de uma aba, a leitura avisa quais outras estao abertas",
+   "A janela tem 2 abas" in _saida_aba42 and "outro.com" in _saida_aba42)
+
+from bgh.tools import ver_tela as _ver_tela42
+ok("a descricao do ver_tela manda usar ver_pagina em site que o TEO abriu",
+   "abrir_navegador" in _ver_tela42.SPEC["function"]["description"]
+   and "ver_pagina" in _ver_tela42.SPEC["function"]["description"])
+from bgh import prompts as _prompts42
+_prompt42 = _prompts42.build_system_prompt([], [], [])
+ok("o system prompt ensina o caminho do site com login (e proibe print da tela)",
+   "SITE COM LOGIN" in _prompt42 and "ver_tela (print da tela inteira)" in _prompt42)
+ok("a descricao do ver_pagina diz que 'aba' vale nos tres sistemas",
+   "Linux, Windows e macOS" in _pagina337.SPEC["function"]["parameters"]
+   ["properties"]["origem"]["description"])
 
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e

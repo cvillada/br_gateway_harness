@@ -43,8 +43,13 @@ def _ask(prompt: str, default: str = "", secret: bool = False) -> str:
 # hospedado: 60 mil chars custam ~37 s so para o motor ler o prompt; 125 mil
 # custam ~77 s; o motor la aceita 262144 tokens, entao 156 mil chars cabem com
 # folga). Quando o servidor publica seu teto (llama.cpp 'props', lista estilo
-# OpenRouter), o assistente usa o valor dele em vez deste aqui.
-BUDGET_SUGESTAO = {"nubesbr": "156000", "deepseek": "60000", "local": "60000", "custom": "60000"}
+# OpenRouter), o assistente usa o valor dele em vez deste aqui - e por isso o
+# preset so decide no caso SEM prova (setup sem internet, chave invalida). A
+# DeepSeek publica 1M tokens no catalogo models.dev, entao na pratica ela tambem
+# herda (260000 com o teto atual); 120000 aqui e o palpite de quem nao conseguiu
+# perguntar nada, igual a local/custom. nubesbr fica em 156000 porque e medicao
+# no servidor hospedado do dono, nao palpite.
+BUDGET_SUGESTAO = {"nubesbr": "156000", "deepseek": "120000", "local": "120000", "custom": "120000"}
 # Conversao tokens -> caracteres e folga para saida + ferramentas da rodada.
 CHARS_POR_TOKEN = 3.5
 FOLGA_LEITURA = 0.85
@@ -167,7 +172,7 @@ def run(non_interactive: bool = False, provider: str | None = None, api_key: str
             "request_timeout_s": 15,
         })
         if tokens_servidor:
-            cap = int(cfg.get("context_auto_cap_chars") or 160000)
+            cap = int(cfg.get("context_auto_cap_chars") or 260000)
             auto_limite = int(max(8000, min(tokens_servidor * CHARS_POR_TOKEN * FOLGA_LEITURA, cap)))
             cfg["server_context_tokens"] = int(tokens_servidor)  # o rodape pode avisar o teto
             # O numero pertence a este servidor/modelo; troca re-sonda (chat_core).
