@@ -177,6 +177,7 @@ HELP_APP = (
     ("item", "lingua"),
     ("item", "fundo"),
     ("item", "ctx"),
+    ("item", "teto"),
     ("item", "pensamento"),
     ("sec", "quando"),
     ("item", "skills"),

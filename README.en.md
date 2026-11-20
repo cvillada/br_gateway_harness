@@ -190,6 +190,14 @@ footer warns ("cap; the server delivers N tokens"). Output per answer up to 8192
 tokens (`max_tokens`), enough to write a ~28 thousand character HTML document in one
 round; heavy writing sessions can use `/ctx 300000`. Fine tuning: `/ctx` on screen.
 
+Step limit per request: one request can take a lot of work (open pages, run commands,
+check files, write a document). So the TEO does not run for hours without telling you: it
+has a limit of **120 steps per request**. If the work is not over, it does NOT invent the
+rest: it stops, shows `NOT DONE YET`, keeps the conversation and asks you to write
+`continue` - it resumes from where it stopped, with the data it already had. `/cap 60`
+changes the limit, `/cap 0` removes it (it can take long then; ESC or CTRL+C stop) and
+`/cap` alone shows the value in use. The default (120) is saved in the config.
+
 ## Chatting
 
 The chat opens like Hermes: the `you>` line always stays at the bottom and the
@@ -246,6 +254,7 @@ Commands:
 | `/thinking on\|off` | shows or hides the gray block on screen (the model keeps thinking); advanced: level sent to the server auto off minimum low medium high xhigh max ultra |
 | `/stage on\|off` | shows or hides the request trail while answering (fixed screen only) |
 | `/ctx` | context meter; `/ctx <number>` sets the limit and saves it (e.g. `/ctx 65000`; accepts 65k) |
+| `/cap` | how many steps the TEO may take in one request (default 120). `/cap 60` changes it, `/cap 0` removes the limit (it can take long; ESC/CTRL+C stop), `/cap` alone shows the value. Also accepts `off` and `unlimited` |
 | `/setup` | fixes or registers a provider without leaving TEO (same assistant as `bgh setup`) |
 | `/doctor` | connection and machine diagnosis on the screen itself |
 | `/update` | checks for a new version on GitHub; if there is one, asks permission and installs (same version: says everything is fine) |

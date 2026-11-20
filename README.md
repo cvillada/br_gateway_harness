@@ -184,6 +184,14 @@ tokens (`max_tokens`), o suficiente para escrever um documento HTML de ~28 mil
 caracteres numa rodada; sessoes de redacao pesadas podem usar `/ctx 300000`.
 Ajuste fino: `/ctx` na tela.
 
+Limite de passos por pedido: um pedido pode dar muito trabalho (abrir paginas, rodar
+comandos, conferir arquivos, escrever documento). Para nao passar horas sem avisar, o TEO
+tem um limite de **120 passos por pedido**. Se o trabalho nao terminar, ele NAO inventa o
+resto: para, mostra `AINDA NAO ESTA PRONTO`, guarda a conversa e pede para voce escrever
+`continuar` - ele retoma de onde parou, com os dados que ja tinha. `/teto 60` muda o
+limite, `/teto 0` tira o limite (ai pode demorar bastante; ESC ou CTRL+C param) e
+`/teto` sozinho mostra o valor que esta valendo. O padrao (120) fica salvo no config.
+
 ## Conversando
 
 O chat abre igual ao Hermes: a linha `voce>` fica sempre embaixo e as mensagens
@@ -239,6 +247,7 @@ Comandos:
 | `/pensamento liga\|desliga` | mostra ou esconde o bloco cinza na tela (o modelo segue pensando); avancado: nivel enviado ao servidor auto off minimum low medium high xhigh max ultra |
 | `/palco liga\|desliga` | mostra ou esconde a trilha do pedido durante a resposta (so na tela fixa) |
 | `/ctx` | medidor do contexto; `/ctx <numero>` define o limite e salva (ex.: `/ctx 65000`; aceita 65k, 65.000, 65 mil) |
+| `/teto` | quantos passos o TEO pode dar num pedido (padrao 120). `/teto 60` muda, `/teto 0` tira o limite (pode demorar; ESC/CTRL+C param), `/teto` sozinho mostra o valor. Aceita tambem `sem` e `ilimitado` |
 | `/configurar` | conserta ou cadastra provedor sem sair do TEO (mesmo assistente do `bgh setup`) |
 | `/doctor` | diagnostico da conexao e da maquina na propria tela |
 | `/atualizar` | confere se ha versao nova no GitHub; se houver, pede licenca e instala (mesma versao: avisa que esta tudo certo) |
@@ -361,7 +370,9 @@ quer usar:
   `run_command` passa pela mesma licenca (sem saida pelo lado).
 - Anti-loop (regra dura): chamada IDENTICA repetida 3 vezes e cortada antes de executar
   ("LOOP DETECTADO"); 5 falhas em sequencia fecham o turno com uma explicacao ao usuario,
-  em vez de insistir para sempre. Limite de rodadas por turno continua como teto final.
+  em vez de insistir para sempre. O limite de passos por pedido (120, ajustavel com
+  `/teto`) continua como teto final - e quando ele chega, o TEO avisa em vez de entregar
+  documento pela metade.
 
 ## Como ele aprende
 

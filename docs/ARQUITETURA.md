@@ -35,10 +35,15 @@ bgh/
 1. UI (tui ou classico) entrega a linha digitada ao `ChatCore.submit`.
 2. Comandos com barra/atalhos sao resolvidos localmente; senao, `Agent.run_turn`.
 3. `run_turn` roda em etapas de `max_tool_rounds` (prorrogando ate
-   `max_tool_rounds_teto` enquanto o turno progride): modelo -> tool_calls -> `ToolBox.dispatch`
+   `max_tool_rounds_teto` enquanto o turno progride; teto `0` = sem parede): modelo ->
+   tool_calls -> `ToolBox.dispatch`
    (cada ferramenta passa pelo `Gate`) -> resultados -> modelo ate a resposta final.
+   Ao bater o teto com a tarefa em andamento, o harness marca a saida como ENTREGA
+   PARCIAL e guarda a conversa (nao entrega documento pela metade como se fosse final).
 4. Streaming: `llm.chat_stream` empurra pedacos de texto/pensamento para a UI ao vivo.
-5. Contexto acima do orcamento: `Agent._maybe_compress` resume a parte antiga.
+5. Contexto acima do orcamento: `Agent._compress_if_needed` resume a parte antiga,
+   levando junto o bloco de DADOS literais (numeros/trechos) e guardando
+   `session.pre-compact.json` antes de sobrescrever a conversa.
 6. Historico salvo em `~/.bgh/session.json` (retoma na proxima abertura).
 
 ## Botao de parar (CTRL+C / ESC na tela fixa)

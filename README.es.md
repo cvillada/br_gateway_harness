@@ -191,6 +191,14 @@ entrega N tokens"). Salida por respuesta hasta 8192 tokens (`max_tokens`), sufic
 para escribir un documento HTML de ~28 mil caracteres en una ronda; sesiones de
 redaccion pesadas pueden usar `/ctx 300000`. Ajuste fino: `/ctx` en pantalla.
 
+Limite de pasos por pedido: un pedido puede dar mucho trabajo (abrir paginas, ejecutar
+comandos, revisar archivos, escribir un documento). Para no pasar horas sin avisar, el TEO
+tiene un limite de **120 pasos por pedido**. Si el trabajo no termina, NO inventa el resto:
+para, muestra `TODAVIA NO ESTA LISTO`, guarda la conversacion y te pide escribir `continuar`
+- retoma desde donde paro, con los datos que ya tenia. `/tope 60` cambia el limite,
+`/tope 0` lo quita (ahi puede demorar bastante; ESC o CTRL+C paran) y `/tope` solo muestra
+el valor que vale. El valor por defecto (120) queda guardado en el config.
+
 ## Conversando
 
 El chat abre igual que Hermes: la linea `tu>` queda siempre abajo y los mensajes
@@ -246,6 +254,7 @@ Comandos:
 | `/pensamiento activar\|desactivar` | muestra u oculta el bloque gris en pantalla (el modelo sigue pensando); avanzado: nivel enviado al servidor auto off minimum low medium high xhigh max ultra |
 | `/escenario activar\|desactivar` | muestra u oculta el recorrido del pedido durante la respuesta (solo pantalla fija) |
 | `/ctx` | medidor del contexto; `/ctx <numero>` fija el limite y lo guarda (ej.: `/ctx 65000`; acepta 65k) |
+| `/tope` | cuantos pasos puede dar el TEO en un pedido (por defecto 120). `/tope 60` lo cambia, `/tope 0` quita el limite (puede demorar; ESC/CTRL+C paran), `/tope` solo muestra el valor. Acepta tambien `sin` e `ilimitado` |
 | `/configurar` | arregla o registra proveedor sin salir del TEO (mismo asistente de `bgh setup`) |
 | `/doctor` | diagnostico de la conexion y de la maquina en la propia pantalla |
 | `/actualizar` | revisa si hay version nueva en GitHub; si hay, pide permiso e instala (misma version: avisa que todo esta bien) |

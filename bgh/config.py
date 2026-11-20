@@ -108,7 +108,17 @@ DEFAULTS = {
     # na etapa, se o turno esta progredindo o TEO prorroga sozinho ate o teto
     # (max_tool_rounds_teto) - nao e parede, mas tambem nao vira loop sem fim.
     "max_tool_rounds": 20,
-    "max_tool_rounds_teto": 40,
+    # Teto do turno. Projeto/tarefa longa passa de 40 ferramentas de verdade: com 40
+    # o TEO fechava no meio do trabalho e o modelo preenchia o buraco por invencao.
+    # Ao bater o teto ele NAO entrega documento: avisa que esta parcial, salva a
+    # conversa e espera 'continue'. 0 = SEM parede (prorroga enquanto progride; os
+    # anti-loop de chamada repetida e de 5 falhas continuam valendo).
+    "max_tool_rounds_teto": 120,
+    # Aviso ao MODELO em % do teto (padrao do Hermes: budget_warning_ratio). Entra UMA
+    # vez no ultimo resultado de ferramenta: "anote o progresso e continue". Serve para
+    # o modelo nao ser surpreendido pelo teto - e nao para encerrar antes da hora.
+    # 0 ou 1 = desligado.
+    "tool_warning_ratio": 0.8,
     # Padroes aprovados com 'always' no prompt de comando perigoso
     # (texto exato ou glob estilo shell; igual ao command_allowlist do Hermes).
     "command_allowlist": [],
@@ -280,6 +290,41 @@ def _migra_cap_contexto(cfg: dict, gravado: dict | None) -> bool:
     return True
 
 
+# Carimbo da migracao do teto de ferramentas do turno (0.2.43).
+TOOL_ROUNDS_MIGRADA = "tool_rounds_migrado"
+
+
+def _migra_tool_rounds(cfg: dict, gravado: dict | None) -> bool:
+    """Sobe UMA vez a etapa/teto de ferramentas de quem tem o valor antigo gravado.
+
+    Quem instalou antes da 0.2.10 ficou com `max_tool_rounds: 12` (e
+    `max_tool_rounds_teto: 40`) no config.json. O valor do arquivo vence o padrao,
+    entao a instalacao continuava fechando o turno no meio de pesquisa/redacao -
+    caso real do dono (12 -> 24 -> 36 -> 40 e resposta com dado inventado). Aqui o
+    valor antigo sobe para o padrao atual uma vez e o arquivo ganha carimbo; ajuste
+    manual depois do carimbo (inclusive `teto: 0`, que significa SEM parede) e
+    sempre respeitado. Devolve True se o config precisa ser regravado.
+    """
+    if gravado is None or gravado.get(TOOL_ROUNDS_MIGRADA):
+        return False
+    padrao = int(DEFAULTS["max_tool_rounds"])
+    teto_padrao = int(DEFAULTS["max_tool_rounds_teto"])
+    try:
+        etapas = int(gravado.get("max_tool_rounds", padrao))
+    except (TypeError, ValueError):
+        etapas = padrao
+    try:
+        teto = int(gravado.get("max_tool_rounds_teto", teto_padrao))
+    except (TypeError, ValueError):
+        teto = teto_padrao
+    if etapas < padrao:
+        cfg["max_tool_rounds"] = padrao
+    if 0 < teto < teto_padrao:
+        cfg["max_tool_rounds_teto"] = teto_padrao
+    cfg[TOOL_ROUNDS_MIGRADA] = True
+    return True
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
     gravado: dict | None = None
@@ -303,6 +348,8 @@ def load_config() -> dict:
     ensure_profiles(cfg)
     migrou = _migra_max_tokens(cfg, gravado)
     if _migra_cap_contexto(cfg, gravado):
+        migrou = True
+    if _migra_tool_rounds(cfg, gravado):
         migrou = True
     if migrou:
         save_config(cfg)

@@ -351,6 +351,26 @@ def parse_budget(raw: str) -> int | None:
     return valor if 8000 <= valor <= 1000000 else None
 
 
+def parse_teto(raw: str) -> int | None:
+    """Passos por pedido: 0 = sem limite; 1 a 1000. None = nao entendi.
+
+    Palavra tambem vale ("sem", "ilimitado", "off"...), porque quem digita pode ser
+    crianca ou pessoa idosa: o comando nao pode exigir que ela saiba o numero certo.
+    """
+    texto = str(raw or "").strip().lower().replace(" ", "")
+    if not texto:
+        return None
+    for palavra in ("sem", "semlimite", "ilimitado", "infinito", "off", "none",
+                    "unlimited", "sin", "sinlimite", "sempre"):
+        if texto == palavra:
+            return 0
+    texto = texto.replace(".", "").replace(",", "")
+    if not texto.isdigit():
+        return None
+    valor = int(texto)
+    return valor if 0 <= valor <= 1000 else None
+
+
 class ConsoleSink:
     """Affiche classica (rich), usada quando nao ha tela fixa."""
 
@@ -1272,6 +1292,38 @@ class ChatCore:
                         save_config(self.cfg)
                         self.sink.line(t("cmd.ctx.set", n=novo), style="cyan")
                 self.print_ctx()
+            elif what == "teto":
+                # Quantos passos o TEO pode dar antes de chamar a pessoa para continuar.
+                # Sem argumento mostra o valor; 0 = sem limite.
+                if not rest:
+                    self.sink.line(
+                        t("cmd.teto.show",
+                          teto=int(self.cfg.get("max_tool_rounds_teto", 120)),
+                          cmd=i18n.cmd("teto")), style="cyan")
+                else:
+                    novo_t = parse_teto(rest)
+                    if novo_t is None:
+                        self.sink.line(t("cmd.teto.bad", cmd=i18n.cmd("teto")),
+                                       style="yellow")
+                    else:
+                        etapa = max(1, int(self.cfg.get("max_tool_rounds", 20)))
+                        if novo_t and novo_t < etapa:
+                            # Teto abaixo da etapa nao valeria na pratica: a etapa desce
+                            # junto (a pessoa nao precisa saber que existem duas contas).
+                            etapa = novo_t
+                        self.cfg["max_tool_rounds"] = etapa
+                        self.cfg["max_tool_rounds_teto"] = novo_t
+                        for dono in (self.agent, self.llm):
+                            dono_cfg = getattr(dono, "cfg", None)
+                            if dono_cfg is not None and dono_cfg is not self.cfg:
+                                dono_cfg["max_tool_rounds"] = etapa
+                                dono_cfg["max_tool_rounds_teto"] = novo_t
+                        save_config(self.cfg)
+                        if novo_t == 0:
+                            self.sink.line(t("cmd.teto.no_wall"), style="cyan")
+                        else:
+                            self.sink.line(t("cmd.teto.set", teto=novo_t),
+                                           style="cyan")
             elif what == "lang":
                 if rest:
                     codigo = i18n.lang_from_answer(rest)

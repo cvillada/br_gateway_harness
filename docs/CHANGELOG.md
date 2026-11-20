@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.2.43
+
+Turno longo nao entrega mais documento pela metade, e compactar nao apaga o dado.
+
+- TETO DE FERRAMENTAS: a etapa subiu de fabrica para 20 e o teto do turno para 120,
+  com MIGRACAO (`tool_rounds_migrado`): quem tem 12/40 gravado no config.json sobe
+  UMA vez e o ajuste a mao depois disso vale - inclusive `max_tool_rounds_teto: 0`,
+  que significa SEM parede (projeto/tarefa longa segue enquanto progride, com os
+  anti-loop de chamada repetida e de 5 falhas valendo).
+- PROGRESSO DE VERDADE: a prorrogacao agora exige chamada DISTINTA que deu certo na
+  etapa (antes bastava a ultima nao ter falhado). A nota "vou continuar por mais N"
+  sai UMA vez por turno, nao a cada etapa: a tela nao vira contador.
+- ENTREGA PARCIAL: ao bater o teto com a tarefa em andamento, o modelo nao recebe mais
+  "responda com o que ja coletou". Ele recebe ordem de dizer o que esta feito, o que
+  falta e o proximo passo, sem escrever documento final e sem preencher dado nao
+  coletado; e o HARNESS escreve o cabecalho "ENTREGA PARCIAL" na frente do texto (e
+  avisa em linha propria na tela), porque instrucao a modelo pequeno nao garante aviso.
+- COMPACTACAO QUE GUARDA DADO: cada mensagem antiga entra no resumo com 4000
+  caracteres (era 500 - cortava no meio resultado de ferramenta), o prompt do resumo
+  manda preservar numeros/medidas/citacoes literalmente, e um bloco de DADOS LITERAIS
+  (montado pelo codigo, sem modelo) volta junto: numero medido sobrevive a compactar.
+  Resumo vazio nao apaga mais a conversa sozinho - o bloco literal fica no lugar.
+- `session.pre-compact.json`: a conversa inteira e copiada ANTES de compactar, para o
+  "continue" ter de onde voltar (o session.json e sobrescrito pela compactacao).
+- UMA compactacao = UMA chamada de resumo: se o resumo nao baixou o suficiente, o TEO
+  corta resultado de ferramenta velho em vez de resumir o resumo (eram ate 3 + 4
+  passadas). Se nem isso baixa, ele segue com a conversa atual e avisa (com `/ctx` e
+  `/nova` na dica) em vez de repetir resumo a cada rodada.
+- RESPOSTA VAZIA no fim do turno (o modelo gastou a saida pensando, tipico logo depois
+  de compactar) ganha UMA segunda tentativa automatica com pensamento "low". Antes o
+  turno morria e a pessoa tinha de digitar "continue".
+- System prompt (pt/en/es): regra dura de nao completar numero/medida/citacao que nao
+  foi coletado; se a conversa foi resumida ou a coleta parou, dizer o que faltou.
+- A instrucao de fechamento do turno (teto/etapa) nao fica mais no historico: ela e
+  usada na hora e sai, em vez de puxar o turno seguinte para "encerrar o assunto".
+- AVISO AO MODELO em 80% do teto (`tool_warning_ratio`, padrao do Hermes
+  `budget_warning_ratio`): entra UMA vez no ultimo resultado de ferramenta "anote o
+  progresso e continue; nao pare so por causa deste aviso". O modelo deixa de ser
+  surpreendido pelo teto. 0 ou 1 desliga.
+- O system prompt passa a dizer que a conversa de ANTES da compactacao esta em
+  `~/.bgh/session.pre-compact.json`: se faltar um dado, o modelo PROCURA ali com
+  search_files antes de dizer que faltou (mesma ideia do "look it up, do not guess"
+  do compressor do Hermes).
+- `/teto` na tela: mostra o limite de passos do pedido, `/teto 60` muda, `/teto 0` tira o
+  limite (aceita "sem", "ilimitado", "off"). Fica salvo no config e vale no proximo pedido.
+  Se o numero for menor que a etapa interna, a etapa desce junto (nao existe numero que
+  "nao vale na pratica"). Apelidos: `/cap` e `/tope`.
+- Texto de tela do limite reescrito para quem usa o TEO (crianca e pessoa idosa): "passos"
+  em vez de "ferramentas", "AINDA NAO ESTA PRONTO" em vez de "ENTREGA PARCIAL", e o convite
+  e "escreva continuar". As instrucoes ao MODELO (que nao aparecem na tela) continuam
+  tecnicas de proposito.
+- README nos tres idiomas explica o limite de passos em linguagem simples e ganhou a linha
+  do `/teto` na tabela de comandos.
+
+Suite local: 683 verificacoes gerais + 181 da tela.
+
 ## 0.2.42
 
 Tabela desenhada no terminal, mais contexto por padrao e site com login lido

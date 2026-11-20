@@ -1060,13 +1060,17 @@ _notas_close: list[str] = []
 _ag_close.on_note = _notas_close.append
 _ans_close = _ag_close.run_turn("probe")
 ok("limite de rodadas fecha o turno com nota visivel na tela",
-   any("Limite de ferramentas" in n for n in _notas_close))
+   any("limite de passos" in n for n in _notas_close))
 ok("fechamento usa streaming quando o servidor suporta (sem silencio morto)",
    _ans_close == "fechamento streamed em portugues"
    and _llm_close.chamadas[-1] == ("stream", False))
+from bgh.i18n import t as _t43
+
 ok("instrucao de fechamento em portugues",
-   any("Responda em portugues" in str(m.get("content", ""))
-       for m in _ag_close.messages if m.get("role") == "user"))
+   "Responda em portugues" in _t43("agent.close_round", lang=_t43("agent.in_lang")))
+ok("a instrucao de fechamento NAO fica no historico do turno seguinte",
+   not any("limite de ferramentas deste turno" in str(m.get("content", "")).lower()
+           for m in _ag_close.messages if m.get("role") == "user"))
 _cfg_fail = dict(_cfg_close)
 _cfg_fail["max_tool_rounds"] = 8
 _llm_fail = _CloseLLM26()
@@ -2281,12 +2285,18 @@ _notas_l210: list[str] = []
 _ag_l210.on_note = _notas_l210.append
 _resp_l210 = _ag_l210.run_turn("faca varias coisas")
 ok("limite de 2 ferramentas RENOVA sozinho quando o turno esta progredindo",
-   any("vou continuar por mais 2" in n for n in _notas_l210))
+   any("posso seguir por mais 2" in n for n in _notas_l210))
 ok("prorrogacao para no teto (2 -> 4) e nao vira loop infinito",
-   _llm_l210.com_ferramenta == 4 and _resp_l210 == "resposta final")
+   _llm_l210.com_ferramenta == 4 and _resp_l210.endswith("resposta final"))
 ok("ao bater o teto a tela avisa e a instrucao ensina a continuar",
-   any("Parei em 4 ferramentas" in n for n in _notas_l210)
-   and any("continue" in str(m.get("content", "")) for m in _ag_l210.messages))
+   any("Parei em 4 passos" in n for n in _notas_l210)
+   and any("continuar" in str(m.get("content", "")) for m in _ag_l210.messages))
+ok("entrega no teto vem marcada como NAO PRONTA pelo harness (nao pelo modelo)",
+   _resp_l210.startswith("AINDA NAO ESTA PRONTO")
+   and any(n.startswith("AINDA NAO ESTA PRONTO") for n in _notas_l210))
+ok("a instrucao do teto proibe documento final e dado inventado",
+   "Nao escreva o documento final" in _t43("agent.close_teto", limite=4,
+                                           lang=_t43("agent.in_lang")))
 
 # Sem progresso (tudo falhando) NAO prorroga: fecha na primeira etapa.
 _cfg_r210: dict = dict(core_cfg)
@@ -2298,7 +2308,7 @@ _ag_r210.on_note = _notas_r210.append
 _resp_r210 = _ag_r210.run_turn("quebre tudo")
 ok("turno que so falha NAO prorroga (fecha na etapa, sem gastar mais)",
    _llm_r210.com_ferramenta == 2
-   and not any("vou continuar" in n for n in _notas_r210)
+   and not any("posso seguir por mais" in n for n in _notas_r210)
    and _resp_r210 == "resposta final")
 
 # Teto menor que o dobro: a prorrogacao respeita o numero exato do config.
@@ -4951,6 +4961,246 @@ ok("o system prompt ensina o caminho do site com login (e proibe print da tela)"
 ok("a descricao do ver_pagina diz que 'aba' vale nos tres sistemas",
    "Linux, Windows e macOS" in _pagina337.SPEC["function"]["parameters"]
    ["properties"]["origem"]["description"])
+
+# ---------- v0.2.43: turno longo, entrega PARCIAL e compactacao com dado ------
+# (a) config de fabrica antiga (etapa 12 / teto 40) sobe UMA vez e ganha carimbo.
+_arq43 = _cfgmod42.CONFIG_PATH
+_dados43 = json.loads(_arq43.read_text(encoding="utf-8"))
+_dados43["max_tool_rounds"] = 12
+_dados43["max_tool_rounds_teto"] = 40
+_dados43.pop("tool_rounds_migrado", None)
+_arq43.write_text(json.dumps(_dados43), encoding="utf-8")
+_cfg43 = _load42()
+_gravado43 = json.loads(_arq43.read_text(encoding="utf-8"))
+ok("etapa 12 / teto 40 gravados sobem uma vez para 20/120 (com carimbo)",
+   _cfg43["max_tool_rounds"] == 20 and _cfg43["max_tool_rounds_teto"] == 120
+   and _gravado43.get("tool_rounds_migrado") is True)
+_gravado43["max_tool_rounds"] = 6
+_gravado43["max_tool_rounds_teto"] = 0
+_arq43.write_text(json.dumps(_gravado43), encoding="utf-8")
+_cfg43b = _load42()
+ok("depois do carimbo o ajuste a mao vale - inclusive teto 0 (sem parede)",
+   _cfg43b["max_tool_rounds"] == 6 and _cfg43b["max_tool_rounds_teto"] == 0)
+_gravado43["max_tool_rounds"] = 20
+_gravado43["max_tool_rounds_teto"] = 120
+_arq43.write_text(json.dumps(_gravado43), encoding="utf-8")
+
+
+class _Progresso43:
+    """Ferramenta DIFERENTE a cada rodada (progresso), e para quando o trabalho acaba."""
+
+    def __init__(self, parar_em: int = 30):
+        self.n = 0
+        self.com_ferramenta = 0
+        self.parar_em = parar_em
+
+    def chat(self, messages, tools=None):
+        if tools is None:
+            return {"role": "assistant", "content": "fim"}
+        self.n += 1
+        if self.n > self.parar_em:
+            return {"role": "assistant", "content": "trabalho concluido"}
+        self.com_ferramenta += 1
+        return {"role": "assistant", "content": "", "tool_calls": [{
+            "id": f"c{self.n}", "type": "function",
+            "function": {"name": "run_command",
+                         "arguments": json.dumps({"command": f"echo passo {self.n}"})}}]}
+
+    def summarize(self, text):
+        return "resumo"
+
+
+_cfg43p: dict = dict(core_cfg)
+_cfg43p.update({"max_tool_rounds": 2, "max_tool_rounds_teto": 8, "stream": False})
+_llm43p = _Progresso43(parar_em=30)
+_ag43p = Agent(dict(_cfg43p), _llm43p, Gate(dict(_cfg43p), ask_d))
+_ag43p.new_session()
+_notas43p: list[str] = []
+_ag43p.on_note = _notas43p.append
+_resp43p = _ag43p.run_turn("projeto com muitas tarefas")
+ok("turno longo prorroga sozinho e a nota de prorrogacao sai UMA vez",
+   _llm43p.com_ferramenta == 8
+   and sum(1 for x in _notas43p if "posso seguir" in x) == 1)
+ok("no teto a entrega sai marcada como NAO PRONTA e ensina o 'continuar'",
+   _resp43p.startswith("AINDA NAO ESTA PRONTO") and "continuar" in _resp43p)
+
+# (b2) aviso ao MODELO em 80% do teto (padrao do Hermes): anota o progresso e segue.
+_cfg43n: dict = dict(core_cfg)
+_cfg43n.update({"max_tool_rounds": 2, "max_tool_rounds_teto": 10, "stream": False})
+_llm43n = _Progresso43(parar_em=30)
+_ag43n = Agent(dict(_cfg43n), _llm43n, Gate(dict(_cfg43n), ask_d))
+_ag43n.new_session()
+_ag43n.run_turn("projeto no limite")
+_tool43n = [str(m.get("content")) for m in _ag43n.messages if m.get("role") == "tool"]
+ok("aviso de orcamento entra UMA vez no resultado de ferramenta (80% do teto)",
+   sum(1 for x in _tool43n if "orcamento do turno" in x) == 1
+   and any("8 de 10" in x for x in _tool43n)
+   and any("CONTINUE a tarefa" in x for x in _tool43n))
+
+# (d) /teto: o limite por pedido na mao, em palavra que crianca e idoso entendem.
+from bgh.chat_core import parse_teto as _parse_teto43
+
+ok("parse do /teto aceita numero, zero e palavra (sem/ilimitado/off)",
+   _parse_teto43("60") == 60 and _parse_teto43("0") == 0
+   and _parse_teto43("sem") == 0 and _parse_teto43("ilimitado") == 0
+   and _parse_teto43("abc") is None and _parse_teto43("1001") is None)
+
+_sink_t43 = RecSink()
+_core_t43 = ChatCore(dict(core_cfg), _sink_t43, llm=_ListLLM26())
+_core_t43.submit("/teto 60")
+ok("/teto 60 salva o limite e responde em palavra simples",
+   _core_t43.cfg["max_tool_rounds_teto"] == 60
+   and any("60 passos por pedido" in l for l in _sink_t43.lines))
+_core_t43.submit("/teto 0")
+ok("/teto 0 tira o limite e avisa que pode demorar",
+   _core_t43.cfg["max_tool_rounds_teto"] == 0
+   and any("NAO tem limite" in l for l in _sink_t43.lines))
+_core_t43.submit("/teto 10")
+ok("/teto abaixo da etapa faz a etapa descer junto (teto nunca menor que a etapa)",
+   _core_t43.cfg["max_tool_rounds_teto"] == 10
+   and _core_t43.cfg["max_tool_rounds"] == 10)
+_core_t43.submit("/teto")
+ok("/teto sem numero mostra o valor que esta valendo",
+   any("Limite por pedido" in l and "10 passos" in l for l in _sink_t43.lines))
+_core_t43.submit("/teto 1001")
+ok("/teto com numero absurdo nao muda nada e explica como usar",
+   _core_t43.cfg["max_tool_rounds_teto"] == 10
+   and any("Nao entendi esse numero" in l for l in _sink_t43.lines))
+import bgh.i18n as _i18n43
+
+def _tem_cmd43(tabela, cmd: str) -> bool:
+    return any(c == cmd for _cab, linhas in tabela for c, _d in linhas)
+
+_i18n43.set_lang("pt")
+_ajuda_pt43 = _i18n43.help_table()
+_i18n43.set_lang("en")
+_ajuda_en43 = _i18n43.help_table()
+_i18n43.set_lang("es")
+_ajuda_es43 = _i18n43.help_table()
+_i18n43.set_lang("pt")
+ok("/teto vale nos tres idiomas e aparece na ajuda de cada um",
+   _i18n43.canon("teto") == "teto" and _i18n43.canon("cap") == "teto"
+   and _i18n43.canon("tope") == "teto"
+   and _i18n43.cmd("teto") == "/teto"
+   and _tem_cmd43(_ajuda_pt43, "/teto") and _tem_cmd43(_ajuda_en43, "/cap")
+   and _tem_cmd43(_ajuda_es43, "/tope"))
+
+# (c) teto 0 = SEM parede: projeto/tarefa longa nao tem numero magico.
+_cfg43z: dict = dict(core_cfg)
+_cfg43z.update({"max_tool_rounds": 2, "max_tool_rounds_teto": 0, "stream": False})
+_llm43z = _Progresso43(parar_em=26)
+_ag43z = Agent(dict(_cfg43z), _llm43z, Gate(dict(_cfg43z), ask_d))
+_ag43z.new_session()
+_notas43z: list[str] = []
+_ag43z.on_note = _notas43z.append
+_resp43z = _ag43z.run_turn("projeto sem teto")
+ok("teto 0 = sem parede: segue enquanto progride (26 ferramentas) e fecha no fim",
+   _llm43z.com_ferramenta == 26 and _resp43z == "trabalho concluido"
+   and not any("Parei em" in x for x in _notas43z))
+
+
+class _LLMDado43:
+    """Enche o contexto com resultado de ferramenta que carrega um NUMERO medido."""
+
+    def __init__(self, resumo: str = "RESUMO 43"):
+        self.n = 0
+        self.resumo = resumo
+        self.resumos = 0
+
+    def chat(self, messages, tools=None):
+        if tools is None:
+            return {"role": "assistant", "content": "fechou"}
+        self.n += 1
+        if self.n >= 20:
+            return {"role": "assistant", "content": "acabei"}
+        return {"role": "assistant", "content": "enchimento " * 300, "tool_calls": [{
+            "id": f"c{self.n}", "type": "function",
+            "function": {"name": "medir_dado43",
+                         "arguments": json.dumps({"i": self.n})}}]}
+
+    def summarize(self, texto):
+        self.resumos += 1
+        return self.resumo
+
+
+def _roda_dado43(resumo: str):
+    cfg43 = dict(core_cfg)
+    cfg43.update({"context_budget_chars": 60000, "stream": False,
+                  "max_tool_rounds": 20, "max_tool_rounds_teto": 120})
+    llm43 = _LLMDado43(resumo=resumo)
+    ag43 = Agent(dict(cfg43), llm43, Gate(dict(cfg43), ask_d))
+    ag43.new_session()
+    ag43.tools.handlers["medir_dado43"] = (
+        lambda args, ctx: "MEDIDA-1234 mmHg; " + ("dado coletado " * 400))
+    notas: list[str] = []
+    ag43.on_note = notas.append
+    resposta = ag43.run_turn("analise o laudo com o numero")
+    resumos = [m for m in ag43.messages
+               if m.get("role") == "system" and "RESUMO DA CONVERSA" in str(m.get("content"))]
+    return ag43, llm43, notas, resposta, resumos
+
+
+_ag43d, _llm43d, _notas43d, _resp43d, _resumos43d = _roda_dado43("RESUMO 43")
+_ultimo43d = str(_resumos43d[-1].get("content")) if _resumos43d else ""
+ok("compactacao leva os DADOS literais: o numero medido sobrevive ao resumo",
+   _resp43d == "acabei" and "DADOS COLETADOS" in _ultimo43d
+   and "MEDIDA-1234" in _ultimo43d)
+ok("uma compactacao = UMA chamada de resumo (nao resume o resumo em cascata)",
+   _llm43d.resumos == sum(1 for x in _notas43d if "Compactando" in x))
+_arquivo43d = Path(os.environ["BGH_HOME"], "session.pre-compact.json")
+ok("antes de compactar a conversa inteira fica guardada (continue tem de onde voltar)",
+   _arquivo43d.is_file() and "MEDIDA-1234" in _arquivo43d.read_text(encoding="utf-8"))
+
+_ag43e, _llm43e, _notas43e, _resp43e, _resumos43e = _roda_dado43("")
+_ultimo43e = str(_resumos43e[-1].get("content")) if _resumos43e else ""
+ok("resumo vazio NAO apaga o dado: trechos literais ficam no lugar do aviso",
+   _resp43e == "acabei" and "MEDIDA-1234" in _ultimo43e
+   and "removidas por limite de contexto" in _ultimo43e)
+
+
+class _LLMVazio43:
+    """Primeira resposta sem texto (gastou a saida pensando); a segunda vem."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def chat(self, messages, tools=None):
+        self.calls += 1
+        if self.calls == 1:
+            return {"role": "assistant", "content": ""}
+        return {"role": "assistant", "content": "agora sim"}
+
+    def summarize(self, text):
+        return "r"
+
+
+_cfg43v: dict = dict(core_cfg)
+_llm43v = _LLMVazio43()
+_ag43v = Agent(dict(_cfg43v), _llm43v, Gate(dict(_cfg43v), ask_d))
+_ag43v.new_session()
+_notas43v: list[str] = []
+_ag43v.on_note = _notas43v.append
+_resp43v = _ag43v.run_turn("responde")
+ok("resposta sem texto no fim do turno ganha UMA segunda tentativa automatica",
+   _resp43v == "agora sim" and _llm43v.calls == 2
+   and any("menos pensamento" in x for x in _notas43v))
+ok("a segunda tentativa nao suja o historico (nenhuma mensagem extra do usuario)",
+   sum(1 for m in _ag43v.messages if m.get("role") == "user") == 1)
+
+from bgh.i18n import TEXTS as _TEXTOS43
+from bgh import prompts as _prompts43
+
+ok("entrega parcial, dados literais e regra do resumo existem nos TRES idiomas",
+   all(_TEXTOS43[c][i] for c in ("agent.partial_banner", "agent.data_header",
+                                 "agent.data_cut", "agent.summary_guard",
+                                 "agent.retry_empty") for i in range(3)))
+ok("o system prompt proibe completar dado que nao foi coletado (pt/en/es)",
+   "NAO coletou nao existe" in _prompts43.build_system_prompt([], [], [], lang="pt")
+   and "did NOT collect does not exist" in _prompts43.build_system_prompt([], [], [], lang="en")
+   and "NO recogiste no existe" in _prompts43.build_system_prompt([], [], [], lang="es"))
+ok("o fechamento nao manda mais 'responder com o que ja coletei'",
+   "vou responder com o que ja coletei" not in _TEXTOS43["agent.max_note"][0]
+   and "continuar" in _TEXTOS43["agent.max_note"][0])
 
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e

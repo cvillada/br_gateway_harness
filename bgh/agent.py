@@ -68,6 +68,11 @@ class Agent:
         self.last_reasoning: list[str] = []
         self.last_compressed = False
         self.last_streamed = False
+        # Compactacao que ja tentou e nao baixou o suficiente neste turno: repetir
+        # seria uma chamada de modelo por rodada sem ganho (ver _compress_if_needed).
+        self._compactacao_travada = False
+        # Aviso ao modelo no % do teto: sai uma vez por turno (ver _aviso_orcamento).
+        self._aviso_teto_dado = False
         # Tokens que o servidor informou no ultimo pedido (o palco mostra por etapa).
         self.last_usage: dict | None = None
         self.on_usage: Callable[[dict | None], None] | None = None
@@ -227,6 +232,8 @@ class Agent:
                  imagens: list | None = None) -> str:
         self.last_reasoning = []
         self.last_compressed = False
+        self._compactacao_travada = False   # cada turno tenta compactar de novo
+        self._aviso_teto_dado = False       # aviso de orcamento ao modelo (uma vez)
         self.stop_event.clear()
         fotos = [c for c in (imagens or []) if c]
         if imagem:
@@ -240,11 +247,16 @@ class Agent:
         else:
             self.messages.append({"role": "user", "content": user_text})
         max_rounds = max(1, int(self.cfg.get("max_tool_rounds", 20)))   # tamanho da etapa
-        teto = max(max_rounds,
-                   int(self.cfg.get("max_tool_rounds_teto", max_rounds * 2)))
+        teto_cfg = int(self.cfg.get("max_tool_rounds_teto", max_rounds * 6))
+        # teto 0 = SEM parede: projeto/tarefa longa prorroga enquanto o turno progride
+        # (os anti-loop de chamada repetida e de 5 falhas continuam valendo).
+        teto = 0 if teto_cfg <= 0 else max(max_rounds, teto_cfg)
         limite = max_rounds
         rounds = 0
         sig_count: dict[str, int] = {}   # anti-loop: chamadas identicas sao contadas
+        ok_sigs: set[str] = set()        # chamadas DISTINTAS que deram certo (progresso)
+        feitos_antes = 0                 # progresso no comeco da etapa atual
+        prorrogou = False                # a nota de prorrogacao sai UMA vez por turno
         fail_streak = 0                  # anti-loop: erros em sequencia fecham a janela
         while rounds < limite:
             if self.stop_event.is_set():
@@ -285,6 +297,15 @@ class Agent:
                 self._note(t("agent.vision_refused", model=i18n.cmd("model")))
                 self._round_start()
                 msg = self._call_model(use_stream)
+            if (not msg.get("tool_calls") and not msg.get("stopped")
+                    and not str(msg.get("content") or "").strip()):
+                # Resposta SEM texto (o modelo gastou a saida pensando, tipico logo
+                # depois de compactar): antes o turno morria aqui e a pessoa tinha de
+                # digitar 'continue'. Uma segunda tentativa, sem mexer no historico.
+                nova = self._retry_sem_texto(use_stream)
+                if (str(nova.get("content") or "").strip() or nova.get("tool_calls")
+                        or nova.get("stopped")):
+                    msg = nova
             self.last_streamed = use_stream
             self._usage_note()
             self.messages.append(msg)
@@ -320,11 +341,10 @@ class Agent:
                         self.on_event(fn["name"], fn.get("arguments", "")[:120])
                     result = self.tools.dispatch(fn["name"], fn.get("arguments", ""))
                     prints.extend(_imagens_do_resultado(result))
-                fail_streak = (
-                    fail_streak + 1
-                    if result.startswith(("ERRO", "BLOQUEADO", "FALHOU", "LOOP"))
-                    else 0
-                )
+                falhou = result.startswith(("ERRO", "BLOQUEADO", "FALHOU", "LOOP"))
+                fail_streak = fail_streak + 1 if falhou else 0
+                if not falhou:
+                    ok_sigs.add(sig)   # chamada distinta que deu certo = progresso
                 self.messages.append(
                     {"role": "tool", "tool_call_id": tc["id"], "content": result}
                 )
@@ -342,6 +362,7 @@ class Agent:
                 self._anexar_imagens(t("agent.tool_image", n=len(prints)),
                                      prints[:MAX_PRINTS_RODADA])
             self._drain_steers()  # steering do meio do turno chega entre as rodadas
+            self._aviso_orcamento(rounds + 1, teto)
             rounds += 1
             if self._compress_if_needed():
                 self.last_compressed = True
@@ -350,27 +371,38 @@ class Agent:
                 return self._close_window(t("agent.close_fail",
                                             lang=t("agent.in_lang")))
             if rounds >= limite:
-                # Limite da etapa: se o turno esta PROGREDINDO, prorroga sozinho ate o
-                # teto (nao e parede, mas tambem nao vira loop infinito). Sem progresso
-                # (falha/loop na ultima rodada), fecha como antes.
-                if fail_streak == 0 and limite < teto:
-                    novo = min(limite + max_rounds, teto)
-                    self._note(t("agent.extend_note", limite=limite,
-                                 extra=novo - limite))
+                # Limite da ETAPA: se o turno esta PROGREDINDO (chamada distinta que deu
+                # certo nesta etapa e nada falhando), prorroga sozinho ate o teto. Sem
+                # progresso, fecha como antes. teto 0 = sem parede (projeto/tarefa longa).
+                progrediu = fail_streak == 0 and len(ok_sigs) > feitos_antes
+                if progrediu and (teto == 0 or limite < teto):
+                    novo = (limite + max_rounds if teto == 0
+                            else min(limite + max_rounds, teto))
+                    if not prorrogou:
+                        # A nota sai UMA vez: a tela nao vira contador de ferramentas.
+                        self._note(t("agent.extend_note", limite=limite,
+                                     extra=novo - limite))
+                        prorrogou = True
                     limite = novo
+                    feitos_antes = len(ok_sigs)
                 else:
                     break
-        if limite >= teto:
+        if rounds >= limite and teto > 0 and limite >= teto:
+            # Tarefa NAO terminou: o harness marca a entrega como PARCIAL (cabecalho na
+            # frente do texto, montado aqui - instrucao a modelo pequeno nao garante
+            # aviso) e a conversa fica salva para o 'continue' seguir de onde parou.
             self._note(t("agent.max_note", limite=limite))
-            return self._close_window(t("agent.close_teto", limite=limite,
-                                        lang=t("agent.in_lang")))
+            return self._close_window(
+                t("agent.close_teto", limite=limite, lang=t("agent.in_lang")),
+                marca=t("agent.partial_banner", limite=limite))
         # Estourou o limite de rodadas: fecha a janela pedindo resposta com o que tem.
         self._note(t("agent.round_note"))
         return self._close_window(t("agent.close_round", lang=t("agent.in_lang")))
 
     # ----- janela final -------------------------------------------------------
-    def _close_window(self, note: str) -> str:
+    def _close_window(self, note: str, marca: str | None = None) -> str:
         self.messages.append({"role": "user", "content": note})
+        indice_nota = len(self.messages) - 1
         self._round_start()  # fechamento e bloco novo: cabecalho 'resposta' garantido
         # Fechamento em streaming (estilo Hermes): o texto aparece ao vivo, sem
         # silencio morto no ultimo modelo quando o contexto ja esta cheio.
@@ -390,9 +422,80 @@ class Agent:
             self._force_compress()
             final = self.llm.chat(self.messages)
         self._usage_note()
+        if marca:
+            # Fechamento com a tarefa EM ANDAMENTO: o aviso e do HARNESS (linha na tela
+            # + primeira linha do texto guardado), nao do modelo. Assim um relatorio
+            # pela metade nunca sai com cara de entrega concluida.
+            self._note(marca)
+            final = {**final, "content": marca + "\n\n" + str(final.get("content") or "")}
         self.messages.append(final)
+        # A nota de fechamento e instrucao de GESTAO do turno, nao fala do usuario: sai
+        # do historico depois de usada (antes ela ficava e puxava o turno seguinte para
+        # "encerrar o assunto"). A compactacao pode ter reescrito a lista: confere antes.
+        if (indice_nota < len(self.messages)
+                and self.messages[indice_nota].get("role") == "user"
+                and self.messages[indice_nota].get("content") == note):
+            del self.messages[indice_nota]
         self._save_session()
         return final.get("content", "")
+
+    def _aviso_orcamento(self, usadas: int, teto: int) -> None:
+        """Aviso ao MODELO em % do teto do turno (padrao copiado do Hermes).
+
+        O Hermes injeta `budget_warning_ratio` no ultimo resultado de ferramenta uma
+        unica vez: "checkpoint the progress now, then continue; do not stop solely
+        because of this warning". Aqui o mesmo: o modelo anota o progresso e segue, em
+        vez de ser surpreendido pelo teto e entregar o trabalho pela metade.
+        """
+        if self._aviso_teto_dado or teto <= 0:
+            return
+        try:
+            ratio = float(self.cfg.get("tool_warning_ratio", 0.8))
+        except (TypeError, ValueError):
+            return
+        if not 0 < ratio < 1:
+            return
+        if usadas < min(ratio * teto, teto - 1):
+            return
+        ultimo = self.messages[-1] if self.messages else None
+        if not isinstance(ultimo, dict) or ultimo.get("role") != "tool":
+            return
+        ultimo["content"] = (str(ultimo.get("content") or "") + "\n\n"
+                             + t("agent.budget_notice", usadas=usadas, teto=teto))
+        self._aviso_teto_dado = True
+
+    def _retry_sem_texto(self, use_stream: bool) -> dict:
+        """Segunda tentativa quando o modelo devolve resposta sem texto nenhum.
+
+        Caso real: modelo local com thinking, logo depois de compactar, gasta o
+        `max_tokens` inteiro pensando e devolve vazio. O turno fechava sozinho e a
+        pessoa tinha de digitar 'continue'. Aqui o pedido vai de novo com pensamento
+        'low' (no maximo UMA vez) e o historico NAO ganha mensagem nova.
+        """
+        self._note(t("agent.retry_empty"))
+        llm_cfg = getattr(self.llm, "cfg", None)
+        alternativo = dict(llm_cfg) if isinstance(llm_cfg, dict) else None
+        if alternativo is not None and isinstance(llm_cfg, dict):
+            alternativo["thinking"] = "low"
+            self.llm.cfg = alternativo
+        try:
+            if use_stream and hasattr(self.llm, "chat_stream"):
+                return self.llm.chat_stream(
+                    self.messages, self.tools.specs,
+                    on_text=self.on_text_delta,
+                    on_reasoning=self.on_reasoning_delta,
+                    should_stop=self.stop_event.is_set,
+                )
+            return self.llm.chat(self.messages, self.tools.specs)
+        except ContextOverflowError:
+            return {}
+        except LLMError:
+            return {}
+        except Exception:  # noqa: BLE001 - a segunda tentativa NAO pode derrubar o turno
+            return {}
+        finally:
+            if alternativo is not None and isinstance(llm_cfg, dict):
+                self.llm.cfg = llm_cfg
 
     @staticmethod
     def _call_signature(fn: dict) -> str:
@@ -499,11 +602,93 @@ class Agent:
             )
         return self.llm.chat(self.messages, self.tools.specs)
 
+    # ----- compactacao --------------------------------------------------------
+    # O que cada mensagem antiga leva para o resumo. 500 cortava no meio o resultado
+    # de ferramenta (pagina, laudo, planilha): o resumo nao via o dado e o modelo
+    # completava o buraco depois.
+    RESUMO_POR_MENSAGEM = 4000
+    # Quanto do orcamento o bloco de dados LITERAIS pode ocupar depois do resumo.
+    FRACAO_DADOS = 0.25
+    MAX_DADOS_CHARS = 40000
+
+    def _guardar_pre_compactacao(self) -> None:
+        """Copia a conversa ANTES de resumir (uma vez por compactacao).
+
+        O session.json e sobrescrito pela compactacao; sem esta copia o 'continue'
+        nao tinha de onde voltar e o modelo reconstruia de memoria.
+        """
+        try:
+            alvo = SESSION_FILE.with_name("session.pre-compact.json")
+            alvo.write_text(
+                json.dumps([self._sem_imagem(m) for m in self.messages[1:]],
+                           ensure_ascii=False),
+                encoding="utf-8")
+        except OSError:
+            pass
+
+    def _dados_verbatim(self, head: list) -> str:
+        """Trechos LITERAIS dos resultados de ferramenta que saem da conversa.
+
+        O resumo do modelo perde numero/medida mesmo quando bem instruido. Este bloco
+        e montado pelo codigo (sem modelo), do mais RECENTE para o mais antigo, para o
+        que estava em uso continuar visivel depois de compactar.
+        """
+        budget = int(self.cfg.get("context_budget_chars", 250000))
+        teto = min(int(budget * self.FRACAO_DADOS), self.MAX_DADOS_CHARS)
+        partes: list[str] = []
+        total = 0
+        cortados = 0
+        anteriores = ""
+        # Compactacao em cima de compactacao: o bloco de dados do resumo anterior volta
+        # LITERAL (era exatamente ele que o "resumo do resumo" apagava).
+        for mensagem in head:
+            if mensagem.get("role") != "system":
+                continue
+            texto = self._texto_de(mensagem)
+            marca = t("agent.data_header")
+            if marca not in texto:
+                continue
+            pedaco = texto.split(marca, 1)[1]
+            pedaco = pedaco.split(t("agent.summary_guard"), 1)[0].strip()
+            if pedaco:
+                anteriores = pedaco[: min(teto, 20000)]
+                total += len(anteriores)
+            break
+        for mensagem in reversed(head):
+            if mensagem.get("role") != "tool":
+                continue
+            texto = self._texto_de(mensagem).strip()
+            if not texto:
+                continue
+            pedaco = (texto if len(texto) <= 2000
+                      else texto[:1400] + "\n[...]\n" + texto[-600:])
+            if total + len(pedaco) > teto:
+                cortados += 1
+                continue
+            partes.append(pedaco)
+            total += len(pedaco)
+        if not partes and not anteriores:
+            return ""
+        partes.reverse()   # volta para a ordem em que foi coletado
+        corpo = "\n---\n".join(partes)
+        if anteriores:
+            corpo = anteriores + ("\n---\n" + corpo if corpo else "")
+        if cortados:
+            corpo += "\n" + t("agent.data_cut", n=cortados)
+        return corpo
+
     def _compress_once(self) -> bool:
-        """Uma rodada de compactacao: o comeco da conversa vira um resumo."""
-        keep_tail = 8
-        if len(self.messages) <= keep_tail + 2:
+        """Uma rodada de compactacao: o comeco da conversa vira resumo + dados.
+
+        Uma chamada ao modelo no maximo (o resumo). O que nao couber e resolvido
+        cortando resultado de ferramenta velho (_descartar_troca_antiga), nunca
+        resumindo o resumo - resumo de resumo perde mais e custa outra espera.
+        """
+        if len(self.messages) <= 3:
             return False
+        # Conversa curta com resultado gigante (poucas mensagens e ja acima do
+        # orcamento): a cauda encolhe em vez de recusar a compactacao.
+        keep_tail = min(8, max(2, len(self.messages) - 2))
         head, tail = self.messages[1:-keep_tail], self.messages[-keep_tail:]
         # Ferramenta no comeco da cauda perde o par 'assistant' quando este e
         # cortado; servidores rejeitam a mensagem orfa: ela vai para o resumo.
@@ -511,33 +696,65 @@ class Agent:
             head.append(tail.pop(0))
         if not head:
             return False
+        self._guardar_pre_compactacao()
         transcript = "\n".join(
-            f"{m.get('role')}: {self._texto_de(m)[:500]}" for m in head
+            f"{m.get('role')}: {self._texto_de(m)[:self.RESUMO_POR_MENSAGEM]}"
+            for m in head
         )
         self._note(t("agent.compacting"))
         summary = self.llm.summarize(transcript)
-        if not summary:
-            # Sem resumo possivel, corta o meio (falha aberta mas visivel ao modelo).
-            summary = t("agent.summary_fallback")
+        corpo = summary or t("agent.summary_fallback")
+        dados = self._dados_verbatim(head)
+        if dados:
+            corpo += "\n\n" + t("agent.data_header") + "\n" + dados
         self.messages = [self.messages[0]] + [
-            {"role": "system", "content": t("agent.summary_header") + summary}
+            {"role": "system",
+             "content": t("agent.summary_header") + corpo + "\n\n"
+                        + t("agent.summary_guard")}
         ] + tail
         self._save_session()
         return True
 
+    def _descartar_troca_antiga(self, manter: int = 2) -> bool:
+        """Tira a troca de ferramenta MAIS ANTIGA (assistant + resultados).
+
+        Usado quando o resumo nao baixou o suficiente. Mantem as ultimas trocas
+        (`manter`), que sao as que o turno esta usando agora.
+        """
+        trocas = [i for i, m in enumerate(self.messages)
+                  if m.get("role") == "assistant" and m.get("tool_calls")]
+        if len(trocas) <= manter:
+            return False
+        inicio = trocas[0]
+        fim = inicio + 1
+        while fim < len(self.messages) and self.messages[fim].get("role") == "tool":
+            fim += 1
+        del self.messages[inicio:fim]
+        return True
+
     def _compress_if_needed(self) -> bool:
         """Compacta ANTES de esbarrar no teto: comeca no % configurado (85%)."""
+        if self._compactacao_travada:
+            # Ja compactou e nao baixou (a cauda sozinha passa do limiar): repetir e
+            # uma chamada de modelo por rodada sem ganho nenhum. A barra do rodape
+            # mostra o numero real; se o servidor recusar, _force_compress age.
+            return False
         budget = int(self.cfg.get("context_budget_chars", 250000))
         threshold = int(budget * self._compress_pct() / 100)
         if self._estimate_chars() <= threshold:
             return False
-        did = False
-        for _ in range(3):
-            if not self._compress_once():
-                break
-            did = True
+        did = self._compress_once()
+        if not did:
+            return False
+        for _ in range(6):
             if self._estimate_chars() <= threshold:
                 break
+            if not self._descartar_troca_antiga():
+                break
+            did = True
+        if self._estimate_chars() > threshold:
+            self._compactacao_travada = True
+            self._note(t("agent.ctx_stuck", ctx=i18n.cmd("ctx"), new=i18n.cmd("new")))
         return did
 
     def _abrir_espaco_para_imagem(self, pct: float = 0.55) -> bool:
@@ -561,11 +778,13 @@ class Agent:
         """Compactacao depois que o servidor ja recusou: baixa ate pct do orcamento."""
         budget = int(self.cfg.get("context_budget_chars", 250000))
         target = int(budget * pct)
-        did = False
-        for _ in range(4):
+        if self._estimate_chars() <= target:
+            return False
+        did = self._compress_once()
+        for _ in range(8):
             if self._estimate_chars() <= target:
                 break
-            if not self._compress_once():
+            if not self._descartar_troca_antiga():
                 break
             did = True
         return did

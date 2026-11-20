@@ -65,6 +65,9 @@ ALIASES = {
     "thinking": ("pensamento", "thinking", "pensamiento"),
     "stage": ("palco", "stage", "escenario"),
     "ctx": ("ctx", "contexto", "context"),
+    # Teto de ferramentas por pedido (0 = sem limite). "limite" NAO entra: e a
+    # palavra que o pessoal usa para o contexto, e trocar um pelo outro confunde.
+    "teto": ("teto", "cap", "tope"),
     "setup": ("configurar", "configure", "setup", "configuracion"),
     "doctor": ("doctor",),
     "update": ("atualizar", "update", "actualizar"),
@@ -95,6 +98,7 @@ CMD = {
     "thinking": ("/pensamento", "/thinking", "/pensamiento"),
     "stage": ("/palco", "/stage", "/escenario"),
     "ctx": ("/ctx", "/ctx", "/ctx"),
+    "teto": ("/teto", "/cap", "/tope"),
     "setup": ("/configurar", "/setup", "/configurar"),
     "doctor": ("/doctor", "/doctor", "/doctor"),
     "update": ("/atualizar", "/update", "/actualizar"),
@@ -284,6 +288,13 @@ HELP_SECTIONS = [
          "(e.g. /ctx 65000; accepts 65k)",
          "medidor del contexto; /ctx <numero> fija el limite y lo guarda "
          "(ej.: /ctx 65000; acepta 65k)"),
+        ("/teto", "/cap", "/tope",
+         "teto de ferramentas por pedido (padrao 120); /teto 0 = sem limite, "
+         "prorroga enquanto o turno progride",
+         "tool cap per request (default 120); /cap 0 = no limit, it extends "
+         "while the turn progresses",
+         "tope de herramientas por pedido (por defecto 120); /tope 0 = sin limite, "
+         "sigue mientras el turno avanza"),
         ("/configurar", "/setup", "/configurar",
          "conserta ou cria um provedor sem sair do TEO (o mesmo assistente do 'bgh setup')",
          "fixes or creates a provider without leaving TEO (same as 'bgh setup')",
@@ -901,6 +912,37 @@ CHAT = {
         "Context budget set to {n} characters (saved). It applies on the next answer.",
         "Presupuesto de contexto ajustado a {n} caracteres (guardado). Vale ya en "
         "la proxima respuesta."),
+    "cmd.teto.show": (
+        "Limite por pedido: o TEO pode dar ate {teto} passos antes de pedir para "
+        "voce continuar. 0 = sem limite. Para mudar, escreva {cmd} 60 (60 passos) "
+        "ou {cmd} 0 (sem limite).",
+        "Limit per request: TEO may take up to {teto} steps before asking you to "
+        "continue. 0 = no limit. To change it, write {cmd} 60 (60 steps) or "
+        "{cmd} 0 (no limit).",
+        "Limite por pedido: el TEO puede dar hasta {teto} pasos antes de pedirte "
+        "que sigas. 0 = sin limite. Para cambiar, escribe {cmd} 60 (60 pasos) "
+        "o {cmd} 0 (sin limite)."),
+    "cmd.teto.set": (
+        "Pronto: agora o TEO pode dar ate {teto} passos por pedido. Vale no proximo "
+        "pedido.",
+        "Done: TEO may now take up to {teto} steps per request. It applies on the "
+        "next request.",
+        "Listo: ahora el TEO puede dar hasta {teto} pasos por pedido. Vale en el "
+        "proximo pedido."),
+    "cmd.teto.no_wall": (
+        "Pronto: agora NAO tem limite de passos por pedido. Pode demorar bastante; "
+        "se quiser parar, aperte ESC (ou CTRL+C). Vale no proximo pedido.",
+        "Done: there is NO step limit per request now. It can take a long while; "
+        "to stop, press ESC (or CTRL+C). It applies on the next request.",
+        "Listo: ahora NO hay limite de pasos por pedido. Puede demorar bastante; "
+        "si quieres parar, pulsa ESC (o CTRL+C). Vale en el proximo pedido."),
+    "cmd.teto.bad": (
+        "Nao entendi esse numero. Escreva {cmd} 60 para 60 passos, ou {cmd} 0 para "
+        "nao ter limite.",
+        "I did not understand that number. Write {cmd} 60 for 60 steps, or {cmd} 0 "
+        "for no limit.",
+        "No entendi ese numero. Escribe {cmd} 60 para 60 pasos, o {cmd} 0 para no "
+        "tener limite."),
     "cmd.setup.no_menu": (
         "Este modo nao consegue perguntar na tela; rode 'bgh setup' na janela de comando.",
         "This mode cannot ask on the screen; run 'bgh setup' in the command window.",
@@ -1246,41 +1288,75 @@ AGENT = {
         "(5 herramientas fallaron en secuencia. Deja de probar variantes del mismo camino "
         "y responde {lang} al usuario: que se intento, que se trabo y que puede hacer.)"),
     "agent.extend_note": (
-        "Ja usei {limite} ferramentas neste pedido; vou continuar por mais {extra} "
+        "Ja usei {limite} passos neste pedido; posso seguir por mais {extra} "
         "(CTRL+C ou ESC para parar).",
-        "I already used {limite} tools in this request; I will go on for {extra} more "
+        "I already used {limite} steps in this request; I can go on for {extra} more "
         "(CTRL+C or ESC to stop).",
-        "Ya use {limite} herramientas en este pedido; sigo por {extra} mas "
+        "Ya use {limite} pasos en este pedido; puedo seguir por {extra} mas "
         "(CTRL+C o ESC para parar)."),
-    "agent.max_note": ("Parei em {limite} ferramentas para nao gastar demais; vou "
-                       "responder com o que ja coletei.",
-                       "I stopped at {limite} tools to avoid overspending; I will answer "
-                       "with what I already collected.",
-                       "Pare en {limite} herramientas para no gastar de mas; respondo "
-                       "con lo que ya recogi."),
+    # A tarefa NAO terminou: o texto nao pode soar como entrega pronta (era assim que
+    # o modelo devolvia laudo/relatorio acabado com buraco preenchido por invencao).
+    "agent.max_note": (
+        "Parei em {limite} passos porque este pedido e grande e o trabalho NAO "
+        "terminou. Nada se perdeu: escreva continuar que eu sigo de onde parei.",
+        "I stopped at {limite} steps because this request is big and the work is NOT "
+        "done. Nothing was lost: write continue and I go on from where I stopped.",
+        "Pare en {limite} pasos porque este pedido es grande y el trabajo NO "
+        "termino. No se perdio nada: escribe continuar y sigo desde donde pare."),
     "agent.close_teto": (
-        "(voce chegou ao teto de {limite} ferramentas deste turno. Responda {lang} com o "
-        "que ja coletou, sem prometer acao futura, e termine a resposta dizendo ao "
-        "usuario que ele pode escrever 'continue' para voce seguir de onde parou.)",
-        "(you reached the cap of {limite} tools in this turn. Answer {lang} with what you "
-        "already collected, do not promise future action, and end the answer telling the "
-        "user he can write 'continue' for you to go on from where you stopped.)",
-        "(llegaste al tope de {limite} herramientas de este turno. Responde {lang} con lo "
-        "que ya recogiste, sin prometer accion futura, y termina la respuesta diciendo al "
-        "usuario que puede escribir 'continua' para que sigas desde donde paraste.)"),
-    "agent.round_note": ("Limite de ferramentas deste turno atingido; vou responder com o "
-                         "que ja coletei.",
-                         "Tool limit for this turn reached; I will answer with what I "
-                         "already collected.",
-                         "Limite de herramientas de este turno alcanzado; respondo con lo "
-                         "que ya recogi."),
+        "(voce chegou ao teto de {limite} ferramentas deste turno e a tarefa NAO "
+        "terminou. Responda {lang}, em no maximo 12 linhas: 1) o que ja foi feito e "
+        "provado; 2) o que falta e qual e o proximo passo. Nao escreva o documento final, "
+        "nao preencha dado que voce nao "
+        "coletou e nao prometa acao futura; termine dizendo que o usuario pode escrever "
+        "'continuar' para voce seguir de onde parou.)",
+        "(you reached the cap of {limite} tools in this turn and the task is NOT done. "
+        "Answer {lang} in at most 12 lines: 1) what is already done and proven; 2) what "
+        "is missing and the next step. Do not write the final document, do not fill in data "
+        "you did not collect and do "
+        "not promise future action; end by saying the user can write 'continue' so you go "
+        "on from where you stopped.)",
+        "(llegaste al tope de {limite} herramientas de este turno y la tarea NO termino. "
+        "Responde {lang}, en no mas de 12 lineas: 1) lo que ya esta hecho y probado; 2) lo "
+        "que falta y el proximo paso. No escribas el documento final, no rellenes dato que no "
+        "recogiste y no prometas "
+        "accion futura; termina diciendo que el usuario puede escribir 'continua' para que "
+        "sigas desde donde paraste.)"),
+    # Marcado pelo HARNESS, na frente do texto: instrucao a modelo pequeno nao garante
+    # que o aviso apareca - e essa e a diferenca entre "relatorio" e "entrega parcial".
+    "agent.partial_banner": (
+        "AINDA NAO ESTA PRONTO: parei no limite de {limite} passos deste pedido. "
+        "Escreva continuar que eu sigo de onde parei.",
+        "NOT DONE YET: I stopped at the {limite} step limit of this request. Write "
+        "continue and I go on from where I stopped.",
+        "TODAVIA NO ESTA LISTO: pare en el limite de {limite} pasos de este pedido. "
+        "Escribe continuar y sigo desde donde pare."),
+    "agent.round_note": (
+        "Cheguei no limite de passos deste pedido e o trabalho nao terminou; vou te "
+        "contar onde parei.",
+        "I reached this request step limit and the work is not done; I will tell you "
+        "where I stopped.",
+        "Llegue al limite de pasos de este pedido y el trabajo no termino; te cuento "
+        "donde pare."),
     "agent.close_round": (
-        "(limite de ferramentas deste turno atingido. Responda {lang} usando apenas o que "
-        "ja foi coletado; nao prometa acao futura, feche o assunto agora.)",
-        "(tool limit for this turn reached. Answer {lang} using only what was already "
-        "collected; do not promise future action, close the subject now.)",
-        "(limite de herramientas de este turno alcanzado. Responde {lang} usando solo lo "
-        "que ya se recogio; no prometas accion futura, cierra el asunto ahora.)"),
+        "(limite de ferramentas deste turno atingido e o trabalho NAO terminou. Responda "
+        "{lang} em no maximo 12 linhas usando apenas o que ja foi coletado: o que esta "
+        "feito, o que falta e o proximo passo. Nao escreva documento final, nao preencha "
+        "dado que voce nao coletou e nao prometa acao futura.)",
+        "(tool limit for this turn reached and the work is NOT done. Answer {lang} in at "
+        "most 12 lines using only what was already collected: what is done, what is "
+        "missing and the next step. Do not write the final document, do not fill in data "
+        "you did not collect and do not promise future action.)",
+        "(limite de herramientas de este turno alcanzado y el trabajo NO termino. Responde "
+        "{lang} en no mas de 12 lineas usando solo lo que ya se recogio: lo que esta "
+        "hecho, lo que falta y el proximo paso. No escribas documento final, no rellenes "
+        "dato que no recogiste y no prometas accion futura.)"),
+    "agent.retry_empty": ("O modelo respondeu sem texto (gastou a saida pensando); "
+                          "tentando de novo com menos pensamento...",
+                          "The model answered without text (it spent the output "
+                          "thinking); trying again with less thinking...",
+                          "El modelo respondio sin texto (gasto la salida pensando); "
+                          "intentando de nuevo con menos pensamiento..."),
     "agent.steer_wrap": ("(mensagem do usuario durante o processamento): {texto}",
                          "(user message during processing): {texto}",
                          "(mensaje del usuario durante el procesamiento): {texto}"),
@@ -1324,6 +1400,43 @@ AGENT = {
     "agent.summary_header": ("RESUMO DA CONVERSA ANTERIOR:\n",
                              "SUMMARY OF THE PREVIOUS CONVERSATION:\n",
                              "RESUMEN DE LA CONVERSACION ANTERIOR:\n"),
+    # O resumo pode perder numero/medida. Estes dois textos existem para o dado nao
+    # sumir calado: trechos LITERAIS dos resultados de ferramenta voltam junto.
+    "agent.data_header": ("DADOS COLETADOS ANTES DO RESUMO (trechos literais):",
+                          "DATA COLLECTED BEFORE THE SUMMARY (verbatim excerpts):",
+                          "DATOS RECOGIDOS ANTES DEL RESUMEN (trozos literales):"),
+    "agent.data_cut": ("(+{n} resultado(s) de ferramenta nao couberam por tamanho)",
+                       "(+{n} tool result(s) did not fit for size)",
+                       "(+{n} resultado(s) de herramienta no cupieron por tamano)"),
+    "agent.summary_guard": ("Dado coletado antes deste resumo pode ter ficado incompleto: "
+                            "se faltar informacao, diga que faltou; NUNCA complete de "
+                            "memoria.",
+                            "Data collected before this summary may be incomplete: if "
+                            "information is missing, say it is missing; NEVER fill it in "
+                            "from memory.",
+                            "Dato recogido antes de este resumen puede haber quedado "
+                            "incompleto: si falta informacion, di que falto; NUNCA "
+                            "completes de memoria."),
+    "agent.ctx_stuck": ("A conversa ficou grande demais e nao deu para encurtar mais. "
+                        "Segui com ela assim. Se aparecer erro de tamanho, use {ctx} "
+                        "para diminuir ou {new} para comecar uma conversa nova.",
+                        "The conversation got too big and could not be shortened any "
+                        "further. I went on with it like this. If a size error shows up, "
+                        "use {ctx} to make it smaller or {new} to start a new "
+                        "conversation.",
+                        "La conversacion se hizo demasiado grande y no se pudo acortar "
+                        "mas. Segui con ella asi. Si aparece un error de tamano, usa {ctx} "
+                        "para achicarla o {new} para empezar una conversacion nueva."),
+    "agent.budget_notice": (
+        "[AVISO DO SISTEMA - orcamento do turno] Voce ja usou {usadas} de {teto} "
+        "ferramentas deste turno. Anote agora o progresso (o que esta feito, o que falta e "
+        "o proximo passo) e CONTINUE a tarefa; nao pare so por causa deste aviso.",
+        "[SYSTEM NOTICE - turn budget] You have used {usadas} of {teto} tools in this turn. "
+        "Checkpoint the progress now (what is done, what is missing and the next step) and "
+        "CONTINUE the task; do not stop solely because of this warning.",
+        "[AVISO DEL SISTEMA - presupuesto del turno] Ya usaste {usadas} de {teto} "
+        "herramientas de este turno. Anota ahora el progreso (lo que esta hecho, lo que "
+        "falta y el proximo paso) y SIGUE la tarea; no pares solo por este aviso."),
     "agent.in_lang": ("em portugues", "in English", "en espanol"),
 }
 
@@ -1649,15 +1762,23 @@ LLM = {
         "Nada llego del servidor en {s}s; voy a intentar sin streaming (una espera "
         "mas, y el pedido vuelve a la fila)."),
     "llm.summarize": (
-        "Resuma a conversa abaixo em no maximo 15 pontos curtos. Preserve: decisoes "
-        "tomadas, caminhos de arquivo citados, erros encontrados e pedidos ainda "
-        "abertos. Responda so com o resumo.",
-        "Summarize the conversation below in at most 15 short points. Keep: decisions "
-        "taken, file paths mentioned, errors found and requests still open. Answer "
-        "only with the summary.",
-        "Resume la conversacion abajo en maximo 15 puntos cortos. Conserva: decisiones "
-        "tomadas, rutas de archivo citadas, errores encontrados y pedidos aun "
-        "abiertos. Responde solo con el resumen."),
+        "Resuma a conversa abaixo em no maximo 30 pontos curtos. Preserve "
+        "LITERALMENTE: numeros, medidas, datas, nomes, trechos citados, caminhos de "
+        "arquivo, decisoes tomadas, erros encontrados e pedidos ainda abertos. No fim, "
+        "sob a linha 'DADOS:', liste cada dado coletado por ferramenta (valor medido, "
+        "texto citado) sem arredondar e sem trocar numero por adjetivo. Responda so com "
+        "o resumo.",
+        "Summarize the conversation below in at most 30 short points. Keep VERBATIM: "
+        "numbers, measurements, dates, names, quoted excerpts, file paths, decisions "
+        "taken, errors found and requests still open. At the end, under the line 'DATA:', "
+        "list every piece of data collected by a tool (measured value, quoted text) "
+        "without rounding and without trading a number for an adjective. Answer only with "
+        "the summary.",
+        "Resume la conversacion abajo en maximo 30 puntos cortos. Conserva LITERALMENTE: "
+        "numeros, medidas, fechas, nombres, trozos citados, caminos de archivo, decisiones "
+        "tomadas, errores encontrados y pedidos aun abiertos. Al final, bajo la linea "
+        "'DATOS:', lista cada dato recogido por herramienta (valor medido, texto citado) "
+        "sin redondear y sin cambiar numero por adjetivo. Responde solo con el resumen."),
 }
 
 # ---------------------------------------------------------------------------
@@ -2423,6 +2544,10 @@ APP = {
     "app.help.configurar": ("assistente que cria ou conserta o provedor, sem editar arquivo",
                             "wizard that creates or fixes the provider, no file editing",
                             "asistente que crea o arregla el proveedor, sin editar archivo"),
+    "app.cmd.teto": ("/teto", "/cap", "/tope"),
+    "app.help.teto": ("teto de ferramentas por pedido (padrao 120); /teto 0 = sem limite",
+                      "tool cap per request (default 120); /cap 0 = no limit",
+                      "tope de herramientas por pedido (por defecto 120); /tope 0 = sin limite"),
     "app.cmd.ctx": ("/ctx", "/ctx", "/ctx"),
     "app.help.ctx": ("medidor da memoria da conversa; /ctx 65000 define o limite",
                      "conversation memory meter; /ctx 65000 sets the limit",
