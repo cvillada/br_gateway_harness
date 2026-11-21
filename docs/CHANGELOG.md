@@ -20,6 +20,12 @@ O /configurar na tela do navegador mostra as opcoes da pergunta.
 
 Suite local: 683 verificacoes gerais + 188 da tela.
 
+CI: testes verdes em ubuntu e windows (Python 3.11 e 3.12) e os dois executaveis
+(windows-exe e macos-binary) gerados a partir do commit da tag. O job de TESTES do
+macOS falha em 'ver_pagina le a ABA ABERTA' - defeito ANTERIOR a esta versao (o
+mesmo job ja estava vermelho na 0.2.43), nao bloqueia o run; fica na fila para
+conserto.
+
 ## 0.2.43
 
 Turno longo nao entrega mais documento pela metade, e compactar nao apaga o dado.
