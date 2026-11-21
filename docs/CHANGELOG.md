@@ -23,8 +23,11 @@ Suite local: 683 verificacoes gerais + 188 da tela.
 CI: testes verdes em ubuntu e windows (Python 3.11 e 3.12) e os dois executaveis
 (windows-exe e macos-binary) gerados a partir do commit da tag. O job de TESTES do
 macOS falha em 'ver_pagina le a ABA ABERTA' - defeito ANTERIOR a esta versao (o
-mesmo job ja estava vermelho na 0.2.43), nao bloqueia o run; fica na fila para
-conserto.
+mesmo job ja estava vermelho na 0.2.43). CAUSA achada e corrigida logo depois desta
+versao, so no teste: o runner do macOS nao tem Chrome, o achar_navegador devolvia
+("", "safari") e o teste ia pelo caminho do Safari em vez do caminho da janela do
+TEO (CDP). O bloco passou a fixar o navegador; a rodada seguinte ficou com os 5
+jobs verdes, macOS incluido.
 
 ## 0.2.43
 
