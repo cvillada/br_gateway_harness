@@ -811,6 +811,11 @@ class ChatCore:
         if ask_fn is None:
             self.sink.line(t("cmd.setup.no_menu"), style="yellow")
             return "continue"
+        # O cartao de pergunta cobre o historico no navegador: o que o
+        # assistente diz antes da pergunta passa a viajar junto com ela.
+        novo_contexto = getattr(self.sink, "contexto_novo", None)
+        if novo_contexto is not None:
+            novo_contexto()
         run_setup(ask=ask_fn,
                   say=lambda *a: self.sink.line(" ".join(str(x) for x in a)),
                   from_chat=True)

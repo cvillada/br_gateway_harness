@@ -1091,7 +1091,7 @@ function pergunta(e) {
     $("m-ok").hidden = false;
     $("m-texto").type = e.secret ? "password" : "text";
     $("m-texto").value = "";
-    $("m-texto").placeholder = "";
+    $("m-texto").placeholder = e.placeholder || "";
     $("m-ok").textContent = t("app.enviar");
     $("m-ok").onclick = function () { responder($("m-texto").value); };
     $("m-texto").onkeydown = function (ev) {

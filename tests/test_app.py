@@ -970,5 +970,57 @@ ok("a lista que a tela oferece e a MESMA que o servidor aceita",
 app7.encerrar("teste")
 app7.esperar_fim(5)
 
+# ---------- 18. o cartao do /configurar mostra as OPCOES ---------------------
+# Bug do dono (21/11): no /configurar a tela cobria o historico com o cartao e
+# sobrava a palavra "Opcao" e o valor padrao - a lista de provedores que o
+# assistente imprime acima nao aparecia em lugar nenhum. Agora o que foi dito
+# desde a pergunta anterior viaja DENTRO do cartao, e o padrao vira dica no
+# campo. O Enter/campo vazio devolve o padrao (igual ao terminal).
+
+_ctx18 = App(dict(CFG), token="tok18")
+_fila18 = _ctx18.canal.assinar(desde=-1)
+_guarda18 = {}
+
+
+def _responde18(valor: str) -> dict:
+    while True:
+        _ev = _fila18.get(timeout=5)
+        if _ev.get("tipo") == "pergunta":
+            _ctx18.responder(_ev["id"], valor)
+            return _ev
+
+
+def _pergunta18(prompt: str, padrao: str, resposta: str) -> tuple:
+    def _alvo():
+        _guarda18["resp"] = _ctx18.sink.ask_line(prompt, padrao)
+
+    _thread = threading.Thread(target=_alvo, daemon=True)
+    _thread.start()
+    _evento = _responde18(resposta)
+    _thread.join(5)
+    return _evento, _guarda18.get("resp")
+
+
+_ctx18.sink.contexto_novo()
+_ctx18.sink.line("Escolha onde o modelo vai rodar:")
+_ctx18.sink.line("  1) DeepSeek      - API na nuvem (mais facil)")
+_ctx18.sink.line("  4) Outro         - qualquer endpoint OpenAI-compativel")
+_ev18a, _resp18a = _pergunta18(t("setup.option"), "1", "4")
+_det18a = str(_ev18a.get("detalhe") or "")
+ok("a pergunta do /configurar leva as opcoes dentro do cartao",
+   "DeepSeek" in _det18a and "Outro" in _det18a and "1) DeepSeek" in _det18a)
+ok("o cartao da pergunta tem titulo proprio (nao o da licenca)",
+   _ev18a.get("titulo") == t("setup.title"))
+ok("o valor padrao vai como dica no CAMPO, nao como texto solto",
+   _ev18a.get("placeholder") == "1" and "1" != _det18a.strip())
+ok("a resposta digitada chega inteira ao assistente", _resp18a == "4")
+
+_ev18b, _resp18b = _pergunta18(t("setup.keep"), "s", "")
+ok("campo vazio/Enter devolve o padrao (igual ao terminal)", _resp18b == "s")
+ok("a pergunta seguinte nao repete a lista da anterior",
+   not str(_ev18b.get("detalhe") or "").strip())
+ok("a tela le a dica do campo enviada pelo servidor",
+   'e.placeholder || ""' in _js12)
+
 print()
 print(f"TODOS OS TESTES DA TELA PASSARAM ({PASS} verificacoes)")

@@ -77,6 +77,10 @@ PING_S = 15
 COOKIE = "teo_app"
 BUFFER_EVENTOS = 4000
 CORPO_MAX = 1_000_000
+# Quantas linhas ditas antes da pergunta viajam DENTRO do cartao (o cartao cobre
+# o historico). 14 cobre a lista de provedores + os avisos do assistente sem
+# transformar o cartao numa parede de texto.
+CONTEXTO_PERGUNTA = 14
 
 # Anexo (clipe da tela) tem corpo BINARIO e limite proprio: CORPO_MAX acima e do
 # JSON curto do turno. Base64 no JSON incharia 33% e estouraria o teto.
@@ -291,10 +295,24 @@ class AppSink:
         self.tema_fn = None
         self.preencher_fn = None
         self.bipar_fn = None
+        # Linhas ditas desde que o assistente do /configurar comecou. O cartao
+        # de pergunta cobre o historico, entao as explicacoes que o terminal
+        # imprime acima da pergunta (a lista de provedores, o valor padrao)
+        # chegavam invisiveis: a pessoa via so "Opcao" e o campo vazio
+        # (reclamacao do dono, 21/11). Estas linhas vao DENTRO do cartao.
+        self._contexto: list[str] = []
 
     # ----- texto no historico ------------------------------------------------
     def line(self, text: str, style: str | None = None) -> None:
         self.canal.emitir("linha", texto=str(text), estilo=style or "")
+        # Regua/separador nao e explicacao: fica no historico, nao no cartao.
+        if str(text).strip().strip("-").strip():
+            self._contexto.append(str(text))
+            del self._contexto[:-CONTEXTO_PERGUNTA]
+
+    def contexto_novo(self) -> None:
+        """Zera o texto que acompanha a proxima pergunta (/configurar chama)."""
+        self._contexto.clear()
 
     def parts(self, segments: list) -> None:
         self.canal.emitir("partes",
@@ -373,11 +391,28 @@ class AppSink:
         raise EOFError
 
     def ask_line(self, prompt: str, default: str = "", secret: bool = False) -> str:
-        return self._perguntar(
-            {"modo": "texto", "titulo": "", "label": str(prompt),
-             "detalhe": str(default), "secret": bool(secret), "valor": str(default)},
+        """Pergunta de texto livre (assistente do /configurar) no cartao.
+
+        O que o assistente explicou DESDE a pergunta anterior (a lista de
+        provedores, o aviso de orcamento) vai junto no corpo do cartao: no
+        navegador o cartao cobre o historico e a pessoa ficava so com "Opcao" e
+        um campo vazio. O valor padrao aparece como dica DENTRO do campo
+        (Enter devolve o padrao, igual ao Enter do terminal).
+        """
+        titulo_setup = t("setup.title")
+        detalhe = "\n".join(
+            ln for ln in self._contexto
+            if ln.strip() and ln.strip() != titulo_setup
+        )
+        self._contexto.clear()      # a proxima pergunta leva so o que vier depois
+        resposta = self._perguntar(
+            {"modo": "texto", "titulo": titulo_setup, "label": str(prompt),
+             "detalhe": detalhe, "secret": bool(secret), "valor": str(default),
+             "placeholder": "" if secret else str(default)},
             default=str(default),
         )
+        # Enter/campo vazio = valor padrao, como na janela de comando.
+        return str(resposta).strip() or str(default)
 
     def ask_approval(self, label: str, detail: str, allow_always: bool) -> str:
         opcoes, codigos = build_approval_options(allow_always)

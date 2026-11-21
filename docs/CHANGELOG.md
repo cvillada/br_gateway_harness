@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.44
+
+O /configurar na tela do navegador mostra as opcoes da pergunta.
+
+- No navegador o cartao de pergunta cobre o historico: as linhas que o assistente
+  escrevia antes ("Escolha onde o modelo vai rodar" e a lista 1) DeepSeek ...
+  4) Outro) chegavam invisiveis e so sobrava a palavra "Opcao" - quem abria o
+  /configurar nao via o que escolher. Agora o que foi dito DESDE a pergunta
+  anterior viaja dentro do cartao (ate 14 linhas, sem as reguas) e a pergunta
+  seguinte comeca limpa, sem repetir a lista da anterior.
+- O cartao do /configurar ganhou titulo proprio ("Configuracao do TEO"); antes
+  usava o titulo da licenca, que nao tem nada a ver com configurar o provedor.
+- O valor padrao virou dica DENTRO do campo (o "1" da opcao, o "s" do manter) e
+  campo vazio/Enter devolve o padrao, igual ao Enter do terminal. Antes o campo
+  vazio voltava vazio e a pergunta seguinte perdia o padrao.
+- O terminal continua igual: la as linhas ja aparecem no historico e o
+  assistente e o mesmo.
+
+Suite local: 683 verificacoes gerais + 188 da tela.
+
 ## 0.2.43
 
 Turno longo nao entrega mais documento pela metade, e compactar nao apaga o dado.
