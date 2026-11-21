@@ -4900,8 +4900,16 @@ ok("abrir_janela reusa a janela aberta (abre aba nova em vez de segunda janela)"
 # ver_pagina com janela aberta: le a aba e NAO manda recomecar o login
 _original_texto42 = _cdp42.texto_da_aba
 _original_print42 = _cdp42.print_da_aba
+_original_pronta42 = _cdp42.pronta
 try:
+    # O navegador que EXISTE na maquina nao pode decidir o caminho do teste: no
+    # runner do macOS nao ha Chrome e achar_navegador devolve ("", "safari") -
+    # o run() ia para o Safari e o teste morria por um motivo que nao e o dele
+    # (era o job vermelho do macOS desde a 0.2.42). O bloco prova o caminho da
+    # JANELA do TEO (CDP), entao o navegador e fixado aqui.
+    _pagina337.achar_navegador = lambda: ("/usr/bin/google-chrome", "google-chrome")
     _pagina337.janela_aberta = lambda: (43210, {"porta": 43210})
+    _cdp42.pronta = lambda ws_url, **kw: True      # nao espera aba de verdade
     _cdp42.abas = lambda porta, timeout=2.0: [
         {"url": "https://mail.exemplo.com/caixa", "title": "Caixa",
          "webSocketDebuggerUrl": "ws://127.0.0.1:1/devtools/page/x"}]
@@ -4909,10 +4917,12 @@ try:
     _cdp42.print_da_aba = lambda ws_url, timeout=15.0: None
     _saida42 = _pagina337.run({"origem": "https://mail.exemplo.com/caixa"}, _Ctx339())
 finally:
+    _pagina337.achar_navegador = _original_achar42
     _pagina337.janela_aberta = _original_janela42b
     _cdp42.abas = _original_abas42
     _cdp42.texto_da_aba = _original_texto42
     _cdp42.print_da_aba = _original_print42
+    _cdp42.pronta = _original_pronta42
 ok("ver_pagina le a ABA ABERTA (site logado) quando a janela do TEO esta de pe",
    "AREA LOGADA" in _saida42 and "cliente: Maria" in _saida42
    and "janela do TEO" in _saida42)
