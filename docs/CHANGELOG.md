@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.45
+
+Rascunho num lugar so, aviso de pasta cheia e a resposta nao muda de lugar.
+
+- TELA DO NAVEGADOR: quando o TEO avisa algo no MEIO do turno (a linha amarela de
+  "Compactando a conversa", "voce ja usou 20 de 120 ferramentas" etc.), o resto da
+  resposta continuava sendo colado no cartao que ja estava ACIMA do aviso: o aviso
+  ficava sozinho embaixo, com um vazio grande depois dele. Agora a linha do sistema
+  fecha o cartao aberto (`fecharCartoes()` no app.js) e o texto seguinte abre um
+  cartao NOVO abaixo do aviso - a leitura segue de cima para baixo, como no
+  terminal. O fim do turno usa o mesmo fechamento (a regra mora num lugar so).
+- RUN_COMMAND E RUN_PYTHON num lugar so: o `run_command` herdava a pasta de onde o
+  TEO foi aberto e o TEMP do sistema (no Mac, /var/folders...), entao criava
+  arquivo FORA da pasta de rascunho e o `/limpar` nao alcancava. Agora o comando
+  roda com `cwd` no `~/.bgh/scratch` e com TMPDIR/TEMP/TMP apontando para
+  `~/.bgh/scratch/tmp`; o `run_python` recebe o mesmo ambiente. Um lugar so para
+  criar e um lugar so para apagar.
+- AVISO DE PASTA CHEIA: na abertura (terminal, tela fixa e navegador) o TEO mostra
+  UMA linha amarela quando a pasta de rascunhos passou do tamanho combinado - o
+  mesmo espirito do aviso de versao nova. O tamanho padrao e 3 GB e o proprio
+  comando ajusta: `/limpar 5GB` (ou 10GB, 500MB) grava o numero e continua sendo
+  `/limpar` sozinho que apaga. Nada de conversa, memoria, skills ou configuracao
+  mora ali - a frase do aviso diz isso.
+- Textos novos na tela nos tres idiomas (pt/en/es) e a descricao da ferramenta
+  `run_command` passa a dizer que o comando roda na pasta de rascunho (caminho
+  absoluto para tocar os arquivos do usuario).
+
+Suite local: 695 verificacoes gerais + 191 da tela.
+
 ## 0.2.44
 
 O /configurar na tela do navegador mostra as opcoes da pergunta.

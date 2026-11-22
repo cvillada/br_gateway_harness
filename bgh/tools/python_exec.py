@@ -5,7 +5,7 @@ import subprocess
 import sys
 from datetime import datetime
 
-from bgh.config import SCRATCH_DIR, ensure_dirs
+from bgh.config import SCRATCH_DIR, ensure_dirs, scratch_env
 
 from .guard import STOPPED_NOTE, stopped, wait_with_stop
 
@@ -49,10 +49,13 @@ def run(args: dict, ctx) -> str:
     try:
         # Popen + espera vigiada (em vez de run()): assim o 'parar' do usuario derruba
         # o script em andamento em ~1 s, em vez de esperar ate o timeout da ferramenta.
+        # env=scratch_env(): o TEMP/TMP do script tambem mora no scratch (o
+        # tempfile do Python, por exemplo), para o /limpar apagar tudo de uma vez.
         proc = subprocess.Popen(
             [sys.executable, str(script)],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             cwd=str(SCRATCH_DIR),
+            env=scratch_env(),
             start_new_session=True,
             **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
                if os.name == "nt" else {}),

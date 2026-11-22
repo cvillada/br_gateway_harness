@@ -338,12 +338,15 @@ HELP_SECTIONS = [
          "accesibilidad: lee las respuestas en voz alta con la voz del sistema; "
          "escribirlo otra vez apaga (ESC calla la voz)"),
         ("/limpar", "/clean", "/limpiar",
-         "apaga os rascunhos que o TEO guarda na pasta scratch (scripts e textos "
-         "da voz) e diz quanto espaco foi liberado",
-         "deletes the drafts TEO keeps in the scratch folder (scripts and voice "
-         "texts) and reports how much space was freed",
-         "borra los borradores que el TEO guarda en la carpeta scratch (scripts y "
-         "textos de la voz) y dice cuanto espacio se libero"),
+         "apaga os rascunhos que o TEO guarda na pasta scratch (scripts, textos "
+         "da voz e temporarios) e diz quanto espaco foi liberado; com um tamanho "
+         "(/limpar 5GB) muda o aviso de pasta cheia",
+         "deletes the drafts TEO keeps in the scratch folder (scripts, voice "
+         "texts and temporary files) and reports how much space was freed; with "
+         "a size (/clean 5GB) it changes the full-folder warning",
+         "borra los borradores que el TEO guarda en la carpeta scratch (scripts, "
+         "textos de la voz y temporales) y dice cuanto espacio se libero; con un "
+         "tamano (/limpiar 5GB) cambia el aviso de carpeta llena"),
         ("/fundo", "/background", "/fondo",
          "cor de fundo da tela: branco, azul, amarelo, verde, vermelho ou preto "
          "(as letras mudam para continuar legiveis)",
@@ -439,6 +442,32 @@ CHAT = {
     "cmd.clean.confirm_hint": ("Para apagar de uma vez: {cmd} sim.",
                               "To delete in one go: {cmd} yes.",
                               "Para borrar de una vez: {cmd} si."),
+    # `/limpar 5GB` nao apaga: muda o tamanho a partir do qual a ABERTURA avisa
+    # que a pasta de rascunhos esta cheia (o aviso amarelo do comeco da tela).
+    "cmd.clean.set": (
+        "Pronto: quando a pasta de rascunhos passar de {gb}, o TEO avisa na "
+        "abertura. Para apagar os rascunhos agora: {cmd}.",
+        "Done: when the draft folder goes above {gb}, TEO warns at startup. "
+        "To delete the drafts now: {cmd}.",
+        "Listo: cuando la carpeta de borradores pase de {gb}, el TEO avisa al "
+        "abrir. Para borrar los borradores ahora: {cmd}."),
+    "cmd.clean.bad": (
+        "Nao entendi esse tamanho. Use {cmd} 3GB (ou 5GB, 10GB) para mudar o "
+        "aviso, ou {cmd} sozinho para apagar os rascunhos.",
+        "I did not understand that size. Use {cmd} 3GB (or 5GB, 10GB) to change "
+        "the warning, or {cmd} alone to delete the drafts.",
+        "No entendi ese tamano. Usa {cmd} 3GB (o 5GB, 10GB) para cambiar el "
+        "aviso, o {cmd} solo para borrar los borradores."),
+    "cmd.scratch.aviso": (
+        "A pasta de rascunhos do TEO ja tem {size} (o aviso comeca em {gb}). "
+        "Use {cmd} para apagar: ali so ha rascunhos - conversa, memoria e skills "
+        "ficam em outro lugar.",
+        "TEO's draft folder already holds {size} (the warning starts at {gb}). "
+        "Use {cmd} to delete them: only drafts live there - conversation, memory "
+        "and skills are stored elsewhere.",
+        "La carpeta de borradores del TEO ya tiene {size} (el aviso empieza en "
+        "{gb}). Usa {cmd} para borrarlos: ahi solo hay borradores - conversacion, "
+        "memoria y skills estan en otro lugar."),
     "cmd.fundo.ask": ("Qual cor? (Enter = {first})", "Which color? (Enter = {first})",
                       "Que color? (Enter = {first})"),
     "cmd.fundo.list": ("Fundo atual: {atual}. Opcoes: {cores}. Use {cmd} <cor>.",
@@ -1961,13 +1990,19 @@ TOOLS = {
     "tool.run_command.desc": (
         "Executa um comando shell na maquina local (ls, df, journalctl, systemctl "
         "status, nvidia-smi, apt list, smartctl etc.). Comandos de leitura rodam sem "
-        "perguntar; perigosos pedem aprovacao do usuario.",
+        "perguntar; perigosos pedem aprovacao do usuario. O comando roda na PASTA DE "
+        "RASCUNHO do TEO (o temporario do sistema tambem aponta para la): use caminho "
+        "absoluto para tocar os arquivos do usuario.",
         "Runs a shell command on the local machine (ls, df, journalctl, systemctl "
         "status, nvidia-smi, apt list, smartctl etc.). Read-only commands run without "
-        "asking; dangerous ones ask the user for approval.",
+        "asking; dangerous ones ask the user for approval. The command runs in the TEO "
+        "DRAFT FOLDER (the system temp folder points there too): use an absolute path "
+        "to touch the user's files.",
         "Ejecuta un comando shell en la maquina local (ls, df, journalctl, systemctl "
         "status, nvidia-smi, apt list, smartctl etc.). Los comandos de lectura corren "
-        "sin preguntar; los peligrosos piden aprobacion del usuario."),
+        "sin preguntar; los peligrosos piden aprobacion del usuario. El comando corre "
+        "en la CARPETA DE BORRADOR del TEO (el temporal del sistema tambien apunta "
+        "ahi): usa ruta absoluta para tocar los archivos del usuario."),
     "tool.run_command.arg.command": ("O comando shell completo", "The full shell command",
                                      "El comando shell completo"),
     "tool.run_command.arg.timeout": ("Tempo limite em segundos (padrao 120)",

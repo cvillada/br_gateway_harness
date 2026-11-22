@@ -653,6 +653,7 @@ class App:
         self.abertura()
         try:
             self.core.check_update_on_start()
+            self.core.aviso_scratch_on_start()
         except Exception as exc:  # noqa: BLE001 - aviso de versao nunca impede o app
             log_error(exc, "aviso de versao no app")
 

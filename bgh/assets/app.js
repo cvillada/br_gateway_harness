@@ -257,8 +257,27 @@ function acrescentar(el) {
   rolar(estava);
 }
 
+/* Fecha os cartoes que estao abertos no streaming. Motivo (visto na tela do
+ * dono): quando o TEO avisa algo no meio do turno ("Compactando a conversa",
+ * "voce ja usou 20 ferramentas"...), a linha do aviso entrava DEPOIS do cartao
+ * e o resto da resposta continuava sendo colado no cartao de CIMA, fora de
+ * ordem: o aviso ficava sozinho embaixo, com um vazio grande depois dele. Aqui o
+ * cartao ja desenhado fica onde esta e o texto que vier abre um cartao NOVO
+ * abaixo do aviso - a leitura segue de cima para baixo, como no terminal. */
+function fecharCartoes() {
+  Object.keys(canais).forEach(function (canal) {
+    var caixa = canais[canal];
+    caixa.raiz.classList.remove("pensando");
+    if (canal === "pensamento" && !caixa.corpo.textContent.trim()) {
+      if (caixa.raiz.parentNode) { caixa.raiz.parentNode.removeChild(caixa.raiz); }
+    }
+  });
+  canais = {};
+}
+
 function linha(texto, estilo) {
   if (texto === undefined || texto === null) { return; }
+  fecharCartoes();
   var el = document.createElement("div");
   el.className = "linha" + (estilo ? " " + String(estilo).replace("class:", "") : "");
   el.textContent = String(texto);
@@ -688,14 +707,7 @@ function mostrarPasso() {
 }
 
 function fimTurno() {
-  Object.keys(canais).forEach(function (canal) {
-    var caixa = canais[canal];
-    caixa.raiz.classList.remove("pensando");
-    if (canal === "pensamento" && !caixa.corpo.textContent.trim()) {
-      if (caixa.raiz.parentNode) { caixa.raiz.parentNode.removeChild(caixa.raiz); }
-    }
-  });
-  canais = {};
+  fecharCartoes();     // fecha o que ficou aberto (tira o pulso do rascunho)
   ocupado = false;
   aplicarOcupado();
   // Fim do turno = resposta completa: agora a resposta pode ser desenhada

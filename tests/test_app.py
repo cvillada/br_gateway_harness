@@ -1022,5 +1022,24 @@ ok("a pergunta seguinte nao repete a lista da anterior",
 ok("a tela le a dica do campo enviada pelo servidor",
    'e.placeholder || ""' in _js12)
 
+# ---------- 19. aviso no meio do turno nao muda a resposta de lugar --------
+# Bug do dono (Mac): durante o turno aparece uma linha amarela ("Compactando a
+# conversa", "voce ja usou 20 ferramentas"). O texto seguinte continuava sendo
+# colado no cartao que ja estava ACIMA do aviso, e o aviso ficava sozinho embaixo
+# com um vazio grande depois. Agora fecharCartoes() solta o cartao aberto: o texto
+# que vem depois da linha abre um cartao NOVO abaixo dela, na ordem de leitura.
+ok("existe fecharCartoes() e a linha do sistema fecha os cartoes abertos",
+   "function fecharCartoes()" in _js12
+   and "fecharCartoes();" in _js12[_js12.index("function linha("):
+                                   _js12.index("function linhaDePartes")])
+ok("o texto depois do aviso abre cartao novo em vez de voltar para o de cima",
+   "canais = {};" in _js12[_js12.index("function fecharCartoes"):
+                            _js12.index("function linhaDePartes")])
+ok("o fim do turno usa o mesmo fechamento (a regra mora num lugar so)",
+   "fecharCartoes();" in _js12[_js12.index("function fimTurno"):
+                               _js12.index("function fimTurno") + 400]
+   and "canais = {};" not in _js12[_js12.index("function fimTurno"):
+                                   _js12.index("function fimTurno") + 400])
+
 print()
 print(f"TODOS OS TESTES DA TELA PASSARAM ({PASS} verificacoes)")

@@ -859,6 +859,7 @@ def run_tui(cfg: dict) -> int:
         # janela tinha acabado de maximizar (relato no Windows 10).
         empurrar_cursor_para_o_fim()
         core.check_update_on_start()   # uma vez, em segundo plano (versao nova?)
+        core.aviso_scratch_on_start()  # rascunhos acima do tamanho combinado?
 
     app = Application(
         layout=layout,

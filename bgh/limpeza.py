@@ -12,9 +12,15 @@ Regras de seguranca:
 """
 
 import os
+import re
 from pathlib import Path
 
 from .config import SCRATCH_DIR
+
+GB = 1024 ** 3
+# Mesmo numero do config (scratch_aviso_gb): aqui e o piso, usado quando a
+# configuracao nao tem a chave ou tem valor invalido.
+AVISO_GB_PADRAO = 3.0
 
 
 def _dentro(caminho: Path, raiz: Path) -> bool:
@@ -87,3 +93,61 @@ def tamanho_legivel(bytes_: int) -> str:
             texto = f"{valor:.1f}".replace(".", ",")
             return f"{texto} {unidade}"
     return f"{int(valor)} GB"
+
+
+def gb_legivel(valor: float) -> str:
+    """'3 GB', '2,5 GB', '512 MB' - o numero do aviso como a pessoa escreveu.
+
+    Abaixo de 1 GB sai em MB: `/limpar 512MB` nao pode virar '0 GB' na frase.
+    """
+    gb = float(valor or 0)
+    if 0 < gb < 1:
+        mb = gb * 1024.0
+        inteiro = round(mb)
+        texto = (f"{inteiro}" if abs(mb - inteiro) < 0.05
+                 else f"{mb:.1f}".replace(".", ","))
+        return f"{texto} MB"
+    texto = f"{gb:.1f}".rstrip("0").rstrip(".").replace(".", ",")
+    return f"{texto} GB"
+
+
+def gb_de_texto(texto: str) -> float | None:
+    """Le o tamanho digitado no /limpar: '3GB', '3 gb', '512MB', '2,5'.
+
+    Devolve o tamanho em GB ou None quando nao e um tamanho valido (nesse caso
+    o comando segue o caminho de sempre: perguntar antes de apagar).
+    """
+    bruto = str(texto or "").strip().lower().replace(",", ".")
+    achado = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*(gb|g|mb|m|tb|t)?", bruto)
+    if not achado:
+        return None
+    try:
+        valor = float(achado.group(1))
+    except (TypeError, ValueError):
+        return None
+    unidade = achado.group(2) or "gb"
+    if unidade in ("mb", "m"):
+        valor /= 1024.0
+    elif unidade in ("tb", "t"):
+        valor *= 1024.0
+    if valor <= 0:
+        return None
+    return valor
+
+
+def aviso_gb(cfg: dict | None = None) -> float:
+    """Tamanho (GB) a partir do qual a abertura avisa. Vem do /limpar NGB."""
+    try:
+        valor = float((cfg if isinstance(cfg, dict) else {}).get(
+            "scratch_aviso_gb", AVISO_GB_PADRAO))
+    except (TypeError, ValueError):
+        valor = AVISO_GB_PADRAO
+    return valor if valor > 0 else AVISO_GB_PADRAO
+
+
+def precisa_aviso(cfg: dict | None = None, pasta: Path | None = None) -> tuple[int, int] | None:
+    """(quantos arquivos, quantos bytes) se o scratch passou do aviso; senao None."""
+    arquivos, total = varrer(pasta)
+    if total < int(aviso_gb(cfg) * GB):
+        return None
+    return (arquivos, total)

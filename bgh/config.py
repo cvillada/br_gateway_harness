@@ -137,6 +137,10 @@ DEFAULTS = {
     # Idioma da interface: pt | en | es. O instalador pergunta no inicio e o
     # comando /lingua troca a qualquer momento (fica salvo aqui).
     "lang": "pt",
+    # A partir de quantos GB de rascunhos a ABERTURA avisa que a pasta `scratch`
+    # esta cheia. Ajustado pelo proprio comando: `/limpar 5GB` grava 5 aqui.
+    # 3 de fabrica: abaixo disso a limpeza nao muda nada no uso da maquina.
+    "scratch_aviso_gb": 3,
 }
 
 
@@ -216,6 +220,26 @@ def sync_profile(cfg: dict, name: str | None = None) -> bool:
 def ensure_dirs() -> None:
     for d in (BGH_HOME, SKILLS_DIR, SCRATCH_DIR):
         d.mkdir(parents=True, exist_ok=True)
+
+
+def scratch_env() -> dict:
+    """Ambiente dos comandos e scripts: o TEMP do sistema DENTRO do scratch.
+
+    Motivo (Mac do dono): o que a ferramenta criava em /tmp ficava fora da pasta
+    que o `/limpar` apaga, entao limpar deixava metade dos rascunhos para tras.
+    Com TMPDIR, TEMP e TMP apontando para `scratch/tmp`, o que o comando (e os
+    programas que ele chama) grava de temporario cai no mesmo lugar que a
+    limpeza conhece - um lugar so para apagar.
+    """
+    env = dict(os.environ)
+    tmp = SCRATCH_DIR / "tmp"
+    try:
+        tmp.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return env      # sem permissao: melhor o TEMP do sistema do que nada
+    for var in ("TMPDIR", "TEMP", "TMP"):
+        env[var] = str(tmp)
+    return env
 
 
 def saved_lang() -> str:

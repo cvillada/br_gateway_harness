@@ -84,6 +84,7 @@ def chat(_args) -> int:
     core = ChatCore(cfg, sink)
     core.banner()
     core.check_update_on_start()   # uma vez, em segundo plano (aviso de versao nova)
+    core.aviso_scratch_on_start()  # pasta de rascunhos acima do tamanho combinado?
     try:
         while True:
             try:

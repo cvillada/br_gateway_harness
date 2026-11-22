@@ -5212,6 +5212,108 @@ ok("o fechamento nao manda mais 'responder com o que ja coletei'",
    "vou responder com o que ja coletei" not in _TEXTOS43["agent.max_note"][0]
    and "continuar" in _TEXTOS43["agent.max_note"][0])
 
+# ---------- 0.2.45: rascunhos num lugar so, aviso de pasta cheia -------------
+# Pedidos do dono (Mac): o run_command criava arquivo FORA do scratch (herdava a
+# pasta de onde o TEO foi aberto e o TEMP do sistema) e o /limpar nao alcancava; e
+# a pasta crescia calada. Agora tudo cai no scratch e a abertura avisa a partir de
+# um tamanho que o proprio /limpar ajusta (3 GB de fabrica).
+from bgh import config as _cfgmod345
+from bgh import limpeza as _limp345
+from bgh.tools import terminal as _cmd345
+
+_SCR345 = _cfgmod345.SCRATCH_DIR
+
+ok("o tamanho do aviso entende GB, MB e numero puro",
+   _limp345.gb_de_texto("3GB") == 3 and _limp345.gb_de_texto("5 gb") == 5
+   and _limp345.gb_de_texto("2,5") == 2.5
+   and abs(_limp345.gb_de_texto("512MB") - 0.5) < 1e-9
+   and _limp345.gb_de_texto("") is None and _limp345.gb_de_texto("abc") is None
+   and _limp345.gb_de_texto("0") is None)
+ok("o aviso de pasta cheia comeca em 3 GB e aparece escrito como se fala",
+   _cfgmod345.DEFAULTS.get("scratch_aviso_gb") == 3
+   and _limp345.aviso_gb({}) == 3 and _limp345.gb_legivel(3) == "3 GB"
+   and _limp345.gb_legivel(2.5) == "2,5 GB"
+   and _limp345.gb_legivel(_limp345.gb_de_texto("512MB")) == "512 MB"
+   and _limp345.aviso_gb({"scratch_aviso_gb": "lixo"}) == 3)
+ok("scratch acima do aviso devolve tamanho; abaixo devolve None",
+   _limp345.precisa_aviso({"scratch_aviso_gb": 1}, _SCR345) is None)
+
+_limp345.limpar()
+(_SCR345 / "grande345.bin").write_bytes(b"x" * (2 * 1024 * 1024))
+_aviso345 = _limp345.precisa_aviso({"scratch_aviso_gb": 0.001}, _SCR345)
+ok("passar do tamanho combinado marca a pasta para o aviso da abertura",
+   _aviso345 is not None and _aviso345[1] == 2 * 1024 * 1024
+   and _limp345.precisa_aviso({"scratch_aviso_gb": 3}, _SCR345) is None)
+
+class _Sink345(RecSink):
+    def __init__(self):
+        super().__init__()
+        self.escolha = ""
+
+    def ask_choice(self, title, label, options):
+        return self.escolha or options[0]
+
+_sink345 = _Sink345()
+_cfg345 = dict(core_cfg)
+_core345 = ChatCore(_cfg345, _sink345, llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+_core345.submit("/limpar 5GB")
+ok("/limpar 5GB grava o tamanho do aviso e NAO apaga nada",
+   _cfg345.get("scratch_aviso_gb") == 5
+   and (_SCR345 / "grande345.bin").is_file()
+   and json.loads(Path(os.environ["BGH_HOME"], "config.json").read_text())
+   .get("scratch_aviso_gb") == 5
+   and any("passar de 5 GB" in l for l in _sink345.lines[-2:]))
+_core345.submit("/limpar 0")
+ok("/limpar com tamanho invalido nao mexe no config e ensina o uso",
+   _cfg345.get("scratch_aviso_gb") == 5
+   and any("Nao entendi esse tamanho" in l for l in _sink345.lines[-2:]))
+_aviso345b = []
+_orig_line345 = _sink345.line
+_sink345.line = lambda texto, style=None: (_aviso345b.append(str(texto)),
+                                           _orig_line345(texto, style))
+try:
+    _core345.submit("/limpar 0.001GB")
+finally:
+    _sink345.line = _orig_line345
+ok("/limpar NGB mostra na hora o aviso quando a pasta ja passou do numero",
+   any("pasta de rascunhos do TEO ja tem" in l for l in _aviso345b))
+ok("a abertura avisa em UMA linha quando a pasta passou do tamanho",
+   "aviso_scratch_on_start" in (_RAIZ316 / "bgh" / "chat_core.py").read_text(encoding="utf-8")
+   and "aviso_scratch_on_start()" in (_RAIZ316 / "bgh" / "cli.py").read_text(encoding="utf-8")
+   and "aviso_scratch_on_start()" in (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8")
+   and "aviso_scratch_on_start()" in
+   (_RAIZ316 / "bgh" / "app_servidor.py").read_text(encoding="utf-8"))
+_limp345.limpar()
+
+# cwd e TEMP dos comandos: um lugar so para a limpeza achar.
+_env345 = _cfgmod345.scratch_env()
+ok("o TEMP/TMP/TMPDIR dos comandos aponta para dentro do scratch",
+   all(Path(_env345[v]).resolve() == (_SCR345 / "tmp").resolve()
+       for v in ("TMPDIR", "TEMP", "TMP")))
+_res345 = _cmd345.run({"command": 'echo oi > marca_cwd345.txt'}, ctx)
+ok("run_command roda DENTRO da pasta de rascunho",
+   (_SCR345 / "marca_cwd345.txt").is_file() and "exit_code=0" in _res345)
+_res345b = _cmd345.run({"command": f'"{sys.executable}" -c "'
+                                   'import os,pathlib,tempfile;'
+                                   'print(pathlib.Path(os.getcwd()).resolve());'
+                                   'print(pathlib.Path(tempfile.gettempdir()).resolve())"'},
+                       ctx)
+_linhas345 = _res345b.splitlines()
+ok("o comando tambem ve o TEMP do sistema dentro do scratch",
+   len(_linhas345) >= 3
+   and os.path.normcase(Path(_linhas345[1].strip()).resolve())
+   == os.path.normcase(_SCR345.resolve())
+   and os.path.normcase(Path(_linhas345[2].strip()).resolve())
+   == os.path.normcase((_SCR345 / "tmp").resolve()))
+_res345c = python_exec.run(
+    {"code": "import pathlib,tempfile;print(pathlib.Path(tempfile.gettempdir()).resolve())"},
+    ctx)
+ok("run_python usa o mesmo TEMP (script e temporarios no scratch)",
+   os.path.normcase(str((_SCR345 / "tmp").resolve())) in os.path.normcase(_res345c))
+_limp345.limpar()
+
+
 # ---------- versao e changelog andam juntos (evita bump sem nota) -----------
 from bgh import __version__ as _ver316e
 

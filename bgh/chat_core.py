@@ -717,6 +717,26 @@ class ChatCore:
         self._update_thread = threading.Thread(target=_worker, daemon=True)
         self._update_thread.start()
 
+    def aviso_scratch_on_start(self) -> None:
+        """Avisa na abertura quando a pasta de rascunhos passou do tamanho combinado.
+
+        Mesmo espirito do aviso de versao nova: uma linha, no comeco, sem segurar a
+        tela. O numero vem do `/limpar NGB` (config `scratch_aviso_gb`, 3 GB de
+        fabrica). Sem isso a pasta crescia calada ate encher o disco do cliente -
+        os scripts do run_python e os temporarios dos comandos ficam todos ali.
+        """
+        try:
+            excedeu = limpeza.precisa_aviso(self.cfg)
+        except OSError:
+            return          # pasta ilegivel nao pode impedir a abertura
+        if not excedeu:
+            return
+        _quantos, total = excedeu
+        self.sink.line(t("cmd.scratch.aviso",
+                         size=limpeza.tamanho_legivel(total),
+                         gb=limpeza.gb_legivel(limpeza.aviso_gb(self.cfg)),
+                         cmd=i18n.cmd("clean")), style="yellow")
+
     def _list_models(self) -> None:
         try:
             self.model_list = self.llm.list_models()
@@ -1378,14 +1398,36 @@ class ChatCore:
                                      cmd=i18n.cmd("voice")), style="cyan")
                     voz.falar(t("cmd.voz.hello"))
             elif what == "clean":
-                # Rascunhos do TEO: scripts do run_python e textos da voz. Nada de
-                # conversa/memoria/skills mora aqui - a frase final diz isso.
+                # Rascunhos do TEO: scripts do run_python, textos da voz, temporarios
+                # dos comandos. Nada de conversa/memoria/skills mora aqui.
+                # `/limpar 5GB` NAO apaga: muda a partir de que tamanho a abertura
+                # avisa (o mesmo aviso do tamanho cheio). Sao dois usos distintos de
+                # proposito - apagar continua sendo o comando sozinho.
+                alvo_gb = limpeza.gb_de_texto(rest) if rest else None
+                if alvo_gb is not None:
+                    self.cfg["scratch_aviso_gb"] = alvo_gb
+                    save_config(self.cfg)
+                    self.sink.line(t("cmd.clean.set", gb=limpeza.gb_legivel(alvo_gb),
+                                     cmd=i18n.cmd("clean")), style="cyan")
+                    quantos, tamanho = limpeza.varrer()
+                    if quantos and tamanho >= int(alvo_gb * limpeza.GB):
+                        # Ja passou do numero novo: mostra agora, sem esperar a proxima
+                        # abertura (a pessoa acabou de pedir esse tamanho).
+                        self.sink.line(t("cmd.scratch.aviso",
+                                         size=limpeza.tamanho_legivel(tamanho),
+                                         gb=limpeza.gb_legivel(alvo_gb),
+                                         cmd=i18n.cmd("clean")), style="yellow")
+                    return "continue"
                 quantos, tamanho = limpeza.varrer()
                 if not quantos:
                     self.sink.line(t("cmd.clean.empty"), style="dim")
                     return "continue"
                 tam_txt = limpeza.tamanho_legivel(tamanho)
                 apagar = str(rest).strip().lower() in ("sim", "yes", "si", "s", "sì")
+                if rest and not apagar:
+                    self.sink.line(t("cmd.clean.bad", cmd=i18n.cmd("clean")),
+                                   style="yellow")
+                    return "continue"
                 if not apagar:
                     if hasattr(self.sink, "ask_choice"):
                         escolha = self.sink.ask_choice(

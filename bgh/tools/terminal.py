@@ -11,6 +11,8 @@ import subprocess
 import threading
 import time
 
+from ..config import SCRATCH_DIR, ensure_dirs, scratch_env
+
 SPEC = {
     "type": "function",
     "function": {
@@ -50,10 +52,23 @@ def run(args: dict, ctx) -> str:
     if _stopped(ctx):
         return "PARADO: o comando nem chegou a comecar porque voce mandou parar."
 
+    # Tudo o que o comando cria fica na pasta de rascunho do TEO: cwd ali e o
+    # TEMP/TMP do sistema apontando para `scratch/tmp`. Antes o comando herdava a
+    # pasta de onde o TEO foi aberto (no Mac, a pasta pessoal ou /tmp) e o
+    # /limpar nao alcancava esses arquivos.
+    try:
+        ensure_dirs()
+        pasta_trabalho = str(SCRATCH_DIR)
+        ambiente = scratch_env()
+    except OSError as exc:
+        return f"ERRO: nao consegui preparar a pasta de rascunho: {exc}"
+
     try:
         proc = subprocess.Popen(
             command, shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            cwd=pasta_trabalho,
+            env=ambiente,
             start_new_session=True,  # grupo proprio: matar o shell mata os filhos tambem
             **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
                if os.name == "nt" else {}),  # Windows: grupo novo (sem API POSIX aqui)
