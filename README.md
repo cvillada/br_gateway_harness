@@ -6,8 +6,8 @@ TEO e o apelido deste harness (br_gateway_harness): o nome do gato preto do auto
 
 Harness enxuto em Python: loop de agente + endpoint OpenAI-compativel (local ou
 API), ferramentas reais (shell, arquivos, Python, web, documentos), memoria
-persistente e skills que o proprio TEO cria ao aprender. Modelo de aprovacao
-espelhado no Hermes Agent: seguro roda direto, perigoso pede aprovacao humana.
+persistente e skills que o proprio TEO cria ao aprender. Modelo de aprovacao:
+seguro roda direto, perigoso pede aprovacao humana.
 
 ## Instalacao por sistema operacional (pasta TEO + ambiente virtual)
 
@@ -194,7 +194,7 @@ limite, `/teto 0` tira o limite (ai pode demorar bastante; ESC ou CTRL+C param) 
 
 ## Conversando
 
-O chat abre igual ao Hermes: a linha `voce>` fica sempre embaixo e as mensagens
+O chat abre com a linha `voce>` sempre embaixo e as mensagens
 entram no rolamento natural do proprio terminal - a rodinha e a barra lateral do SEU
 terminal rolam a conversa, e ao sair o texto continua visivel para reler. Sem
 terminal interativo (pipe/script), cai no modo classico sozinho. Para desligar a
@@ -357,7 +357,7 @@ quer usar:
 - Tabelas na resposta agora saem como tabela de verdade na tela do navegador, e
   caminho de documento (inclusive .html) vira link que abre em outra janela.
 
-## Seguranca (modelo Hermes, menu simples para o usuario)
+## Seguranca (menu simples para o usuario)
 
 - Comando seguro: executa sem perguntar.
 - Apagar arquivo (ate um so), sobrescrever existente, codigo Python que apaga, disco,
@@ -414,7 +414,7 @@ bgh/                pacote do agente
   chat_core.py      nucleo do chat compartilhado pelas duas telas (comandos, turnos)
   agent.py          loop + streaming + compressao + sessao + botao de parar
   llm.py            cliente OpenAI-compativel (stream + reasoning + thinking toggle)
-  approvals.py      gate de licencas (modelo Hermes)
+  approvals.py      gate de licencas (menu numerico)
   prompts.py        system prompt por idioma (identidade + memoria + skills)
   palco.py          trilha do pedido desenhada enquanto o TEO trabalha
   assets/           o icone do gato (png/ico/svg) usado pelo atalho do desktop

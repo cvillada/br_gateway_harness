@@ -7,8 +7,8 @@ black cat.
 
 A lean harness in Python: agent loop + any OpenAI-compatible endpoint (local or
 API), real tools (shell, files, Python, web, documents), persistent memory and
-skills that TEO itself creates as it learns. Approval model mirroring Hermes
-Agent: safe commands run directly, dangerous ones ask for human permission.
+skills that TEO itself creates as it learns. Approval model:
+safe commands run directly, dangerous ones ask for human permission.
 
 ## Installation by operating system (TEO folder + virtual environment)
 
@@ -200,7 +200,7 @@ changes the limit, `/cap 0` removes it (it can take long then; ESC or CTRL+C sto
 
 ## Chatting
 
-The chat opens like Hermes: the `you>` line always stays at the bottom and the
+The chat opens with the `you>` line always at the bottom and the
 messages go into the terminal's own natural scrollback - the mouse wheel and the
 scrollbar of YOUR terminal scroll the conversation, and when you leave the text is
 still there to re-read. Without an interactive terminal (pipe/script) it falls back
@@ -364,7 +364,7 @@ Whoever opens TEO - from the desktop icon or typing `bgh` - chooses how to use i
 - Tables in the answer now come out as a real table on the browser screen, and a
   document path (including .html) becomes a link that opens in another window.
 
-## Security (Hermes model, simple menu for the user)
+## Security (simple menu for the user)
 
 - Safe command: runs without asking.
 - Deleting a file (even a single one), overwriting an existing one, Python code that
@@ -422,7 +422,7 @@ bgh/                agent package
   chat_core.py      chat core shared by both screens (commands, turns)
   agent.py          loop + streaming + compression + session + stop button
   llm.py            OpenAI-compatible client (stream + reasoning + thinking toggle)
-  approvals.py      permission gate (Hermes model)
+  approvals.py      permission gate (numeric menu)
   prompts.py        system prompt per language (identity + memory + skills)
   palco.py          request trail drawn while TEO works
   assets/           the cat icon (png/ico/svg) used by the desktop shortcut

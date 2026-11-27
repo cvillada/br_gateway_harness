@@ -7,8 +7,8 @@ autor.
 
 Harness liviano en Python: bucle de agente + endpoint compatible con OpenAI (local o
 API), herramientas reales (shell, archivos, Python, web, documentos), memoria
-persistente y skills que el propio TEO crea al aprender. Modelo de aprobacion
-copiado de Hermes Agent: lo seguro corre directo, lo peligroso pide aprobacion
+persistente y skills que el propio TEO crea al aprender. Modelo de aprobacion:
+lo seguro corre directo, lo peligroso pide aprobacion
 humana.
 
 ## Instalacion por sistema operativo (carpeta TEO + ambiente virtual)
@@ -201,7 +201,7 @@ el valor que vale. El valor por defecto (120) queda guardado en el config.
 
 ## Conversando
 
-El chat abre igual que Hermes: la linea `tu>` queda siempre abajo y los mensajes
+El chat abre con la linea `tu>` siempre abajo y los mensajes
 entran en el scroll natural de la propia terminal - la rueda y la barra lateral de TU
 terminal mueven la conversacion, y al salir el texto sigue visible para releer. Sin
 terminal interactiva (pipe/script), cae en el modo clasico solo. Para apagar la
@@ -366,7 +366,7 @@ usarlo:
   navegador, y la ruta de un documento (incluido .html) se vuelve un enlace que
   abre en otra ventana.
 
-## Seguridad (modelo Hermes, menu simple para el usuario)
+## Seguridad (menu simple para el usuario)
 
 - Comando seguro: corre sin preguntar.
 - Borrar archivo (aunque sea uno solo), sobrescribir existente, codigo Python que
@@ -426,7 +426,7 @@ bgh/                paquete del agente
   chat_core.py      nucleo del chat compartido por las dos pantallas (comandos, turnos)
   agent.py          bucle + streaming + compresion + sesion + boton de parar
   llm.py            cliente compatible con OpenAI (stream + reasoning + thinking toggle)
-  approvals.py      gate de permisos (modelo Hermes)
+  approvals.py      gate de permisos (menu numerico)
   prompts.py        system prompt por idioma (identidad + memoria + skills)
   palco.py          recorrido del pedido dibujado mientras el TEO trabaja
   assets/           el icono del gato (png/ico/svg) usado por el atajo del escritorio
