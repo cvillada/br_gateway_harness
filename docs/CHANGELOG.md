@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.61
+
+Os testes que deixaram o CI vermelho no macOS e no Windows (o programa nao mudou).
+
+- macOS: o teste do aviso dizia "o corpo 'pronto' esta na lista" comparando o texto
+  com a LISTA de argumentos; no osascript o texto vai dentro do `-e` e o teste usava
+  igualdade, nao "contem". Agora procura o texto dentro de cada argumento.
+- Windows: o teste da navegacao por caminho usava "/home/am", que so' existe no
+  Linux. Agora usa uma pasta REAL do sistema (a mesma nos tres), e o caso de
+  caminho inexistente continua valendo em qualquer SO.
+- Memoria: os testes de FTS5 (palavras fora de ordem e radical) agora so' rodam
+  quando o SQLite da maquina tem FTS5; sem ele o teste cobra o que vale de fato
+  (busca pelo texto exato, via LIKE).
+- Nada no programa mudou: 0.2.60 e 0.2.61 sao o mesmo conteudo da 0.2.59.
+  Suite local: 797 verificacoes gerais + 191 da tela.
+
 ## 0.2.60
 
 Correcao do TESTE que deixou o CI vermelho na 0.2.59 (o programa nao mudou).

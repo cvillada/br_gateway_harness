@@ -2000,7 +2000,7 @@ if os.name == "posix":
         _tui49.shutil.which = _which49
     ok("aviso do sistema monta o comando do SO (notify-send/osascript)",
        bool(_argv49) and _argv49[0] in ("notify-send", "osascript")
-       and "pronto" in _argv49)
+       and any("pronto" in str(parte) for parte in _argv49))
     try:
         _tui49.shutil.which = lambda nome: None
         _sem49 = _tui49.argv_notificacao("TEO", "pronto")
@@ -2050,7 +2050,9 @@ ok("/aviso liga volta a ligar", _core_av49.cfg["notify"] is True)
 from bgh.tools import memory as _mem50  # noqa: E402
 
 _mem50.load_lines("note")   # abre a base: garante que o indice foi tentado
-ok("busca da memoria usa indice FTS5 nesta maquina", _mem50._FTS["ok"] is True)
+_tem_fts50 = _mem50._FTS["ok"] is True
+ok("busca da memoria decide o caminho na abertura (FTS5 quando o SQLite tem)",
+   isinstance(_mem50._FTS["ok"], bool))
 
 _mem50.add("a impressora da sala usa o comando lp e papel A4", "note")
 for _i50 in range(50):
@@ -2063,10 +2065,16 @@ ok("busca sem resultado devolve a frase de 'nao achei' (nao explode)",
 _relev50 = _mem50.relevant("preciso imprimir um documento na impressora da sala")
 ok("memorias que combinam com o pedido sao selecionadas (nao as 50 ultimas)",
    any("impressora" in item for item in _relev50))
-ok("busca entende as palavras fora de ordem (indice FTS, nao LIKE puro)",
-   "impressora" in _mem50.search("sala impressora"))
-ok("busca frouxa acha por radical quando a palavra exata nao existe "
-   "(imprimir -> impressora)", "impressora" in _mem50.search("imprimir"))
+if _tem_fts50:
+    ok("busca entende as palavras fora de ordem (indice FTS, nao LIKE puro)",
+       "impressora" in _mem50.search("sala impressora"))
+    ok("busca frouxa acha por radical quando a palavra exata nao existe "
+       "(imprimir -> impressora)", "impressora" in _mem50.search("imprimir"))
+else:
+    # SQLite sem FTS5 (algumas builds): o codigo cai no LIKE e continua achando o
+    # texto exato - o teste cobra o que vale nas duas maquinas.
+    ok("sem FTS5 a busca cai no LIKE e ainda acha pelo texto exato",
+       "impressora" in _mem50.search("impressora"))
 ok("pedido sem assunto conhecido nao puxa memoria nenhuma",
    _mem50.relevant("quanto e 2 mais 2") == [])
 ok("o bloco por turno nao repete o que ja esta no prompt",
@@ -2536,11 +2544,13 @@ ok("'/' depois de texto vira caminho; texto sem '/' nao vira nada",
    _tui49.palavra_caminho("veja /ho") == "/ho"
    and _tui49.palavra_caminho("veja ") is None
    and _tui49.palavra_caminho("ola") is None)
+# Pasta REAL do sistema (a mesma em qualquer SO): o teste de "/home/am" so' valia
+# no Linux - no Windows e no macOS /home pode nao existir e a funcao volta a raiz.
+_raiz57 = str(TMP).replace(os.sep, "/")
 ok("o caminho digitado se divide em pasta + filtro",
-   _tui49.separar_caminho("/home/am") == ("/home", "am")
-   and _tui49.separar_caminho("/home/") == ("/home", "")
-   and _tui49.separar_caminho("/") == ("/", "")
-   and _tui49.separar_caminho("/ho") == ("/", "ho"))
+   _tui49.separar_caminho(_raiz57 + "/sub57") == (_raiz57, "sub57")
+   and _tui49.separar_caminho(_raiz57 + "/") == (_raiz57, "")
+   and _tui49.separar_caminho("/") == ("/", ""))
 ok("caminho que nao existe volta para a raiz com o texto como filtro",
    _tui49.separar_caminho("/nao/existe/mesmo") == ("/", "nao/existe/mesmo"))
 ok("/modelo digitado inteiro E' comando (ENTER executa, nao escolhe no menu)",
