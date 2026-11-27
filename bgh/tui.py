@@ -115,6 +115,9 @@ def comandos_da_ajuda() -> list[dict]:
     Fonte unica: a MESMA tabela de ajuda que a pessoa ve (/ajuda) - comando novo
     entra na ajuda e aparece no menu sem ninguem lembrar de mexer aqui. Entradas
     que nao sao comando ("/ <pasta>", "@<arquivo>", "Ctrl+J", "F2") ficam de fora.
+
+    A PRIMEIRA linha nao e' comando: e' a porta para navegar nas pastas (o "/" era
+    o navegador antes de virar lista de comandos; o menu nao pode perder isso).
     """
     vistos: set[str] = set()
     itens: list[dict] = []
@@ -126,7 +129,10 @@ def comandos_da_ajuda() -> list[dict]:
             vistos.add(nome)
             itens.append({"rotulo": nome, "alvo": nome, "tipo": "cmd",
                           "dica": str(explicacao)})
-    return sorted(itens, key=lambda item: item["rotulo"])
+    itens.sort(key=lambda item: item["rotulo"])
+    itens.insert(0, {"rotulo": t("menu.ir_pasta"), "alvo": "__pasta__",
+                     "tipo": "nav", "dica": t("menu.ir_pasta_dica")})
+    return itens
 
 
 # Nomes de comando que nao estao em i18n.ALIASES (tratados direto no chat_core).
@@ -202,11 +208,14 @@ def menu_linha(item: dict, modo: str) -> str:
     """O que entra na LINHA quando a pessoa escolhe um item com ENTER.
 
     Comando: '/modelo ' (com espaco, para digitar o argumento). Arquivo com @:
-    '@<caminho>' (o nucleo le text[1:] como caminho e anexa).
+    '@<caminho>' (o nucleo le text[1:] como caminho e anexa). Arquivo no navegador
+    do /: '/ <caminho>' (o nucleo lista o arquivo).
     """
     alvo = str(item.get("alvo", ""))
     if modo == "comando":
         return alvo + " "
+    if modo == "nav":
+        return "/ " + alvo
     return "@" + alvo
 
 
@@ -834,6 +843,17 @@ def run_tui(cfg: dict) -> int:
             _menu_fechar()
             return False
         item = itens[min(max(0, int(menu["cursor"])), len(itens) - 1)]
+        if item["tipo"] == "nav":
+            # A porta para as PASTAS dentro do menu do /: vira o navegador de antes.
+            menu["modo"] = "nav"
+            menu["filtro"] = None
+            menu["cursor"] = 0
+            in_buf.text = str(menu.get("gatilho") or "")
+            in_buf.cursor_position = len(in_buf.text)
+            _menu_atual()
+            if app is not None:
+                _schedule(app.invalidate)
+            return True
         if item["tipo"] == "up":
             _menu_trocar_pasta(menu, str(item["alvo"]))
             return True

@@ -2505,12 +2505,16 @@ _cmds57 = _tui49.comandos_da_ajuda()
 _nomes57 = [c["rotulo"] for c in _cmds57]
 ok("menu de comandos vem da ajuda (e tem os comandos desta sessao)",
    "/modelo" in _nomes57 and "/handoff" in _nomes57 and "/ajuda" in _nomes57
-   and _nomes57 == sorted(_nomes57))
+   and _nomes57[1:] == sorted(_nomes57[1:]))
+ok("primeira linha do menu do / e' a porta para as PASTAS",
+   _cmds57[0]["tipo"] == "nav" and "pasta" in _cmds57[0]["rotulo"].lower())
 ok("menu de comandos filtra pelo nome digitado",
    [c["rotulo"] for c in _tui49.menu_itens(".", "hand", "comando")] == ["/handoff"])
 ok("escolher um comando poe o comando na linha, com espaco para o argumento",
    _tui49.menu_linha({"rotulo": "/modelo", "alvo": "/modelo", "tipo": "cmd"},
                      "comando") == "/modelo ")
+ok("no navegador do /, escolher arquivo poe '/ <caminho>' (listar)",
+   _tui49.menu_linha(_arq56, "nav") == "/ " + _arq56["alvo"])
 ok("/modelo digitado inteiro E' comando (ENTER executa, nao escolhe no menu)",
    _tui49.eh_comando("/modelo") and _tui49.eh_comando("/model")
    and _tui49.eh_comando("/handoff notas/x"))

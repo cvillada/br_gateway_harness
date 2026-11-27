@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.58
+
+As pastas voltam ao menu do "/": primeira linha "[ abrir uma pasta... ]".
+
+- O que faltava depois da 0.2.57 (relatado pelo dono): o "/" virou lista de
+  comandos e nao havia mais como NAVEGAR nas pastas por ali (o "@" navega, mas
+  escolhendo o arquivo ele ANEXA - nao serve para so' olhar).
+- AGORA: o menu do "/" abre com a primeira linha "[ abrir uma pasta... ]"; ENTER
+  nela vira o navegador de antes: ".." sobe, pastas com "/" entram, setas andam,
+  digitar filtra, e ENTER num arquivo poe "/ <caminho>" na linha (ENTER de novo
+  mostra o arquivo). "@" continua sendo o menu de ANEXAR.
+- Suite local: 794 verificacoes gerais (2 novas: a porta das pastas e' a primeira
+  linha do menu do /, e no navegador do / o arquivo escolhido vai como
+  '/ <caminho>') + 191 da tela.
+
 ## 0.2.57
 
 Correcao do menu: "/" lista COMANDOS, e o comando digitado inteiro executa.
