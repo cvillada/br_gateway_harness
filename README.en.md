@@ -238,8 +238,8 @@ Quick shortcuts (they do not ask permission, they only show):
 
 | Shortcut | What it does |
 |----------|--------------|
-| `/` | on the fixed screen opens the menu of the current folder (pick by number); in simple mode, lists |
-| `@` | on the fixed screen opens the file menu to attach; in simple mode, lists the files |
+| `/` | at the START of the line opens the command list (arrows choose, typing filters, ENTER runs it); after some text (e.g. `veja /`) opens the FOLDER browser from the root - arrows move, ENTER enters, `..` goes up; in simple mode, lists |
+| `@` | with an empty line opens the file menu of the current folder to attach (arrows choose, ENTER picks and ENTER again attaches); in simple mode, lists the files |
 | `@<file>` | attaches the file; then just ask about it. PNG/JPG/WEBP/GIF/BMP go as an IMAGE to the model's vision (up to 5 MB); writing the image path in the message also attaches it |
 | `/ls <folder>` | lists a specific folder (no menu) |
 
@@ -263,9 +263,17 @@ Commands:
 | `/voz` | accessibility: reads every answer out loud with the system voice (speech-dispatcher/espeak on Linux, System.Speech on Windows, `say` on macOS); type it again to turn off; ESC silences. Shortcut: `/voice` |
 | `/fundo` | screen background color: white, yellow, green, blue, red, black or `default`; the letters change on their own to stay readable (light background = dark letters). Shortcut: `/background` |
 | `/fonte` | letter size: 1 normal, 2 large, 3 larger, 4 huge. On Windows it changes right away; on Linux/macOS it reopens the window with zoom (or teaches your terminal keys). Shortcut: `/font` |
-| `/ditar` | accessibility: write by SPEAKING. TEO listens to the microphone, transcribes in the screen language and puts the text on the line for you to check before ENTER. The language model (pt/en/es, ~55 MB) is downloaded once on first use; after that it works offline and the sound never leaves your computer. Shortcuts: `/ditar`, `/dictar`. On the fixed screen F2 does the same, and with an EMPTY line so does the spacebar (one beep means it started listening, another that it stopped; ESC cancels) |
+| `/ditar` | accessibility: write by SPEAKING. TEO listens to the microphone, transcribes in the screen language and puts the text on the line for you to check before ENTER. The language model (pt/en/es, ~55 MB) is downloaded once on first use; after that it works offline and the sound never leaves your computer. Shortcuts: `/ditar`, `/dictar`. On the fixed screen F2 does the same, and with an EMPTY line TWO spaces in a row also do it (a single space is a normal space; one beep means it started listening, another that it stopped; ESC cancels) |
 | `/limpar` | deletes the drafts TEO creates in the `scratch` folder (run_python scripts, voice texts and command temporary files) and reports the space freed; it asks first and never touches conversation, memory or skills. With a size (`/clean 5GB`) it only changes the startup full-folder warning (default 3 GB). Shortcut: `/clean` |
-| `/new` `/skills` `/help` `/exit` | new conversation, skills, help, quit |
+| `/sessoes` | lists the saved conversations (date, subject, messages). `/abrir <number>` goes back to one; the open conversation is saved too. Shortcuts: `/sessions`, `/sesiones`; `/open` |
+| `/handoff [folder/name]` | saves a .md in the folder you choose (or this one) with what was done, where we stopped and the next steps, to continue another day; TEO finds and reads that file when you ask to continue |
+| `/buscar <word>` | looks for a word in the conversation and shows the snippets (you, TEO and tool). Shortcut: `/find` |
+| `/exportar [name]` | saves the conversation in `~/Documentos` as plain text, to send to someone. Shortcut: `/export` |
+| `/erro` | shows the last recorded technical error, ready to copy and ask for help. Shortcut: `/error` |
+| `/aviso` | turns on/off the beep and system notification when a long turn ends or when TEO is waiting for your answer (license). Shortcut: `/notify` |
+| `/simples` | simple screen: hides the request trail and the tool name - for a child or anyone distracted by too much information. Shortcut: `/simple` |
+| `/reserva <number>` | backup provider: if the main one does not answer, TEO tries this one ONCE in the turn and goes back to the main one next turn; `/reserva off` turns it off. Shortcut: `/reserve` |
+| `/new` `/skills` `/help` `/exit` | new conversation (the current one is saved in sessions), skills, help, quit |
 
 Language: TEO speaks Portuguese (factory default), English and Spanish. The installer
 asks the language at the start and `/language` switches it at any moment, right away
@@ -293,8 +301,11 @@ without reinstalling.
   (green/yellow/red); at 85% the bottom bar turns to the alert color and the next
   heavy round compacts the conversation into a summary by itself (TEO says so on
   screen while compacting). If the server refuses the size, it compacts and tries
-  again instead of stopping. The compaction point is adjustable:
-  `context_compress_pct` in `~/.bgh/config.json`.
+  again instead of stopping. The meter moves at every round (not only at the end) and,
+  when the conversation is already past the threshold, compaction runs at the END of a
+  long turn - the next one starts with room. The compaction point is adjustable:
+  `context_compress_pct` in `~/.bgh/config.json`; with `summary_model` a smaller model
+  can do the summary.
 
 ## Browser screen (the same TEO, with buttons)
 
@@ -378,6 +389,12 @@ Whoever opens TEO - from the desktop icon or typing `bgh` - chooses how to use i
   needed, calls `instalar_pacote(pacote, motivo)` - the permission appears to the user
   with the reason in simple words - installs via pip and goes on with the task.
   `pip install` through `run_command` goes through the same permission (no side door).
+- Reminder: when the person asks "warn me in 20 minutes", TEO sets a notice on its own
+  screen (with beep and notification, if `/aviso` is on) - it works while TEO is open,
+  and TEO says that in the answer.
+- Documents in `.docx`, `.xlsx` and `.pdf`: `make_document` creates all three. A missing
+  library (python-docx, openpyxl or reportlab) is installed ON THE SPOT with the same
+  permission - the TEO package does not grow because of them.
 - Anti-loop (hard rule): an IDENTICAL call repeated 3 times is cut before running
   ("LOOP DETECTED"); 5 failures in a row close the turn with an explanation to the
   user, instead of insisting forever. The round limit per turn stays as the final cap.
@@ -387,6 +404,10 @@ Whoever opens TEO - from the desktop icon or typing `bgh` - chooses how to use i
 - `memory` (SQLite in ~/.bgh/memory.db): target=user keeps who the user is and how
   they like answers; target=note keeps machine facts. Everything comes back into the
   system prompt of the next conversations.
+- Memory is looked up by SUBJECT (SQLite FTS5 index, with a plain search when the build
+  lacks it): what matches the request travels with the message, so an old preference
+  comes back when the subject shows up. A permanent request ("my name is...", "I
+  prefer...", "from now on...") is saved even if the model forgets.
 - `skill` (SKILL.md in ~/.bgh/skills): when it finds a procedure that worked, TEO
   creates/updates its skill. Factory skills in the repo's `skills/` are copied at
   setup and serve as a base.
@@ -405,7 +426,7 @@ bgh/                agent package
   prompts.py        system prompt per language (identity + memory + skills)
   palco.py          request trail drawn while TEO works
   assets/           the cat icon (png/ico/svg) used by the desktop shortcut
-  tools/            run_command (interruptible), run_python, read/write/search, web, memory, skill, document
+  tools/            run_command (interruptible), run_python, read/write/search, web, memory, skill, document, reminder
   skills_default/   factory skills (copied to ~/.bgh/skills at setup)
 tests/test_smoke.py offline tests (no model)
 pyproject.toml      packaging (wheel)

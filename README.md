@@ -231,8 +231,8 @@ Atalhos rapidos (nao perguntam licenca, so mostram):
 
 | Atalho | O que faz |
 |--------|-----------|
-| `/` | na tela fixa abre o menu da pasta atual (escolhe por numero); no modo simples, lista |
-| `@` | na tela fixa abre o menu de arquivos para anexar; no modo simples, lista os arquivos |
+| `/` | no COMECO da linha abre a lista de comandos (setas escolhem, digitar filtra, ENTER executa); depois de texto (ex.: `veja /`) abre o navegador de PASTAS a partir da raiz - setas andam, ENTER entra, `..` sobe; no modo simples, lista |
+| `@` | com a linha vazia abre o menu de arquivos da pasta atual para anexar (setas escolhem, ENTER pega e ENTER de novo anexa); no modo simples, lista os arquivos |
 | `@<arquivo>` | anexa o arquivo; depois e so perguntar sobre ele. PNG/JPG/WEBP/GIF/BMP vao como IMAGEM para a visao do modelo (ate 5 MB); escrever o caminho da imagem na mensagem tambem anexa |
 | `/ls <pasta>` | lista uma pasta especifica (sem menu) |
 
@@ -256,9 +256,17 @@ Comandos:
 | `/voz` | acessibilidade: le cada resposta em voz alta com a voz do sistema (speech-dispatcher/espeak no Linux, System.Speech no Windows, `say` no Mac); digitar de novo desliga; ESC cala. Atalhos: `/voice` |
 | `/fundo` | cor de fundo da tela: branco, amarelo, verde, azul, vermelho, preto ou `padrao`; a letra muda sozinha para continuar legivel (fundo claro = letra escura). Atalhos: `/background` |
 | `/fonte` | tamanho da letra: 1 normal, 2 grande, 3 maior, 4 enorme. No Windows muda na hora; no Linux/Mac reabre a janela com zoom (ou ensina as teclas do seu terminal). Atalhos: `/font` |
-| `/ditar` | acessibilidade: escreva FALANDO. O TEO ouve o microfone, transcreve no idioma da tela e poe o texto na linha para conferir antes do ENTER. O modelo do idioma (pt/en/es, ~55 MB) e baixado uma vez, na primeira vez; depois funciona sem internet e o som nao sai do seu computador. Atalhos: `/dictate`, `/dictar`. Na tela fixa a tecla F2 faz o mesmo, e com a linha VAZIA a barra de espaco tambem (um bip avisa que comecou a ouvir, outro que parou; ESC corta) |
+| `/ditar` | acessibilidade: escreva FALANDO. O TEO ouve o microfone, transcreve no idioma da tela e poe o texto na linha para conferir antes do ENTER. O modelo do idioma (pt/en/es, ~55 MB) e baixado uma vez, na primeira vez; depois funciona sem internet e o som nao sai do seu computador. Atalhos: `/dictate`, `/dictar`. Na tela fixa a tecla F2 faz o mesmo, e com a linha VAZIA DOIS espacos seguidos tambem (um espaco sozinho e' espaco normal; um bip avisa que comecou a ouvir, outro que parou; ESC corta) |
 | `/limpar` | apaga os rascunhos que o TEO cria na pasta `scratch` (scripts do `run_python`, textos da voz e temporarios dos comandos) e mostra o espaco liberado; pergunta antes e nao toca em conversa, memoria nem skills. Com um tamanho (`/limpar 5GB`) muda so o aviso de pasta cheia da abertura (padrao 3 GB). Atalhos: `/clean` |
-| `/nova` `/skills` `/ajuda` `/sair` | conversa nova, skills, ajuda, sair (`/nov` continua valendo) |
+| `/sessoes` | lista as conversas guardadas (data, assunto, mensagens). `/abrir <numero>` volta numa delas; a conversa aberta tambem fica guardada. Atalhos: `/sessions`, `/sesiones`; `/open` |
+| `/handoff [pasta/nome]` | salva um .md na pasta que voce escolher (ou nesta) com o que foi feito, onde paramos e os proximos passos, para continuar em outro dia; o TEO procura e le esse arquivo quando voce pedir para continuar |
+| `/buscar <palavra>` | procura uma palavra na conversa e mostra os trechos (voce, TEO e ferramenta). Atalhos: `/find` |
+| `/exportar [nome]` | salva a conversa em `~/Documentos` como texto simples, para mandar para alguem. Atalhos: `/export` |
+| `/erro` | mostra o ultimo erro tecnico registrado, pronto para copiar e pedir ajuda. Atalhos: `/error` |
+| `/aviso` | liga/desliga som e notificacao do sistema quando um turno demorado termina ou quando o TEO esta esperando sua resposta (licenca). Atalhos: `/notify` |
+| `/simples` | tela simples: esconde a trilha do pedido e o nome da ferramenta - para crianca ou para quem se distrai com muita informacao. Atalhos: `/simple` |
+| `/reserva <numero>` | provedor de reserva: se o principal nao responder, o TEO tenta esse UMA vez no turno e volta ao principal no seguinte; `/reserva off` desliga. Atalhos: `/reserve` |
+| `/nova` `/skills` `/ajuda` `/sair` | conversa nova (a atual fica guardada nas sessoes), skills, ajuda, sair (`/nov` continua valendo) |
 
 Idioma: o TEO fala portugues (de fabrica), ingles e espanhol. O instalador pergunta
 o idioma no inicio e o `/lingua` troca a qualquer momento, na hora - banner, ajuda,
@@ -284,8 +292,11 @@ antiga), rode `scripts/consertar_icone_mac.sh`: conserta sem reinstalar.
 - Contexto: apos cada resposta sai `contexto: NN% de 250000 chars` (verde/amarelo/
   vermelho); aos 85% a barra de baixo entra na cor de alerta e a proxima rodada
   compacta sozinha em resumo (o TEO avisa na tela enquanto compacta). Se o servidor
-  recusar o tamanho, ele compacta e tenta de novo em vez de parar. O ponto de
-  compactacao e ajustavel: `context_compress_pct` no `~/.bgh/config.json`.
+  recusar o tamanho, ele compacta e tenta de novo em vez de parar. O medidor anda a
+  cada rodada (nao so' no fim) e, quando a conversa ja' passou do limiar, a compactacao
+  roda no FIM de um turno demorado - o proximo comeca com espaco. O ponto de
+  compactacao e ajustavel: `context_compress_pct` no `~/.bgh/config.json`; com
+  `summary_model` um modelo menor pode fazer o resumo.
 
 ## Tela do navegador (o mesmo TEO, com botoes)
 
@@ -368,6 +379,12 @@ quer usar:
   chama `instalar_pacote(pacote, motivo)` - a licenca aparece para o usuario com o motivo
   em linguagem simples - instala via pip e continua a tarefa. `pip install` por
   `run_command` passa pela mesma licenca (sem saida pelo lado).
+- Lembrete: quando a pessoa pede "me avise em 20 minutos", o TEO marca um aviso na
+  propria tela (com som e notificacao, se o `/aviso` estiver ligado) - vale enquanto o
+  TEO estiver aberto, e ele avisa isso na resposta.
+- Documentos em `.docx`, `.xlsx` e `.pdf`: o `make_document` cria os tres. A biblioteca
+  que faltar (python-docx, openpyxl ou reportlab) e' instalada NA HORA com a mesma
+  licenca - o pacote do TEO nao engorda por causa delas.
 - Anti-loop (regra dura): chamada IDENTICA repetida 3 vezes e cortada antes de executar
   ("LOOP DETECTADO"); 5 falhas em sequencia fecham o turno com uma explicacao ao usuario,
   em vez de insistir para sempre. O limite de passos por pedido (120, ajustavel com
@@ -379,6 +396,10 @@ quer usar:
 - `memory` (SQLite em ~/.bgh/memory.db): target=user guarda quem o usuario e e
   como ele gosta de resposta; target=note guarda fatos da maquina. Tudo volta
   para o system prompt das proximas conversas.
+- A memoria e' buscada por ASSUNTO (indice FTS5 do SQLite, com busca simples quando a
+  build nao tem): o que combina com o pedido viaja junto da mensagem, entao uma
+  preferencia antiga volta quando o assunto aparece. Pedido permanente ("meu nome e...",
+  "prefiro...", "de agora em diante...") fica gravado mesmo se o modelo esquecer.
 - `skill` (SKILL.md em ~/.bgh/skills): ao descobrir um procedimento que
   funcionou, o TEO cria/atualiza a skill dela. Skills de fabrica em
   `skills/` do repo sao copiadas no setup e servem de base.
@@ -397,7 +418,7 @@ bgh/                pacote do agente
   prompts.py        system prompt por idioma (identidade + memoria + skills)
   palco.py          trilha do pedido desenhada enquanto o TEO trabalha
   assets/           o icone do gato (png/ico/svg) usado pelo atalho do desktop
-  tools/            run_command (interrumpivel), run_python, read/write/search, web, memory, skill, documento
+  tools/            run_command (interrumpivel), run_python, read/write/search, web, memory, skill, documento, lembrete
   skills_default/   skills de fabrica (copiadas para ~/.bgh/skills no setup)
 tests/test_smoke.py testes offline (sem modelo)
 pyproject.toml      empacotamento (wheel)

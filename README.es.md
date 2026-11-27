@@ -238,8 +238,8 @@ Atajos rapidos (no piden permiso, solo muestran):
 
 | Atajo | Que hace |
 |-------|----------|
-| `/` | en la pantalla fija abre el menu de la carpeta actual (elige por numero); en modo simple, lista |
-| `@` | en la pantalla fija abre el menu de archivos para adjuntar; en modo simple, lista los archivos |
+| `/` | al COMIENZO de la linea abre la lista de comandos (flechas eligen, escribir filtra, ENTER ejecuta); despues de texto (ej.: `veja /`) abre el navegador de CARPETAS desde la raiz - flechas andan, ENTER entra, `..` sube; en modo simple, lista |
+| `@` | con la linea vacia abre el menu de archivos de la carpeta actual para adjuntar (flechas eligen, ENTER toma y ENTER otra vez adjunta); en modo simple, lista los archivos |
 | `@<archivo>` | adjunta el archivo; despues solo pregunta sobre el. PNG/JPG/WEBP/GIF/BMP van como IMAGEN a la vision del modelo (hasta 5 MB); escribir la ruta de la imagen en el mensaje tambien adjunta |
 | `/ls <carpeta>` | lista una carpeta especifica (sin menu) |
 
@@ -263,9 +263,17 @@ Comandos:
 | `/voz` | accesibilidad: lee cada respuesta en voz alta con la voz del sistema (speech-dispatcher/espeak en Linux, System.Speech en Windows, `say` en Mac); escribirlo otra vez apaga; ESC calla. Atajo: `/voice` |
 | `/fundo` | color de fondo de la pantalla: blanco, amarillo, verde, azul, rojo, negro o `padrao`; las letras cambian solas para seguir legibles (fondo claro = letras oscuras). Atajo: `/background` |
 | `/fonte` | tamano de la letra: 1 normal, 2 grande, 3 mayor, 4 enorme. En Windows cambia en el acto; en Linux/Mac reabre la ventana con zoom (o ensena las teclas de tu terminal). Atajo: `/font` |
-| `/ditar` | accesibilidad: escribe HABLANDO. El TEO escucha el microfono, transcribe en el idioma de la pantalla y pone el texto en la linea para que lo revises antes del ENTER. El modelo del idioma (pt/en/es, ~55 MB) se baja una vez, la primera vez; despues funciona sin internet y el sonido no sale de tu computadora. Atajos: `/dictate`, `/dictar`. En la pantalla fija la tecla F2 hace lo mismo, y con la linea VACIA tambien la barra de espacio (un bip avisa que empezo a escuchar, otro que paro; ESC corta) |
+| `/ditar` | accesibilidad: escribe HABLANDO. El TEO escucha el microfono, transcribe en el idioma de la pantalla y pone el texto en la linea para que lo revises antes del ENTER. El modelo del idioma (pt/en/es, ~55 MB) se baja una vez, la primera vez; despues funciona sin internet y el sonido no sale de tu computadora. Atajos: `/dictate`, `/dictar`. En la pantalla fija la tecla F2 hace lo mismo, y con la linea VACIA DOS espacios seguidos tambien (un espacio solo es un espacio normal; un bip avisa que empezo a escuchar, otro que paro; ESC corta) |
 | `/limpiar` | borra los borradores que el TEO crea en la carpeta `scratch` (scripts de `run_python`, textos de la voz y temporales de los comandos) y muestra el espacio liberado; pregunta antes y no toca conversacion, memoria ni skills. Con un tamano (`/limpiar 5GB`) cambia solo el aviso de carpeta llena de la apertura (por defecto 3 GB). Atajo: `/clean` |
-| `/nuevo` `/habilidades` `/ayuda` `/salir` | conversacion nueva, skills, ayuda, salir |
+| `/sessoes` | lista las conversaciones guardadas (fecha, asunto, mensajes). `/abrir <numero>` vuelve a una de ellas; la conversacion abierta tambien queda guardada. Atajos: `/sessions`, `/sesiones`; `/open` |
+| `/handoff [carpeta/nombre]` | guarda un .md en la carpeta que elijas (o en esta) con lo que se hizo, donde quedamos y los proximos pasos, para continuar otro dia; el TEO busca y lee ese archivo cuando pidas continuar |
+| `/buscar <palabra>` | busca una palabra en la conversacion y muestra los trozos (tu, TEO y herramienta). Atajo: `/find` |
+| `/exportar [nombre]` | guarda la conversacion en `~/Documentos` como texto simple, para mandarla a alguien. Atajo: `/export` |
+| `/erro` | muestra el ultimo error tecnico registrado, listo para copiar y pedir ayuda. Atajo: `/error` |
+| `/aviso` | activa/desactiva el bip y la notificacion del sistema cuando termina un turno largo o cuando el TEO espera tu respuesta (licencia). Atajo: `/notify` |
+| `/simples` | pantalla simple: esconde el recorrido del pedido y el nombre de la herramienta - para ninos o para quien se distrae con mucha informacion. Atajo: `/simple` |
+| `/reserva <numero>` | proveedor de reserva: si el principal no responde, el TEO intenta ese UNA vez en el turno y vuelve al principal en el siguiente; `/reserva off` lo apaga. Atajo: `/reserve` |
+| `/nuevo` `/habilidades` `/ayuda` `/salir` | conversacion nueva (la actual queda guardada en las sesiones), skills, ayuda, salir |
 
 Idioma: el TEO habla portugues (de fabrica), ingles y espanol. El instalador pregunta
 el idioma al inicio y el `/idioma` lo cambia en cualquier momento, en el acto -
@@ -293,8 +301,10 @@ arregla sin reinstalar.
   (verde/amarillo/rojo); al 85% la barra de abajo entra en el color de alerta y la
   siguiente ronda pesada compacta sola en resumen (el TEO avisa en pantalla mientras
   compacta). Si el servidor rechaza el tamano, compacta e intenta de nuevo en vez de
-  parar. El punto de compactacion es ajustable: `context_compress_pct` en
-  `~/.bgh/config.json`.
+  parar. El medidor anda en cada ronda (no solo al final) y, cuando la conversacion ya
+  paso el umbral, la compactacion corre al FINAL de un turno largo - el siguiente empieza
+  con espacio. El punto de compactacion es ajustable: `context_compress_pct` en
+  `~/.bgh/config.json`; con `summary_model` un modelo menor puede hacer el resumen.
 
 ## Pantalla del navegador (el mismo TEO, con botones)
 
@@ -382,6 +392,12 @@ usarlo:
   hace falta, llama `instalar_pacote(pacote, motivo)` - el permiso aparece para el
   usuario con el motivo en lenguaje simple - instala por pip y sigue la tarea.
   `pip install` por `run_command` pasa por el mismo permiso (sin salida lateral).
+- Recordatorio: cuando la persona pide "avisame en 20 minutos", el TEO marca un aviso en
+  su propia pantalla (con bip y notificacion, si el `/aviso` esta activado) - vale
+  mientras el TEO este abierto, y el TEO lo dice en la respuesta.
+- Documentos en `.docx`, `.xlsx` y `.pdf`: el `make_document` crea los tres. La
+  biblioteca que falte (python-docx, openpyxl o reportlab) se instala EN EL MOMENTO con
+  el mismo permiso - el paquete del TEO no crece por ellas.
 - Anti-bucle (regla dura): una llamada IDENTICA repetida 3 veces se corta antes de
   ejecutar ("BUCLE DETECTADO"); 5 fallas en secuencia cierran el turno con una
   explicacion al usuario, en vez de insistir para siempre. El limite de rondas por
@@ -392,6 +408,10 @@ usarlo:
 - `memory` (SQLite en ~/.bgh/memory.db): target=user guarda quien es el usuario y
   como le gustan las respuestas; target=note guarda datos de la maquina. Todo vuelve
   al system prompt de las proximas conversaciones.
+- La memoria se busca por ASUNTO (indice FTS5 del SQLite, con busqueda simple cuando la
+  build no lo tiene): lo que encaja con el pedido viaja con el mensaje, asi una
+  preferencia vieja vuelve cuando aparece el asunto. Pedido permanente ("me llamo...",
+  "prefiero...", "de ahora en adelante...") queda guardado aunque el modelo lo olvide.
 - `skill` (SKILL.md en ~/.bgh/skills): al descubrir un procedimiento que funciono,
   el TEO crea/actualiza su skill. Las skills de fabrica en `skills/` del repo se
   copian en el setup y sirven de base.
@@ -410,7 +430,7 @@ bgh/                paquete del agente
   prompts.py        system prompt por idioma (identidad + memoria + skills)
   palco.py          recorrido del pedido dibujado mientras el TEO trabaja
   assets/           el icono del gato (png/ico/svg) usado por el atajo del escritorio
-  tools/            run_command (interrumpible), run_python, read/write/search, web, memory, skill, documento
+  tools/            run_command (interrumpible), run_python, read/write/search, web, memory, skill, documento, recordatorio
   skills_default/   skills de fabrica (copiadas a ~/.bgh/skills en el setup)
 tests/test_smoke.py pruebas offline (sin modelo)
 pyproject.toml      empaquetado (wheel)
