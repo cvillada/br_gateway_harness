@@ -2515,6 +2515,19 @@ ok("escolher um comando poe o comando na linha, com espaco para o argumento",
                      "comando") == "/modelo ")
 ok("no navegador do /, escolher arquivo poe '/ <caminho>' (listar)",
    _tui49.menu_linha(_arq56, "nav") == "/ " + _arq56["alvo"])
+
+# ----- "/" no meio da frase = navegador de pastas (igual ao Hermes) -----------
+ok("'/' depois de texto vira caminho; texto sem '/' nao vira nada",
+   _tui49.palavra_caminho("veja /ho") == "/ho"
+   and _tui49.palavra_caminho("veja ") is None
+   and _tui49.palavra_caminho("ola") is None)
+ok("o caminho digitado se divide em pasta + filtro",
+   _tui49.separar_caminho("/home/am") == ("/home", "am")
+   and _tui49.separar_caminho("/home/") == ("/home", "")
+   and _tui49.separar_caminho("/") == ("/", "")
+   and _tui49.separar_caminho("/ho") == ("/", "ho"))
+ok("caminho que nao existe volta para a raiz com o texto como filtro",
+   _tui49.separar_caminho("/nao/existe/mesmo") == ("/", "nao/existe/mesmo"))
 ok("/modelo digitado inteiro E' comando (ENTER executa, nao escolhe no menu)",
    _tui49.eh_comando("/modelo") and _tui49.eh_comando("/model")
    and _tui49.eh_comando("/handoff notas/x"))
@@ -4475,11 +4488,11 @@ ok("a ajuda anuncia o /ditar nos tres idiomas",
 # -- 0.2.23: tecla de ditado (F2 / espaco com a linha vazia) -------------------
 _tui323 = (_RAIZ316 / "bgh" / "tui.py").read_text(encoding="utf-8")
 _core323_txt = (_RAIZ316 / "bgh" / "chat_core.py").read_text(encoding="utf-8")
-ok("a tela fixa tem tecla de ditado: F2 e espaco com a linha vazia",
+ok("a tela fixa tem tecla de ditado: F2 e espaco (duas vezes)",
    'kb.add("f2")' in _tui323 and 'kb.add(" ")' in _tui323
    and "_ditar_agora()" in _tui323)
-ok("o espaco continua sendo espaco quando ja existe texto (nao rouba a tecla)",
-   "in_buf.insert_text" in _tui323 and "if in_buf.text or" in _tui323)
+ok("um espaco e' espaco normal; DOIS espacos seguidos com a linha vazia ditam",
+   "espaco_ts" in _tui323 and 'in_buf.insert_text(" ")' in _tui323)
 ok("a tecla roda em thread e nao trava a tela (mesmo caminho do ENTER)",
    "target=_worker, daemon=True" in _tui323)
 ok("o ditado tem bip de inicio e de fim (aviso para quem nao ve a tela)",
@@ -4487,9 +4500,9 @@ ok("o ditado tem bip de inicio e de fim (aviso para quem nao ve a tela)",
 ok("a barra de baixo mostra 'ouvindo Ns' durante a escuta",
    "tui.listening" in _tui323 and _i18n316.t("tui.listening") == "ouvindo")
 _ajuda323 = [c for _h, pares in _i18n316.help_table() for c, _d in pares]
-ok("a ajuda ensina a tecla (F2, espaco com a linha vazia, ESC para cortar)",
+ok("a ajuda ensina a tecla (F2, espaco duas vezes, ESC para cortar)",
    any("F2" == c for c in _ajuda323)
-   and any("espaco com a linha vazia" == c for c in _ajuda323)
+   and any("espaco duas vezes com a linha vazia" == c for c in _ajuda323)
    and any("ESC durante a escuta" == c for c in _ajuda323))
 ok("na ajuda a secao 'Falar em vez de digitar' vem ANTES de 'Comandos:'",
    [h for h, _p in _i18n316.help_table()].index(

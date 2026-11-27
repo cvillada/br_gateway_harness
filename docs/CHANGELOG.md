@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.59
+
+"/" igual ao Hermes: no comeco da linha sao os COMANDOS; depois de texto (ou de um
+espaco) sao as PASTAS, a partir da raiz.
+
+- "/" na linha vazia: menu de comandos (como na 0.2.57), primeira linha
+  "[ abrir uma pasta... ]" para quem quer o navegador.
+- "/" DEPOIS de texto ("veja /" ou so' um espaco e "/"): abre o navegador de pastas
+  a partir da RAIZ, com pastas primeiro e depois arquivos, igual ao Hermes. E
+  navegador de verdade: digitar "/home/am" ja' filtra a pasta /home por "am";
+  ENTER numa pasta TROCA o caminho na linha ("/home/" -> "/home/maria/"), ENTER num
+  arquivo fecha o menu e deixa o caminho completo na linha; ".." sobe (sem virar
+  "//" na raiz).
+- ESPACO mudou: um espaco e' espaco (antes, com a linha vazia, ele comecava o
+  ditado e era impossivel comecar uma linha com espaco - e sem isso o " /" nao
+  existia). DOIS espacos seguidos com a linha vazia comecam a ouvir; F2 continua
+  igual. Ajuda atualizada nos tres idiomas.
+- ESC no menu: fecha e limpa a linha SO' quando nela ha apenas o gatilho; com texto
+  antes ("veja /ho") o texto fica.
+- Suite local: 797 verificacoes gerais (3 novas: "/" depois de texto vira caminho,
+  divisao caminho/pasta+filtro, e caminho inexistente voltando para a raiz) + 191
+  da tela. Alem disso, bateria no TUI de verdade (pty, 14 casos): /, " /", " /ho",
+  ENTER no caminho, " /home/am", ESC com texto, @, espaco/espaco, espaco sozinho,
+  "/modelo" executando, arquivo escolhido no caminho, "..", porta das pastas e
+  navegador do "/".
+
 ## 0.2.58
 
 As pastas voltam ao menu do "/": primeira linha "[ abrir uma pasta... ]".

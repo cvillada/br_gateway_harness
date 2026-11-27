@@ -276,11 +276,14 @@ HELP_SECTIONS = [
          "by itself when you go quiet (one beep when it starts, another when it stops)",
          "empieza a escuchar el microfono y pone el texto en la linea; para solo "
          "cuando callas (un bip avisa que empezo y otro que paro)"),
-        ("espaco com a linha vazia", "space on an empty line",
-         "espacio con la linea vacia",
-         "a mesma coisa, na tecla mais facil de achar no teclado",
-         "the same thing, on the easiest key to find on the keyboard",
-         "lo mismo, en la tecla mas facil de encontrar en el teclado"),
+        ("espaco duas vezes com a linha vazia", "two spaces on an empty line",
+         "espacio dos veces con la linea vacia",
+         "a mesma coisa, na tecla mais facil de achar no teclado (um espaco sozinho"
+         " e' espaco normal)",
+         "the same thing, on the easiest key to find on the keyboard (a single space"
+         " is a normal space)",
+         "lo mismo, en la tecla mas facil de encontrar en el teclado (un espacio solo"
+         " es un espacio normal)"),
         ("ESC durante a escuta", "ESC while listening", "ESC mientras escucha",
          "para de ouvir na hora, sem enviar nada",
          "stops listening right away, without sending anything",

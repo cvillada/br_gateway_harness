@@ -154,6 +154,41 @@ def eh_comando(texto: str) -> bool:
     return i18n.canon(nome) in i18n.ALIASES or nome in COMANDOS_EXTRAS
 
 
+def palavra_caminho(texto: str) -> str | None:
+    """A ULTIMA palavra da linha, quando ela e' um caminho absoluto ('veja /ho').
+
+    E' o gatilho do navegador de pastas no meio da frase: "/" no comeco da linha
+    abre os COMANDOS; "/" depois de texto (ou de um espaco) abre as PASTAS.
+    """
+    partes = str(texto or "").rsplit(" ", 1)
+    palavra = partes[-1] if partes else ""
+    return palavra if palavra.startswith("/") else None
+
+
+def separar_caminho(palavra: str) -> tuple[str, str]:
+    """'<pasta que existe>', '<filtro>' a partir do que a pessoa digitou.
+
+    '/home/am' -> ('/home', 'am');  '/home/' -> ('/home', '');  '/' -> ('/', '');
+    '/ho' -> ('/', 'ho'). Caminho que nao existe volta para a raiz, com o texto
+    inteiro como filtro (a pessoa continua digitando sem o menu fechar).
+    """
+    texto = str(palavra or "")
+    if texto.endswith("/"):
+        base, filtro = texto[:-1], ""
+    elif "/" in texto[1:]:
+        base, _, filtro = texto.rpartition("/")
+    else:
+        base, filtro = "", texto[1:]
+    base = base or "/"
+    try:
+        existe = os.path.isdir(os.path.expanduser(base))
+    except OSError:
+        existe = False
+    if not existe:
+        return "/", texto.lstrip("/")
+    return base, filtro
+
+
 def menu_itens(pasta: str, filtro: str = "", modo: str = "arquivo") -> list[dict]:
     """Entradas do menu: '..', pastas e arquivos (ou comandos de barra).
 
@@ -753,6 +788,20 @@ def run_tui(cfg: dict) -> int:
         menu = state.get("menu")
         if not menu:
             return None
+        if menu["modo"] == "caminho":
+            # Navegador de pastas do meio da frase: pasta e filtro saem do TEXTO
+            # ("veja /home/am" -> pasta /home, filtro "am"), entao digitar ja' navega.
+            palavra = palavra_caminho(in_buf.text)
+            if palavra is None:
+                state["menu"] = None
+                return None
+            pasta, filtro = separar_caminho(palavra)
+            if pasta != menu.get("pasta") or filtro != menu.get("filtro"):
+                menu["pasta"], menu["filtro"] = pasta, filtro
+                menu["itens"] = menu_itens(pasta, filtro, "caminho")
+                if menu.get("cursor", 0) >= len(menu["itens"]):
+                    menu["cursor"] = 0
+            return menu
         texto = in_buf.text
         if not texto.startswith(menu.get("gatilho") or ""):
             state["menu"] = None
@@ -766,7 +815,8 @@ def run_tui(cfg: dict) -> int:
         return menu
 
     def _menu_abrir(modo: str) -> None:
-        gatilho = "/" if modo == "comando" else "@"
+        # "@" e' o menu de anexar; "comando" e "caminho" nascem da barra.
+        gatilho = "@" if modo == "arquivo" else "/"
         state["menu"] = {"modo": modo, "gatilho": gatilho, "pasta": os.getcwd(),
                          "filtro": None, "cursor": 0, "itens": []}
         _menu_atual()
@@ -828,6 +878,13 @@ def run_tui(cfg: dict) -> int:
         if app is not None:
             _schedule(app.invalidate)
 
+    def _menu_substituir_palavra(texto_novo: str) -> None:
+        """Troca a ULTIMA palavra da linha (o caminho que esta sendo digitado)."""
+        atual = in_buf.text
+        antes, sep, _ = atual.rpartition(" ")
+        in_buf.text = (antes + sep if sep else "") + str(texto_novo)
+        in_buf.cursor_position = len(in_buf.text)
+
     def _menu_escolher(menu: dict) -> bool:
         """ENTER no menu. True = tratado aqui; False = deixa o ENTER enviar a linha.
 
@@ -843,6 +900,22 @@ def run_tui(cfg: dict) -> int:
             _menu_fechar()
             return False
         item = itens[min(max(0, int(menu["cursor"])), len(itens) - 1)]
+        if menu["modo"] == "caminho":
+            # Navegador de pastas do meio da frase: escolher TROCA a palavra da
+            # linha, entao digitar "/home/ma" e ENTER vira "/home/maria/" e segue.
+            alvo = str(item["alvo"])
+            if item["tipo"] in ("dir", "up"):
+                novo = alvo.rstrip(os.sep) + os.sep   # "/" continua "/" (nao "//")
+            else:
+                novo = alvo
+            _menu_substituir_palavra(novo)
+            if item["tipo"] == "file":
+                _menu_fechar()
+            else:
+                _menu_atual()
+                if app is not None:
+                    _schedule(app.invalidate)
+            return True
         if item["tipo"] == "nav":
             # A porta para as PASTAS dentro do menu do /: vira o navegador de antes.
             menu["modo"] = "nav"
@@ -1156,19 +1229,32 @@ def run_tui(cfg: dict) -> int:
 
     @kb.add(" ")
     def _espaco(event):
-        # A tecla mais facil de achar no teclado. Com a linha VAZIA ela comeca a
-        # ouvir; com texto (ou menu/licenca aberto), e espaco normal.
-        if in_buf.text or state.get("approval") is not None:
-            in_buf.insert_text(" ")
-        else:
+        # UM espaco e' espaco (inclusive no comeco da linha - e' o que permite
+        # " /" abrir o navegador de pastas, como no Hermes). DOIS espacos seguidos
+        # com a linha vazia comecam a ouvir: o atalho de acessibilidade continua na
+        # tecla mais facil de achar, sem roubar o espaco normal de quem digita.
+        agora = time.time()
+        vazia = not in_buf.text.strip()
+        if (state.get("approval") is None and vazia
+                and agora - float(state.get("espaco_ts") or 0.0) < 0.7):
+            if in_buf.text:
+                in_buf.reset()      # tira o espaco que entrou na primeira batida
+            state["espaco_ts"] = 0.0
             _ditar_agora()
+            return
+        state["espaco_ts"] = agora
+        in_buf.insert_text(" ")
 
     @kb.add("escape")
     def _esc(event):
-        # Menu de @ e / aberto: ESC fecha o menu e limpa a linha (nada e' enviado).
+        # Menu aberto: ESC fecha. Limpa a linha SO' quando nela so' ha o gatilho
+        # ("/" ou "@"); com texto antes ("veja /ho") o texto fica, senao a pessoa
+        # perde o que escreveu por causa de um ESC.
         if state.get("menu"):
+            gatilho = str((state.get("menu") or {}).get("gatilho") or "")
             _menu_fechar()
-            in_buf.reset()
+            if in_buf.text.strip() in ("", gatilho):
+                in_buf.reset()
             return
         # ESC cala a VOZ e para/licenca/limpa linha, mas NUNCA fecha o app sozinho
         # (crianca apertando ESC por engano nao perde a conversa; fechar e CTRL+C).
@@ -1217,14 +1303,19 @@ def run_tui(cfg: dict) -> int:
         _menu_abrir("arquivo")
 
     @kb.add("/")
-    def _gatilho_comando(event):
-        # "/" com a linha VAZIA: menu de COMANDOS (setas, filtro pelo nome). Digitar
-        # o comando inteiro ("/modelo") e ENTER executa - o menu nao atrapalha.
-        if in_buf.text or state.get("approval") is not None or state["busy"]:
+    def _gatilho_barra(event):
+        # "/" no COMECO da linha: menu de COMANDOS. "/" depois de texto (ou de um
+        # espaco): navegador de PASTAS a partir da raiz - igual ao Hermes.
+        if state.get("approval") is not None or state["busy"]:
             in_buf.insert_text("/")
             return
+        vazia = not in_buf.text
         in_buf.insert_text("/")
-        _menu_abrir("comando")
+        if vazia:
+            _menu_abrir("comando")
+            return
+        if not in_buf.text.startswith("/") and palavra_caminho(in_buf.text) is not None:
+            _menu_abrir("caminho")
 
     def _pinta_fundo() -> None:
         """Manda a cor de fundo para o terminal (OSC 11); ignorada se nao aceitar."""
