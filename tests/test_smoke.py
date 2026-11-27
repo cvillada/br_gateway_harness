@@ -1925,7 +1925,22 @@ def _llm_rede28(falhas, exc):
     return llm
 
 
-_req28 = types.SimpleNamespace(method="POST", url="http://fake/v1")
+# Request de verdade para as excecoes do SDK: a versao do openai do CI chama
+# _error_request(request) no __init__ e exige .method/.url/.headers/.content -
+# um objeto falso quebrava a suite no CI (passava so' na maquina local, onde o
+# openai instalado nao faz essa chamada). httpx2 aqui, httpx no CI.
+def _request_falso28():
+    for modulo in ("httpx", "httpx2"):
+        try:
+            lib = __import__(modulo)
+            return lib.Request("POST", "http://fake/v1")
+        except Exception:  # noqa: BLE001 - sem a lib, cai no objeto simples
+            continue
+    return types.SimpleNamespace(method="POST", url="http://fake/v1",
+                                 headers={}, content=b"")
+
+
+_req28 = _request_falso28()
 
 _llm_pass = _llm_rede28(1, _Conn28(request=_req28))
 _avisos28: list[str] = []

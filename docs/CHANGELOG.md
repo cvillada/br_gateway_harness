@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.60
+
+Correcao do TESTE que deixou o CI vermelho na 0.2.59 (o programa nao mudou).
+
+- A 0.2.59 NAO saiu: todos os jobs do CI falharam por um detalhe do teste novo do
+  retry (0.2.48). O teste montava as excecoes do SDK com um objeto falso; na versao
+  do openai que o CI instala, o `__init__` de `APIConnectionError` monta a mensagem
+  a partir do pedido e exige um request de verdade (metodo, URL, cabecalhos, corpo).
+  Na maquina local o openai instalado nao faz essa chamada, entao passava aqui e
+  quebrava la'.
+- AGORA o teste cria um request de verdade da biblioteca HTTP disponivel (httpx no
+  CI, httpx2 aqui) e so' cai no objeto simples se nenhuma existir.
+- Conteudo funcional desta versao = o da 0.2.59 (menu do "/" com comandos no comeco
+  da linha e pastas depois de texto, espaco/espaco para ditar, ESC preservando o
+  texto). Suite local: 797 verificacoes gerais + 191 da tela.
+
 ## 0.2.59
 
 "/" igual ao Hermes: no comeco da linha sao os COMANDOS; depois de texto (ou de um
