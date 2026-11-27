@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..i18n import t
-from . import (documents, files, memory, packages, pagina, python_exec, skills,
-               terminal, ver_tela, websearch)
+from . import (documents, files, lembrete, memory, packages, pagina, python_exec,
+               skills, terminal, ver_tela, websearch)
 
 
 def localize_specs(specs: list) -> list:
@@ -53,6 +53,9 @@ class Ctx:
     # Arquivos que o TEO criou nesta sessao (write_file). Serve para limpar o
     # apoio sem risco de apagar arquivo do usuario.
     criados: list | None = None
+    # Canal de aviso da TELA (linha + som): o ChatCore liga isto para a ferramenta
+    # `lembrete` falar com a pessoa DEPOIS que a ferramenta ja' retornou.
+    avisar: Callable[[str], None] | None = None
 
 
 class ToolBox:
@@ -72,6 +75,7 @@ class ToolBox:
             "memory": memory.run,
             "skill": skills.load_skill_tool,
             "make_document": documents.make_document,
+            "lembrete": lembrete.run,
             "instalar_pacote": packages.run,
             "limpar_apoio": files.limpar_apoio,
         }
@@ -91,6 +95,7 @@ class ToolBox:
             memory.SPEC,
             skills.SPEC,
             documents.SPEC,
+            lembrete.SPEC,
             packages.SPEC,
             files.LIMPAR_SPEC,
         ])

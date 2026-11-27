@@ -12,7 +12,7 @@ import time
 from typing import Callable
 
 import requests
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from bgh import i18n
 from bgh.config import load_config
@@ -96,6 +96,51 @@ def _wait_hint(exc: BaseException) -> str:
         return t("llm.wait_hint", s=segundos)
     return ""
 
+
+def _status_de(exc: BaseException) -> int:
+    """Codigo HTTP que veio com o erro (SDK do provedor ou gateway); 0 se nao ha."""
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    try:
+        return int(status) if status is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _falha_transitoria(exc: BaseException) -> bool:
+    """Vale repetir o MESMO pedido? So' para falha de rede/5xx passageira.
+
+    Nao repete:
+    - timeout: a espera ja foi inteira (120/300s); repetir custa outra inteira, e
+      quando o modelo local demora assim, tentar de novo piora o problema;
+    - 4xx: pedido errado devolve o mesmo erro (o que inclui contexto grande, que
+      tem caminho proprio de compactacao);
+    - 429/cota: cada tentativa gasta cota e a espera cresce.
+    """
+    if _rate_limited(exc):
+        return False
+    if any(m in str(exc).lower() for m in CONTEXT_MARKERS):
+        # Contexto grande: repetir devolve o mesmo erro e custa uma leitura
+        # inteira; o agente tem o caminho proprio (compactar e tentar de novo).
+        return False
+    if isinstance(exc, APITimeoutError) or "timeout" in str(exc).lower():
+        return False
+    if isinstance(exc, APIConnectionError):
+        return True
+    codigo = _status_de(exc)
+    if codigo:
+        return codigo >= 500           # 5xx: o servidor esta com problema AGORA
+    if isinstance(exc, APIStatusError):
+        return False
+    # Sem status HTTP: o texto do erro e' a unica pista.
+    texto = str(exc).lower()
+    return any(m in texto for m in (
+        "connection reset", "connection aborted", "connection refused",
+        "remotedisconnected", "broken pipe", "temporarily unavailable",
+        "bad gateway", "service unavailable", "502", "503", "504",
+    ))
+
 # Catalog publico de modelos (mesma fonte de metadados que o Hermes usa quando o
 # servidor nao publica nada: DeepSeek, Anthropic, OpenAI e afins). Cacheado uma
 # vez por execucao para nao repetir a baixa.
@@ -163,7 +208,10 @@ class LLM:
             base_url=self.cfg["base_url"],
             api_key=self.cfg.get("api" + "_key") or "none",
             timeout=self.timeout_s,
-            max_retries=self.retries,
+            # max_retries=0: quem decide repetir e' o _pedido() daqui. O SDK
+            # repetiria ate' 429 as escuras (gastando cota) e nao sabe que um
+            # timeout longo nao deve ser repetido - politica nossa, num lugar so'.
+            max_retries=0,
         )
         # Aviso para a tela (ex.: "o servidor demorou; tentei sem streaming").
         self.on_note: Callable[[str], None] | None = None
@@ -173,6 +221,9 @@ class LLM:
         # Por que o pedido terminou ("stop", "length" quando o pensamento comeu o
         # max_tokens, "tool_calls"...). A tela usa isso para avisar em vez de silencio.
         self.last_finish: str | None = None
+        # Ja chegou texto na tela NESTE pedido? Se sim, repetir a chamada (reserva
+        # de provedor) duplicaria meia resposta - quem decide isso le este campo.
+        self.mostrou_texto = False
         # vao para False quando o servidor rejeita cada recurso (queda em escada)
         self._template_ok = True   # chat_template_kwargs (thinking / thinking_budget)
         self._effort_ok = True     # reasoning_effort
@@ -200,6 +251,25 @@ class LLM:
             pass
 
 
+    def _pedido(self, kwargs: dict):
+        """Uma chamada ao servidor, com repeticao curta para falha transitoria.
+
+        Orcamento: 1 + cfg["max_retries"] tentativas (padrao: duas). Repete so'
+        o que e' passageiro (conexao caiu, servidor sumiu, 5xx) - ver
+        _falha_transitoria. Cada nova tentativa avisa a tela: silencio de 30s
+        numa repeticao e' lido como programa travado.
+        """
+        tentativas = 1 + self.retries
+        for n in range(1, tentativas + 1):
+            try:
+                return self.client.chat.completions.create(**kwargs)
+            except Exception as exc:  # noqa: BLE001
+                if n >= tentativas or not _falha_transitoria(exc):
+                    raise
+                self._note(t("llm.retry", n=n + 1, total=tentativas))
+                time.sleep(0.6 * n)
+        raise LLMError(t("llm.fail_fallback"))   # inalcancavel: o laco sempre retorna ou levanta
+
     def _create_stream(self, kwargs: dict):
         """Cria o stream pedindo tambem a contagem de tokens.
 
@@ -210,15 +280,15 @@ class LLM:
         """
         if not self._stream_usage_ok:
             kwargs.pop("stream_options", None)
-            return self.client.chat.completions.create(**kwargs)
+            return self._pedido(kwargs)
         try:
-            return self.client.chat.completions.create(**kwargs)
+            return self._pedido(kwargs)
         except Exception as exc:  # noqa: BLE001
             # Nao repete em caso de limite de uso/cota (cada tentativa gasta cota).
             if "stream_options" in kwargs and not _rate_limited(exc):
                 self._stream_usage_ok = False
                 kwargs.pop("stream_options", None)
-                return self.client.chat.completions.create(**kwargs)
+                return self._pedido(kwargs)
             raise
 
     def _note(self, text: str) -> None:
@@ -261,7 +331,7 @@ class LLM:
         # campo de pensamento, tira o reasoning_effort, depois o chat_template_kwargs.
         for _ in range(3):
             try:
-                return self.client.chat.completions.create(**kwargs)
+                return self._pedido(kwargs)
             except Exception as exc:  # noqa: BLE001
                 eb = kwargs.get("extra_body") or {}
                 text = str(exc).lower()
@@ -278,22 +348,33 @@ class LLM:
                     self._template_ok = False
                     kwargs.pop("extra_body", None)
                     continue
-                if "timeout" in text:
+                if isinstance(exc, APITimeoutError) or "timeout" in text:
                     raise LLMError(t("llm.timeout", s=int(self.timeout_s))) from exc
+                if isinstance(exc, APIConnectionError):
+                    # Servidor fora do ar, cabo/wifi, porta errada: frase de gente
+                    # com o endereco, em vez de "APIConnectionError".
+                    raise LLMError(t("llm.offline",
+                                     url=self.cfg.get("base_url", ""))) from exc
                 if any(marker in text for marker in CONTEXT_MARKERS):
                     # Contexto estourou o teto do servidor: caso tratavel (o agente
-                    # compacta e tenta de novo), nao morte do turno.
+                    # compacta e tenta de novo), nao morte do turno. Vem ANTES do
+                    # 5xx porque o llama.cpp responde 500 quando o contexto passa.
                     raise ContextOverflowError(t("llm.context_overflow")) from exc
+                codigo = _status_de(exc)
+                if codigo >= 500:
+                    raise LLMError(t("llm.server_error", code=codigo)) from exc
                 raise LLMError(t("llm.fail", tipo=type(exc).__name__, erro=exc)) from exc
         raise LLMError(t("llm.fail_fallback"))
 
-    def chat(self, messages: list, tools: list | None = None) -> dict:
+    def chat(self, messages: list, tools: list | None = None,
+             model: str | None = None) -> dict:
         """Devolve a mensagem do assistente como dict pronto para o historico.
 
         Formato: {"role":"assistant","content":str,"reasoning":str?,"tool_calls":[...]?}
+        model: opcional, para o resumo com um modelo dedicado (cfg["summary_model"]).
         """
         kwargs = {
-            "model": self.cfg["model"],
+            "model": model or self.cfg["model"],
             "messages": messages,
             "temperature": float(self.cfg.get("temperature", 0.3)),
             "max_tokens": int(self.cfg.get("max_tokens", 2048)),
@@ -438,6 +519,7 @@ class LLM:
             kwargs["tool_choice"] = "auto"
         self._apply_thinking(kwargs)
         t0 = time.time()
+        self.mostrou_texto = False   # cada pedido comeca do zero
         try:
             resp = self._create_stream(kwargs)
         except Exception as exc:  # noqa: BLE001
@@ -474,10 +556,12 @@ class LLM:
                 rc = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
                 if rc:
                     reasoning_parts.append(rc)
+                    self.mostrou_texto = True
                     if on_reasoning:
                         on_reasoning(rc)
                 if delta.content:
                     content_parts.append(delta.content)
+                    self.mostrou_texto = True
                     if on_text:
                         on_text(delta.content)
                 for tc in getattr(delta, "tool_calls", None) or []:
@@ -522,13 +606,24 @@ class LLM:
         return out
 
     def summarize(self, text: str) -> str:
-        """Resumo sem ferramentas, usado na compressao de contexto."""
+        """Resumo sem ferramentas, usado na compressao de contexto.
+
+        cfg["summary_model"] (opcional, editado no config.json) resume com um
+        modelo MENOR/mais rapido: o resumo nao precisa do modelo grande, e assim
+        ele nao fica preso enquanto a conversa espera. Se o modelo dedicado
+        falhar, cai no modelo normal em vez de perder a compactacao.
+        """
         prompt = [
             {"role": "system", "content": t("llm.summarize")},
             {"role": "user", "content": text},
         ]
+        modelo = str(self.cfg.get("summary_model") or "").strip() or None
         try:
-            return self.chat(prompt).get("content", "")
+            return self.chat(prompt, model=modelo).get("content", "")
         except LLMError:
-            # Sem resumo automatico, mantem-se o corte simples.
-            return ""
+            if not modelo:
+                return ""
+            try:
+                return self.chat(prompt).get("content", "")
+            except LLMError:
+                return ""

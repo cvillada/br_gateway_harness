@@ -22,8 +22,11 @@ classico de rolagem automaticamente.
 """
 
 import asyncio
+import os
+import platform
 import re
 import shutil
+import subprocess
 import textwrap
 import threading
 import time
@@ -47,8 +50,120 @@ from .chat_core import (LINE, ChatCore, build_approval_options, help_lines, log_
                         parse_approval_choice)
 from .config import INPUT_HISTORY_FILE
 from .i18n import t
+from .tools import files as files_mod
 
 FRAMES = "|/-\\"  # bonequinho de espera do "rodando..." na barra de baixo
+
+# Aviso de "acabou" e de "estou esperando voce". Turno curto nao faz barulho
+# (seria enfeite); turno demorado quer dizer que a pessoa pode ter saido da
+# frente - e o aviso e' o que evita achar que o programa travou.
+AVISO_MIN_SEG = 15.0
+
+
+def deve_avisar(segundos: float, cfg: dict) -> bool:
+    """Faz som/aviso? So' com /aviso ligado e depois de um turno demorado."""
+    if not cfg.get("notify", True):
+        return False
+    try:
+        return float(segundos) >= AVISO_MIN_SEG
+    except (TypeError, ValueError):
+        return False
+
+
+def argv_notificacao(titulo: str, corpo: str) -> list[str] | None:
+    """Comando do aviso do sistema, ou None quando nao ha como avisar.
+
+    Linux usa notify-send e macOS o osascript. No Windows fica so' o bip do
+    terminal (e' o que da' para garantir sem instalar nada).
+    """
+    titulo, corpo = str(titulo), str(corpo)
+    if platform.system() == "Darwin":
+        if shutil.which("osascript"):
+            fala = corpo.replace('"', "'").replace("\n", " ")
+            tit = titulo.replace('"', "'")
+            return ["osascript", "-e",
+                    f'display notification "{fala}" with title "{tit}"']
+        return None
+    if os.name == "posix" and shutil.which("notify-send"):
+        return ["notify-send", "-a", "TEO", "-t", "8000", titulo, corpo]
+    return None
+
+
+def notificar(titulo: str, corpo: str) -> None:
+    """Manda o aviso do sistema numa thread: a tela nunca espera por ele."""
+    argv = argv_notificacao(titulo, corpo)
+    if not argv:
+        return
+
+    def _roda() -> None:
+        try:
+            subprocess.run(argv, timeout=5, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:  # noqa: BLE001 - aviso e' conforto, nunca derruba a tela
+            pass
+
+    threading.Thread(target=_roda, daemon=True).start()
+
+
+# ----- menu de arquivos (@) e de pastas (/): setas na linha de digitar --------
+MENU_MAX = 6   # itens visiveis (o cabecalho com a pasta conta separado)
+
+
+def menu_itens(pasta: str, filtro: str = "", modo: str = "arquivo") -> list[dict]:
+    """Entradas do menu: '..', pastas e arquivos, na ordem, ja' filtradas.
+
+    modo decide o que o ENTER faz com um ARQUIVO ('arquivo' anexa com @, 'pasta'
+    abre com /); a lista e' a mesma nas duas. Pasta com muita coisa: a lista chega
+    ate' 200 por tipo (teto do tools/files) e o filtro resolve o resto.
+    """
+    pastas, arquivos, erro = files_mod.entries(pasta)
+    if erro:
+        return []
+    baixo = str(filtro or "").strip().lower()
+    itens: list[dict] = []
+    atual = os.path.abspath(pasta)
+    pai = os.path.dirname(atual)
+    # Com filtro digitado, ".." sai da lista: a pessoa esta procurando algo
+    # especifico, e subir de pasta nao e' escolha possivel no resultado.
+    if not baixo and pai and pai != atual:
+        itens.append({"rotulo": "..", "alvo": pai, "tipo": "up"})
+    for nome in pastas:
+        if baixo and baixo not in nome.lower():
+            continue
+        itens.append({"rotulo": nome + os.sep, "alvo": os.path.join(atual, nome),
+                      "tipo": "dir"})
+    for nome in arquivos:
+        if baixo and baixo not in nome.lower():
+            continue
+        itens.append({"rotulo": nome, "alvo": os.path.join(atual, nome),
+                      "tipo": "file"})
+    return itens
+
+
+def menu_janela(total: int, cursor: int, max_linhas: int = MENU_MAX) -> tuple[int, int]:
+    """Fatia [inicio, fim) do menu que mantem o cursor visivel (rola com as setas)."""
+    if total <= max_linhas:
+        return 0, max(0, total)
+    meio = max_linhas // 2
+    inicio = min(max(0, int(cursor) - meio), total - max_linhas)
+    return inicio, inicio + max_linhas
+
+
+def menu_mover(cursor: int, total: int, passo: int) -> int:
+    """Cursor depois de cima/baixo: da' a volta no comeco e no fim da lista."""
+    if total <= 0:
+        return 0
+    return (int(cursor) + int(passo)) % total
+
+
+def menu_linha(item: dict, modo: str) -> str:
+    """O que entra na LINHA quando a pessoa escolhe um arquivo com ENTER.
+
+    '@' anexa (o nucleo le text[1:] como caminho); '/' abre/lista, e a forma que o
+    nucleo entende e' '/ <caminho>' (barra, espaco, caminho).
+    """
+    alvo = str(item.get("alvo", ""))
+    return ("/ " if modo == "pasta" else "@") + alvo
 
 
 def linhas_de_tela(texto: str, largura: int) -> int:
@@ -215,6 +330,9 @@ class TuiSink:
 
     # A tela fixa sabe abrir menu numerado de pastas/arquivos (o nucleo pergunta).
     menu_arquivos = True
+    # Esta tela grava o historico da seta-para-cima no ENTER (FileHistory), com o
+    # texto ja na memoria na hora. O nucleo nao grava de novo: seria linha dobrada.
+    historico_proprio = True
 
     def __init__(self, emit, close_line, state, width_fn=None):
         # callback que repinta a tela quando o /fundo muda
@@ -223,6 +341,8 @@ class TuiSink:
         self.preencher_fn: Callable[[str], None] | None = None
         # callback do bip do terminal (aviso sonoro do ditado)
         self.bipar_fn: Callable[[], None] | None = None
+        # callback de "preciso de voce" (som + aviso do sistema; ver run_tui)
+        self.avisar_fn: Callable[[str, str], None] | None = None
         self.emit = emit
         self.close_line = close_line
         self.state = state
@@ -279,6 +399,10 @@ class TuiSink:
         self.state["tool"] = name
         self.state["tool_since"] = time.time()
         self.state["fase"] = "ferramenta"  # palco: o pedido esta na mesa de trabalho
+        if self.state.get("simples"):
+            # Tela simples (crianca/idoso): o nome da ferramenta e o caminho do
+            # arquivo nao aparecem - a barra de baixo ja mostra que ha trabalho.
+            return
         self.emit(f"> {name}: {preview}", style="tool")
 
     def status(self, text: str) -> None:
@@ -301,6 +425,25 @@ class TuiSink:
         fn = getattr(self, "bipar_fn", None)
         if fn is not None:
             fn()
+
+    def avisar(self, titulo: str, corpo: str) -> None:
+        """Pede atencao da pessoa (som + aviso do sistema).
+
+        Quem decide SE avisa (ligado no /aviso) e' o run_tui: a tela so' informa
+        que chegou a hora. Usado no menu de licenca, que para o TEO esperando.
+        """
+        fn = getattr(self, "avisar_fn", None)
+        if fn is not None:
+            fn(str(titulo), str(corpo))
+
+    def aplicar_simples(self, ligado: bool) -> None:
+        """Troca a tela simples na hora (o /simples chama por aqui).
+
+        Simples = sem trilha do pedido e sem o nome da ferramenta; continuam o
+        relogio da espera, o aviso de parar e o medidor de contexto.
+        """
+        self.state["simples"] = bool(ligado)
+        self.emit("", newline=False)   # forca o repaint da barra e do palco
 
     def set_ctx(self, text: str, pct: int | None = None, hot_pct: int | None = None,
                 extra: str = "") -> None:
@@ -356,6 +499,11 @@ class TuiSink:
                   "hot": t("tui.hot.license")}
         self.state["approval"] = holder  # GIL: atribuir dict simples e seguro
         self.emit("", newline=False)  # payload vazio so forca o repaint da barra
+        # Daqui para baixo o TEO esta PARADO esperando a pessoa. Se ela saiu da
+        # frente (turno longo, licenca no meio), o som e o aviso do sistema sao o
+        # unico sinal - a barra amarela so' aparece para quem esta olhando.
+        self.avisar(t("tui.need_you_title"),
+                    t("tui.need_you_body", label=label))
         ev.wait()
         self.state["approval"] = None
         return holder["choice"]
@@ -392,7 +540,11 @@ def run_tui(cfg: dict) -> int:
     in_buf = Buffer(multiline=True, history=FileHistory(str(INPUT_HISTORY_FILE)))
     state = {"busy": False, "approval": None, "stop_hits": 0, "spin": 0, "ctx": None,
              "ctx_pct": None, "fase": None, "palco_frame": 0, "tokens": None, "palco_hold": 0,
-             "busy_since": 0.0, "tool": None, "tool_since": 0.0}
+             "busy_since": 0.0, "tool": None, "tool_since": 0.0,
+             # tela simples (/simples): sem trilha do pedido e sem nome da ferramenta
+             "simples": bool(cfg.get("tela_simples", False)),
+             # menu de @ e / (setas): None = fechado
+             "menu": None}
     printed = {"n": 0, "cols": 0}
     app: Application | None = None
 
@@ -522,7 +674,114 @@ def run_tui(cfg: dict) -> int:
             pass
 
     sink.bipar_fn = _bipar
+
+    def _avisar(titulo: str, corpo: str) -> None:
+        """Som + aviso do sistema (o /aviso liga|desliga), sem travar a tela.
+
+        Chamado do menu de licenca e no fim de um turno demorado: e' o unico
+        sinal para quem saiu da frente. O bip vai pelo loop do app (a chamada
+        costuma vir de thread de trabalho).
+        """
+        if not cfg.get("notify", True):
+            return
+        _schedule(_bipar)
+        notificar(titulo, corpo)
+
+    sink.avisar_fn = _avisar
     core = ChatCore(cfg, sink)
+
+    # ----- estado do menu de @ e / (setas na linha de digitar) ----------------
+    def _menu_atual() -> dict | None:
+        """Menu aberto, com a lista em dia com o que esta escrito na linha.
+
+        O filtro e' o texto DEPOIS do @ ou /: cada letra reduz a lista. Se a pessoa
+        apagar o gatilho (ou a linha toda), o menu fecha sozinho.
+        """
+        menu = state.get("menu")
+        if not menu:
+            return None
+        texto = in_buf.text
+        if not texto.startswith(menu.get("gatilho") or ""):
+            state["menu"] = None
+            return None
+        filtro = texto[1:]
+        if filtro != menu.get("filtro"):
+            menu["filtro"] = filtro
+            menu["itens"] = menu_itens(menu["pasta"], filtro, menu["modo"])
+            if menu.get("cursor", 0) >= len(menu["itens"]):
+                menu["cursor"] = 0
+        return menu
+
+    def _menu_abrir(modo: str) -> None:
+        gatilho = "/" if modo == "pasta" else "@"
+        state["menu"] = {"modo": modo, "gatilho": gatilho, "pasta": os.getcwd(),
+                         "filtro": None, "cursor": 0, "itens": []}
+        _menu_atual()
+        if app is not None:
+            _schedule(app.invalidate)
+
+    def _menu_fechar() -> None:
+        state["menu"] = None
+        if app is not None:
+            _schedule(app.invalidate)
+
+    def _menu_altura() -> int:
+        """Linhas que o menu ocupa agora (0 quando fechado)."""
+        menu = _menu_atual()
+        if menu is None:
+            return 0
+        return 1 + min(MENU_MAX, max(1, len(menu["itens"])))
+
+    def _menu_frags() -> list:
+        """Texto do menu: primeira linha = pasta atual; depois os itens."""
+        menu = _menu_atual()
+        if menu is None:
+            return []
+        largura = max(20, _largura() - 2)
+        cabecalho = t("menu.pasta", pasta=menu["pasta"])
+        frags: list = [("class:palco.dim", cabecalho[:largura])]
+        itens = menu["itens"]
+        if not itens:
+            vazio = (t("menu.vazio", filtro=menu["filtro"]) if menu["filtro"]
+                     else t("menu.pasta_vazia"))
+            frags.append(("class:palco.dim", "\n" + vazio))
+            return frags
+        inicio, fim = menu_janela(len(itens), menu["cursor"])
+        for i in range(inicio, fim):
+            item = itens[i]
+            marcado = i == menu["cursor"]
+            marca = "> " if marcado else "  "
+            estilo = "class:palco.sel" if marcado else "class:palco"
+            frags.append((estilo, "\n" + marca + str(item["rotulo"])[:largura]))
+        return frags
+
+    def _menu_trocar_pasta(menu: dict, nova: str) -> None:
+        menu["pasta"] = nova
+        menu["filtro"] = None      # forca recarregar a lista da pasta nova
+        menu["cursor"] = 0
+        in_buf.text = str(menu.get("gatilho") or "")
+        in_buf.cursor_position = len(in_buf.text)
+        _menu_atual()
+        if app is not None:
+            _schedule(app.invalidate)
+
+    def _menu_escolher(menu: dict) -> None:
+        """ENTER no menu: entra na pasta, sobe, ou poe o caminho na linha."""
+        itens = menu["itens"]
+        if not itens:
+            in_buf.reset()
+            _menu_fechar()
+            return
+        item = itens[min(max(0, int(menu["cursor"])), len(itens) - 1)]
+        if item["tipo"] == "up":
+            _menu_trocar_pasta(menu, str(item["alvo"]))
+            return
+        if item["tipo"] == "dir":
+            _menu_trocar_pasta(menu, str(item["alvo"]))
+            return
+        in_buf.text = menu_linha(item, menu["modo"])
+        in_buf.cursor_position = len(in_buf.text)
+        _menu_fechar()
 
     # ----- layout: so a parte fixa (o resto e o historico do proprio terminal) --
     rule_top = Window(height=1, char="-", style="class:rule")
@@ -543,6 +802,10 @@ def run_tui(cfg: dict) -> int:
                 ocupado = 5 if _palco_largo_visivel() else 0
             except Exception:          # noqa: BLE001 - primeira pintura
                 ocupado = 0
+            try:                       # o menu de @ e / tambem come linhas
+                ocupado += _menu_altura()
+            except Exception:          # noqa: BLE001 - primeira pintura
+                pass
             return max(1, min(8, visuais, rows - 4 - ocupado))
         except Exception:  # noqa: BLE001 - desenho nunca derruba a tela
             return 1
@@ -583,6 +846,8 @@ def run_tui(cfg: dict) -> int:
 
     def _palco_visivel_agora() -> bool:
         """Ligado e com pedido em curso OU mostrando a entrega por 1,6s."""
+        if state.get("simples"):
+            return False   # tela simples: sem a trilha do pedido
         return palco.visivel(palco_ligado, state.get("fase"), bool(state["busy"]),
                              float(state.get("palco_hold") or 0), time.time())
 
@@ -603,7 +868,14 @@ def run_tui(cfg: dict) -> int:
         content=Window(FormattedTextControl(_palco_frags), height=1, style="class:palco"),
         filter=Condition(_palco_curto_visivel))
 
-    root = HSplit([rule_top, palco_largo, palco_curto, input_row, rule_bottom, footer_win])
+    # Menu de @ e / : fica entre o palco e a linha de digitar (some quando fecha).
+    menu_win = ConditionalContainer(
+        content=Window(FormattedTextControl(_menu_frags), height=_menu_altura,
+                       style="class:palco"),
+        filter=Condition(lambda: bool(state.get("menu"))))
+
+    root = HSplit([rule_top, palco_largo, palco_curto, menu_win, input_row,
+                   rule_bottom, footer_win])
     layout = Layout(root)
 
     kb = KeyBindings()
@@ -659,6 +931,10 @@ def run_tui(cfg: dict) -> int:
 
     @kb.add("enter")
     def _enter(event):
+        menu = _menu_atual()
+        if menu is not None:
+            _menu_escolher(menu)   # ENTER escolhe no menu de @ e / (nao envia nada)
+            return
         text = in_buf.text
         # Barra invertida no fim = continuar na linha de baixo (regra de shell),
         # que funciona em qualquer terminal - inclusive no cmd do Windows.
@@ -718,6 +994,7 @@ def run_tui(cfg: dict) -> int:
                 log_error(exc, "tela do TEO")   # traceback completo so no arquivo, nunca na tela
                 emit(t("tui.crash"), style="yellow")
             finally:
+                decorrido = time.time() - float(state.get("busy_since") or time.time())
                 state["busy"] = False
                 state["stop_hits"] = 0
                 state["tool"] = None
@@ -736,6 +1013,11 @@ def run_tui(cfg: dict) -> int:
                     state["palco_hold"] = alvo_recolha
                     if app is not None:
                         _schedule(app.invalidate)
+                    # Turno demorado: a pessoa pode ter saido da frente. Som +
+                    # aviso do sistema dizem que acabou (turno curto fica mudo).
+                    if deve_avisar(decorrido, cfg):
+                        _avisar(t("tui.done_title"),
+                                t("tui.done_body", s=int(decorrido)))
 
                     def _recolhe(espera_ate=alvo_recolha) -> None:
                         time.sleep(1.7)
@@ -801,6 +1083,11 @@ def run_tui(cfg: dict) -> int:
 
     @kb.add("escape")
     def _esc(event):
+        # Menu de @ e / aberto: ESC fecha o menu e limpa a linha (nada e' enviado).
+        if state.get("menu"):
+            _menu_fechar()
+            in_buf.reset()
+            return
         # ESC cala a VOZ e para/licenca/limpa linha, mas NUNCA fecha o app sozinho
         # (crianca apertando ESC por engano nao perde a conversa; fechar e CTRL+C).
         # Decisao de projeto: CTRL+C com a linha vazia SAI, entao nao serve para calar -
@@ -819,11 +1106,42 @@ def run_tui(cfg: dict) -> int:
 
     @kb.add("up")
     def _hist_up(event):
+        menu = _menu_atual()
+        if menu is not None:
+            menu["cursor"] = menu_mover(menu["cursor"], len(menu["itens"]), -1)
+            if app is not None:
+                _schedule(app.invalidate)
+            return
         in_buf.history_backward()  # linha anterior digitada (como no bash)
 
     @kb.add("down")
     def _hist_down(event):
+        menu = _menu_atual()
+        if menu is not None:
+            menu["cursor"] = menu_mover(menu["cursor"], len(menu["itens"]), 1)
+            if app is not None:
+                _schedule(app.invalidate)
+            return
         in_buf.history_forward()   # volta para a mais nova / rascunho atual
+
+    @kb.add("@")
+    def _gatilho_arquivo(event):
+        # "@" com a linha VAZIA abre o menu de arquivos (setas). Com texto na
+        # linha, e' o "@" normal (caminho no meio de uma frase).
+        if in_buf.text or state.get("approval") is not None or state["busy"]:
+            in_buf.insert_text("@")
+            return
+        in_buf.insert_text("@")
+        _menu_abrir("arquivo")
+
+    @kb.add("/")
+    def _gatilho_pasta(event):
+        # "/" com a linha VAZIA: menu de pastas/arquivos (ENTER abre/lista).
+        if in_buf.text or state.get("approval") is not None or state["busy"]:
+            in_buf.insert_text("/")
+            return
+        in_buf.insert_text("/")
+        _menu_abrir("pasta")
 
     def _pinta_fundo() -> None:
         """Manda a cor de fundo para o terminal (OSC 11); ignorada se nao aceitar."""
@@ -948,6 +1266,10 @@ def _status_text(state: dict, columns: int | None = None):
         hot = holder.get("hot", t("tui.hot.license"))
         return [("class:footer.hot", fit(hot))]
 
+    if state.get("menu"):
+        # Menu de @ e / aberto: a barra ensina as teclas (setas, ENTER, ESC).
+        return [("class:footer", fit(t("menu.hint")))]
+
     ctx = state.get("ctx") or ""
     if state["busy"]:
         # Espera vira numero visivel: 'rodando... 47s' + a ferramenta em andamento.
@@ -955,7 +1277,7 @@ def _status_text(state: dict, columns: int | None = None):
         decorrido = int(time.time() - float(state.get("busy_since") or time.time()))
         pieces = [FRAMES[state["spin"]], t("tui.running", s=decorrido)]
         tool = state.get("tool")
-        if tool:
+        if tool and not state.get("simples"):
             tool_s = int(time.time() - float(state.get("tool_since") or time.time()))
             pieces.append(f"{tool} {tool_s}s")
         pieces.append(t("tui.stop_keys"))

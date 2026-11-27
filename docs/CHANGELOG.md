@@ -1,5 +1,313 @@
 # Changelog
 
+## 0.2.56
+
+Menu de arquivos e pastas com as SETAS: "@" e "/" abrem na hora em que se digita.
+
+- ANTES: "@" e ENTER (ou "/" e ENTER) abria um menu NUMERADO; era preciso enviar a
+  linha vazia e digitar o numero da opcao.
+- AGORA: com a linha VAZIA, digitar "@" abre o menu de arquivos da pasta atual e
+  digitar "/" abre o mesmo navegador em modo abrir/listar. Setas cima/baixo andam
+  (dando a volta no fim), ENTER entra na pasta / sobe no ".." / escolhe o arquivo,
+  ESC fecha e limpa a linha, e qualquer letra digitada FILTRA pelo nome (sem ligar
+  maiuscula). Ao escolher um arquivo: "@" poe "@<caminho>" na linha (ENTER seguinte
+  anexa, como sempre) e "/" poe "/ <caminho>" (ENTER mostra o arquivo).
+- O menu desenha numa faixa propria acima da linha de digitar (mesmo esquema do
+  palco, sem popup): primeira linha com a pasta atual, itens marcados com ">",
+  rolagem que mantem o escolhido visivel (6 por vez) e a barra de baixo ensinando
+  as teclas. A altura da linha de digitar desconta o menu, para nada sair da tela.
+- Com texto ja' digitado, "@" e "/" continuam sendo o caractere normal (nao abrem
+  menu). Com o TEO trabalhando ou licenca pendente, tambem nao abrem.
+- Corrigido junto: "/ <arquivo>" (o que o menu poe na linha) agora mostra o
+  ARQUIVO; antes ele tentava listar o arquivo como pasta e respondia "nao encontrei
+  a pasta".
+- Suite local: 787 verificacoes gerais (7 novas do modelo do menu: ordem dos itens,
+  filtro sem maiuscula, filtro sem resultado, setas com volta, rolagem, o que vai
+  para a linha no @ e no /, e a dica na barra) + 191 da tela.
+
+## 0.2.55
+
+/handoff: um .md na pasta do projeto para continuar o trabalho no dia seguinte.
+
+- Comando novo: `/handoff` (apelidos /passar, /passagem) escreve o documento na
+  pasta que a pessoa escolher e com o nome que ela quiser: `/handoff` vai na pasta
+  atual como `handoff-AAAAMMDD-HHMM.md`; `/handoff meu-nome` salva
+  `meu-nome.md`; `/handoff ~/projetos/x/nota` cria a pasta e salva `nota.md`;
+  `/handoff sub/` entra na pasta e usa o nome padrao. Cabecalho com data, modelo e
+  pasta; o documento em si vem do MODELO a partir da conversa: "## O que foi
+  feito", "## Onde paramos", "## Proximos passos", "## Arquivos e comandos
+  importantes", "## Cuidados". Transcricao limitada (30 ultimas falas, corte por
+  fala) para nao depender do tamanho da conversa.
+- Se o modelo falhar, o arquivo SAI mesmo assim com o registro das perguntas da
+  pessoa (marcado como resumo automatico indisponivel) - handoff pobre e' melhor
+  que nenhum, e a tela diz o que aconteceu.
+- A resposta na tela diz o caminho e o que dizer amanha ("leia handoff-... e
+  continue de onde paramos"). O prompt ganhou a regra de procurar o handoff-*.md
+  mais recente quando a pessoa pedir para continuar um trabalho de outro dia.
+- Ajuda das duas telas nos tres idiomas.
+- Suite local: 780 verificacoes gerais (7 novas: arquivo na pasta com data,
+  cabecalho e resumo, mensagem com caminho e "amanha", o caminho de reserva quando
+  o modelo falha, e os tres casos de pasta/nome escolhidos) + 191 da tela.
+
+## 0.2.54
+
+Lembrete ("me avise em 20 minutos") e documentos em .docx, .xlsx e .pdf.
+
+- LEMBRETE: ferramenta nova. "Me lembre do remedio em 20 minutos" vira um timer do
+  proprio TEO: quando a hora chega, aparece uma linha na conversa e toca o aviso
+  (som + notificacao do /aviso, quando a tela sabe). Vale ENQUANTO O TEO ESTIVER
+  ABERTO - decisao do dono: nada de cron/systemd, que exigiria tres implementacoes
+  (Linux/Windows/macOS) e um processo escondido. Fechou o TEO, o lembrete se perde;
+  a resposta da ferramenta diz isso ao modelo, que repete para a pessoa. Teto de 20
+  lembretes pendentes (modelo em loop nao enche a memoria); aceita de 0,01 a 1440
+  minutos. O aviso sai pelo canal do nucleo (`ctx.avisar`), o mesmo da tela.
+- DOCUMENTOS em .docx, .xlsx e .pdf: `make_document` ganhou os tres formatos.
+  Decisao do dono: a biblioteca NAO entra no pacote - o TEO instala na hora com
+  licenca (`instalar_pacote`). Faltando a biblioteca, a resposta diz exatamente
+  qual instalar e manda chamar de novo (python-docx, openpyxl, reportlab).
+  .xlsx le as tabelas markdown (| item | valor |) e monta a planilha, com cabecalho
+  em negrito e largura de coluna util; .docx monta titulos, listas, paragrafos e
+  tabela de verdade; .pdf usa o mesmo markdown (A4, titulo, listas).
+- Suite local: 773 verificacoes gerais (9 novas: lembrete marcado, timer tocando de
+  verdade, argumentos invalidos, canal do lembrete ligado pela tela, formato
+  desconhecido, e docx/xlsx/pdf - gera quando a biblioteca existe, ensina a
+  instalar quando falta) + 191 da tela.
+
+## 0.2.53
+
+Reserva de provedor: se o principal nao responde, o TEO tenta outro perfil salvo
+uma vez, avisa na tela e volta ao principal no turno seguinte.
+
+- O BURACO: provedor fora do ar, 5xx insistente ou cota estourada encerravam o
+  turno com erro - mesmo quando a pessoa tinha um segundo provedor configurado
+  (local + nuvem, por exemplo).
+- AGORA: `/reserva <numero ou nome>` escolhe um perfil salvo como reserva (sem
+  argumento mostra a lista do /provedor com o atual; `off` desliga; fica salvo no
+  config). Quando o principal falha, o Agent cria o cliente do perfil de reserva
+  com a MESMA conversa e o MESMO pedido, tenta UMA vez e avisa:
+  "Nao consegui falar com <modelo> (<motivo>). Tentando pelo perfil de reserva
+  \"<perfil>\"."
+- Regras (o que NAO troca): sem reserva configurada; contexto estourado (o
+  caminho e' compactar, nao trocar de provedor); texto ja' mostrado na tela
+  (repetir duplicaria meia resposta); e quando a pessoa mandou parar. Nada e'
+  gravado no config: a troca vale para o turno e o principal volta no seguinte,
+  com aviso ("De volta ao provedor principal: <modelo>").
+- A reserva herda os ganchos da tela do cliente principal (aviso de espera e
+  contagem de tokens continuam funcionando no turno com problema).
+- Ajuda das duas telas nos tres idiomas (o navegador ganhou a linha do /reserva).
+- Suite local: 764 verificacoes gerais (8 novas: cai e a resposta chega, troca
+  avisada na tela, reserva nao gruda no turno seguinte, texto ja' mostrado nao
+  troca, contexto estourado nao troca, /reserva lista, define e desliga) + 191 da
+  tela.
+
+## 0.2.52
+
+Conforto no terminal: buscar na conversa, exportar para mandar a alguem, ver o
+ultimo erro e uma tela simples.
+
+- `/buscar <palavra>`: procura na conversa atual (falas e resultados de
+  ferramenta) e mostra ate 15 trechos, do mais antigo para o mais novo, com o
+  rotulo de quem falou (voce/TEO/ferramenta). Antes so' existia a rolagem do
+  terminal - que nao pesquisa nada depois que a tela passou.
+- `/exportar` (aceita um nome: `/exportar carta`): salva o dialogo em
+  ~/Documentos/teo-conversa-<data>.txt, com cabecalho (data e modelo). So' as
+  falas: resultado de ferramenta nao vai, e as marcas internas que o TEO pendura
+  no pedido ((AGORA: ...), memorias) sao removidas - o arquivo e' para uma pessoa
+  ler, nao para o modelo.
+- `/erro`: mostra o ultimo bloco do erro.log dentro da tela, pronto para copiar e
+  mandar para quem da suporte. A tela continua sem traceback por conta propria.
+- `/simples` (liga/desliga, sem argumento inverte; fica salvo): tela para crianca
+  ou para quem se distrai com muita informacao - esconde a trilha do pedido e o
+  nome da ferramenta (inclusive o caminho do arquivo), e a barra de baixo fica so'
+  com o relogio da espera, o aviso de parar e o medidor. Troca na hora, sem
+  reiniciar.
+- Ajuda das duas telas (a do navegador ganhou a linha do /buscar e do /exportar)
+  nos tres idiomas.
+- Suite local: 756 verificacoes gerais (11 novas: buscar acha e avisa quando nao
+  acha, exportar cria o arquivo com as falas e sem as marcas, /erro mostra o
+  bloco, /simples liga e desliga, tela simples esconde a ferramenta e a barra de
+  baixo, aplicar_simples troca na hora, barra nos dois modos) + 191 da tela.
+
+## 0.2.51
+
+Compactacao: o pedido da pessoa fica literal, leitura repetida nao ocupa espaco e
+o resumo acontece depois da resposta.
+
+- PEDIDO FIXADO: a compactacao transformava tudo em resumo - inclusive o que a
+  pessoa pediu. Agora o pedido do turno entra LITERAL e na FRENTE do resumo
+  ("PEDIDO ATUAL DA PESSOA (literal, continua valendo): ..."), ate 2000
+  caracteres. Era o dado que mais se perdia e o que define o que o turno tem de
+  entregar.
+- LEITURA REPETIDA: o mesmo resultado de ferramenta (ler o mesmo arquivo tres
+  vezes, rodar o mesmo comando de novo) entrava varias vezes no bloco de dados
+  literais. Agora a impressao digital do resultado deduplica: fica a ocorrencia
+  mais recente e o espaco sobra para resultados diferentes.
+- COMPACTACAO NO FIM DO TURNO: quando a conversa ja passou do limiar (85%), o
+  resumo roda DEPOIS de a resposta ser entregue, mirando 10 pontos abaixo do
+  limiar - em vez de travar o meio do turno seguinte. Se nao precisa, nao roda;
+  se falhar, o turno que ja terminou nao perde nada.
+- MODELO DEDICADO AO RESUMO (opcional): `"summary_model": "<nome>"` no
+  config.json faz o resumo com um modelo menor/mais rapido; se ele falhar, cai no
+  modelo principal em vez de perder a compactacao. Sem a chave, nada muda.
+- Suite local: 745 verificacoes gerais (7 novas: compactacao encolhe a conversa,
+  pedido literal na frente do resumo, dedupe da leitura repetida, compactar no fim
+  do turno quando passa do limiar, nao compactar quando nao precisa, resumo com
+  modelo dedicado, e a queda para o modelo principal quando o dedicado falha)
+  + 191 da tela.
+
+## 0.2.50
+
+Memoria por assunto: o que importa volta na hora do pedido (e uma rede de
+seguranca grava o pedido obvio que o modelo esqueceu).
+
+- O BURACO: o prompt levava as 40 memorias mais RECENTES. Depois de 40 gravacoes,
+  uma preferencia antiga ("nao gosto de jargao", "meu nome e...") sumia para
+  sempre - e a busca da ferramenta memory era LIKE '%texto%': so' achava com a
+  palavra exata.
+- AGORA, duas coisas. (1) Indice FTS5 com ranking bm25 (a base antiga e' indexada
+  na primeira abertura; base sem FTS5 continua no LIKE de sempre - nada quebra).
+  A busca entende palavras fora de ordem e ignora palavra de ligacao ("para",
+  "como", "quero"...). Quando a palavra exata nao existe, tenta uma vez por
+  prefixo de 4 letras: "imprimir" acha "impressora" (o FTS5 nao tem radical em
+  portugues). (2) A cada turno, as memorias que COMBINAM com o pedido
+  viajam junto da mensagem da pessoa, numa linha "(MEMORIAS QUE JA SEI E QUE
+  COMBINAM COM O PEDIDO: ...)": ate 5 linhas / 600 caracteres, sem repetir o que
+  o prompt ja mostra. E' assim que uma preferencia de semanas atras volta quando
+  o assunto aparece - e sem mexer no prompt do sistema (que custaria o cache de
+  contexto do servidor a cada turno).
+- REDE DE SEGURANCA DA CAPTURA: modelo pequeno esquece de chamar memory(action=add).
+  Agora, quando a frase da pessoa e' claramente um pedido permanente ("meu nome
+  e...", "me chame de...", "prefiro...", "de agora em diante...", "nao gosto de...",
+  "tenho N anos", "moro em..."), o CODIGO grava - frase curta (ate 300 caracteres),
+  uma por turno, sem duplicar e sem repetir o que o modelo ja gravou no mesmo
+  turno. A tela mostra em linha discreta o que ficou guardado, para a pessoa
+  corrigir na hora.
+- Prompt ganhou a regra da linha de memorias nos tres idiomas (usar sem perguntar
+  de novo; se o pedido de agora contradisser, vale o pedido e a memoria e'
+  atualizada).
+- Suite local: 738 verificacoes gerais (13 novas: indice ativo, busca por assunto
+  com 50 gravacoes na frente, palavras fora de ordem, radical (imprimir->impressora),
+  sem-resultado, selecao por pedido, pedido sem assunto, nao repetir o prompt, bloco
+  na mensagem do turno, captura do pedido permanente, sem duplicar, pedido comum nao
+  capturado, captura calada quando o modelo gravou) + 191 da tela.
+
+## 0.2.49
+
+O TEO avisa quando para e espera voce (som + notificacao do sistema).
+
+- O QUE FALTAVA: o menu de licenca para o turno e fica em `ev.wait()` sem avisar
+  nada, e o fim de um turno longo era so' o palco se recolhendo. Quem saiu da
+  frente da tela (ou quem nao enxerga bem) nao tinha sinal nenhum - e leitura de
+  "travou" e' a reclamacao classica.
+- AGORA: som (BEL do terminal) + notificacao do sistema (`notify-send` no Linux,
+  `osascript` no macOS; no Windows fica o bip, que e' o que da' para garantir sem
+  instalar nada). Dois momentos: (1) a licenca aparece - o TEO avisa na hora,
+  porque dali para frente ele esta parado esperando; (2) um turno que demorou
+  15s ou mais termina - avisa que a resposta esta pronta. Turno curto continua
+  mudo de proposito: som a cada pergunta viraria enfeite.
+- Novo comando `/aviso` (liga/desliga, sem argumento inverte; fica salvo no
+  config). Vem LIGADO de fabrica: quem esta na frente da tela tem o aviso como
+  confirmacao, quem saiu tem o unico sinal que existe.
+- O comando do aviso roda numa thread com teto de 5s: a tela nunca espera por ele
+  e uma area de trabalho sem notificador nao quebra nada (so' fica o bip).
+- Textos novos nos tres idiomas (aviso de licenca, aviso de fim de turno e a
+  ajuda do /aviso).
+- Suite local: 725 verificacoes gerais (9 novas: regra do turno curto/demorado,
+  aviso desligado, padrao de fabrica, comando do SO, sem notificador, entrega do
+  aviso pela tela, licenca disparando o aviso de verdade numa thread, /aviso
+  desliga e /aviso liga) + 191 da tela.
+
+## 0.2.48
+
+Repeticao curta de falha passageira do servidor do modelo, com aviso na tela.
+
+- CAUSA: um timeout, um 502/503 ou a queda da conexao no meio de uma rodada
+  derrubavam o turno inteiro - e num turno de seis minutos isso joga fora a
+  espera e assusta quem nao e' tecnico. O cliente OpenAI era criado com
+  max_retries do SDK, que repete as escuras (inclusive 429, gastando cota) e nao
+  distingue um timeout de 300s de uma queda rapida de rede.
+- AGORA: `LLM._pedido()` e' o unico lugar que repete. Orcamento = 1 +
+  cfg["max_retries"] (padrao: duas tentativas). Repete SO o que e' passageiro:
+  conexao caiu, servidor sumiu, 5xx. NAO repete timeout (a espera ja foi inteira;
+  repetir custa outra), 4xx (pedido errado devolve o mesmo erro), 429/cota (cada
+  tentativa gasta cota) nem contexto estourado (o caminho e' compactar - e o
+  llama.cpp responde 500 quando o contexto passa, entao essa checagem vem antes
+  do 5xx).
+- Cada nova tentativa avisa na tela ("O servidor do modelo nao respondeu; tentando
+  de novo (tentativa 2 de 2)"): silencio de meio minuto numa repeticao e' lido
+  como programa travado.
+- Mensagens em linguagem de gente no lugar do nome da excecao: servidor fora do
+  ar vira "Nao consegui falar com o servidor do modelo em <url>. Confira se ele
+  esta ligado..." e 5xx vira "O servidor do modelo esta com problema agora (erro
+  503). Costuma ser passageiro...".
+- O cliente OpenAI passa a ser criado com max_retries=0: quem decide repetir e'
+  o codigo do TEO, num lugar so'.
+- Suite local: 716 verificacoes gerais (7 novas: repete e recupera, avisa a tela,
+  timeout nao repete, offline com o endereco, duas tentativas e desiste, 5xx com o
+  codigo, contexto estourado nao gasta repeticao) + 191 da tela.
+
+## 0.2.47
+
+Conversas guardadas (/sessoes + /abrir), data/hora no pedido e historico de
+entrada valendo para as duas telas.
+
+- SESSOES GUARDADAS: o /nova nao apaga mais a conversa. Ele ARQUIVA o dialogo em
+  ~/.bgh/sessoes/<data>_<hora>-<assunto>.json e o aviso na tela diz como voltar.
+  Dois comandos novos: `/sessoes` lista as ultimas conversas com numero, data,
+  assunto (a primeira pergunta da pessoa) e quantidade de mensagens; `/abrir
+  <numero>` troca a conversa atual por aquela e avisa de qual sessao se trata.
+  Trocar de sessao tambem guarda a que estava aberta: nada se perde ao voltar.
+  A sessao aberta sai da lista (nao duplica arquivo) e volta nela no proximo
+  /nova. Lista limitada a 50 arquivos, as mais antigas sao podadas. Mesma lista e
+  mesmo numero nas duas telas, porque quem decide a ordem e' o nucleo
+  (Agent.sessoes_guardadas), nao a tela.
+- DATA E HORA NO PEDIDO: o prompt do sistema e' montado uma vez por sessao e
+  envelhecia - numa sessao aberta o dia todo, "hoje", "amanha" e "semana que
+  vem" saiam errados. Agora cada mensagem da pessoa termina com uma linha
+  "(AGORA: sexta-feira, 27/11/2026, 14:32 (-03))", com o dia da semana no idioma
+  da sessao (i18n.WEEKDAYS: strftime depende do locale da maquina e devolveria
+  "Friday" em pt). A linha vai no texto do usuario DE PROPOSITO: reescrever a
+  mensagem do sistema a cada turno jogaria fora o cache de contexto do servidor
+  (no llama.cpp, reprocessar o historico inteiro toda rodada). O prompt ganhou a
+  regra "use a linha mais recente, nunca deduza a data de memoria". O assunto da
+  sessao ignora essa linha.
+- HISTORICO DE ENTRADA NUM LUGAR SO': a seta-para-cima lia ~/.bgh/
+  input_history.txt, mas so' a tela fixa gravava (FileHistory, no ENTER). Conversa
+  feita pelo navegador nao aparecia no terminal. Agora o nucleo grava
+  (config.add_input_history, mesmo formato do prompt_toolkit) quando a tela avisa
+  que nao grava sozinha (`historico_proprio`, que a tela fixa declara) - uma
+  linha so', sem texto dobrado.
+- Ajuda das duas telas atualizada nos tres idiomas (o /nova agora diz que guarda
+  a conversa; /sessoes e /abrir entraram na lista).
+- Suite local: 709 verificacoes gerais (12 novas) + 191 da tela.
+
+## 0.2.46
+
+Medidor de contexto anda DURANTE o turno, nao so no fim.
+
+- SINTOMA (relatado pelo dono no terminal): num turno longo a linha amarela de
+  baixo mostrava o relogio subindo (383s, read_file 62s) e o medidor CONGELADO
+  em "ctx 3% de 450k (~4.19k/128.57k toks) (1 msg)" - o valor do inicio do turno,
+  muitas vezes o do prompt de sistema apenas.
+- CAUSA: a barra do terminal e' repintada a cada 0,3 s (tarefa `spin` do
+  prompt_toolkit), mas ela so' DESENHA o que esta guardado em `state["ctx"]`.
+  Quem escreve nesse campo e' `ChatCore.print_ctx()`, e ele so' era chamado na
+  abertura, no `/novo`, no `/ctx`, na troca de idioma e na SAIDA do laco de
+  turnos. Dentro de `Agent.run_turn` (as rodadas de ferramenta) nao existia
+  nenhuma atualizacao: medido com um modelo falso de 3 rodadas, o medidor era
+  atualizado UMA vez, no fim do turno, ja com todas as mensagens.
+- CONSERTO: `ChatCore.refresh_ctx()` faz so' a parte do medidor (sem repetir as
+  linhas de "Contexto enchendo/compactado") e passou a ser chamado em
+  `_reset_stream_state()`, que o agente dispara no inicio de CADA chamada do
+  modelo. O numero anda por rodada, junto com a saida da ferramenta que acabou
+  de entrar no historico, e a contagem real de tokens do servidor acompanha.
+  `print_ctx()` usa o mesmo metodo, entao o texto e o "extra" continuam morando
+  num lugar so.
+- A TELA DO NAVEGADOR usa o mesmo evento (`set_ctx` -> "ctx"): o painel lateral
+  passa a andar no meio do turno pelo mesmo caminho, sem codigo proprio.
+- Suite local: dois testes novos (medidor atualiza a cada rodada e mostra numero
+  novo no meio do turno) - falhavam antes do conserto.
+
 ## 0.2.45
 
 Rascunho num lugar so, aviso de pasta cheia e a resposta nao muda de lugar.

@@ -24,7 +24,8 @@ from . import i18n, limpeza, tabela, tela, voz
 from .agent import Agent, STOPPED_NOTE
 from .i18n import t
 from .approvals import Gate
-from .config import CONFIG_PATH, SESSION_FILE, ConfigError, load_config, save_config, sync_profile
+from .config import (CONFIG_PATH, SESSION_FILE, ConfigError, add_input_history,
+                     load_config, save_config, sync_profile)
 from .llm import LLM, LLMError, LLMRateLimitError
 from .palco import abrevia
 from .setup_wizard import CHARS_POR_TOKEN, FOLGA_LEITURA
@@ -522,9 +523,29 @@ class ChatCore:
         # quando a tela sabe desenhar isso (a tela fixa sabe; o modo classico nao).
         if hasattr(self.sink, "on_usage"):
             self.agent.on_usage = self.sink.on_usage
+        # Canal dos lembretes: o timer da ferramenta `lembrete` chama isto quando a
+        # hora chega (linha na tela + som/notificacao do /aviso, quando a tela sabe).
+        self.agent.tools.ctx.avisar = self._avisar_lembrete
         # Abertura: se o teto gravado pertence a outro servidor/modelo, re-sonda
         # antes de qualquer barra ser desenhada (barra nunca mostra numero emprestado).
         self._refresh_server_context(troca=False, render=False)
+
+    def _avisar_lembrete(self, texto: str) -> None:
+        """O lembrete chegou (roda na thread do timer): escreve e faz o aviso.
+
+        Nada aqui pode derrubar o processo - o turno pode estar no meio de outra
+        coisa, ou a tela ja pode ter fechado.
+        """
+        try:
+            self.sink.line(texto, style="cyan")
+        except Exception:  # noqa: BLE001
+            pass
+        avisar = getattr(self.sink, "avisar", None)
+        if callable(avisar):
+            try:
+                avisar(t("lembrete.titulo"), texto)
+            except Exception:  # noqa: BLE001
+                pass
 
     # ----- streaming -> sink ---------------------------------------------------
     def _reset_stream_state(self) -> None:
@@ -533,6 +554,11 @@ class ChatCore:
         self.st = {"thinking": False, "resposta": False}
         if hasattr(self.sink, "rodada_nova"):
             self.sink.rodada_nova()   # palco mostra em que rodada esta
+        # O medidor da barra de baixo anda a CADA rodada: e' aqui que a saida da
+        # ferramenta ja entrou no historico. Sem isto ele so' era reescrito no fim
+        # do turno e a barra amarela mostrava o numero do turno anterior ao lado
+        # do relogio subindo ("ctx 3% ... (1 msg)" parado por 6 minutos).
+        self.refresh_ctx()
 
     def steer(self, text: str) -> None:
         """Mensagem digitada durante o processamento: vai ao modelo na proxima
@@ -645,16 +671,256 @@ class ChatCore:
             return None
         return valor if valor >= 20 else None
 
+    # ----- conforto: buscar, exportar e erro ----------------------------------
+    @staticmethod
+    def _sem_marcas(texto: str) -> str:
+        """Tira as linhas que o TEO pendura no fim do pedido ((AGORA: ...), memorias).
+
+        Elas ajudam o modelo, mas nao fazem sentido num texto que a pessoa vai
+        mandar para outra pessoa (/exportar) nem num trecho de busca.
+        """
+        linhas = str(texto or "").splitlines()
+        while (linhas and linhas[-1].strip().startswith("(")
+               and linhas[-1].strip().endswith(")")):
+            linhas.pop()
+        return "\n".join(linhas).strip()
+
+    @staticmethod
+    def _caminho_curto(caminho) -> str:
+        """Caminho com ~ na frente (a tela nao precisa do /home inteiro)."""
+        texto = str(caminho)
+        casa = str(Path.home())
+        return "~" + texto[len(casa):] if texto.startswith(casa) else texto
+
+    def _buscar_na_conversa(self, termo: str) -> None:
+        """/buscar: procura uma palavra na conversa e mostra os trechos.
+
+        O que a pessoa ve na tela e o rolar do terminal; a conversa guardada e' a
+        mesma coisa em texto, com os resultados de ferramenta dentro.
+        """
+        termo = termo.strip()
+        if len(termo) < 2:
+            self.sink.line(t("cmd.find.bad", cmd=i18n.cmd("find")), style="yellow")
+            return
+        baixo = termo.lower()
+        achados: list[tuple[str, str]] = []
+        for mensagem in self.agent.messages[1:]:
+            papel = str(mensagem.get("role") or "")
+            if papel not in ("user", "assistant", "tool"):
+                continue
+            texto = self._sem_marcas(self.agent._texto_de(mensagem))
+            pos = texto.lower().find(baixo)
+            if pos < 0:
+                continue
+            ini = max(0, pos - 40)
+            fim = min(len(texto), pos + len(termo) + 60)
+            achados.append((papel, " ".join(texto[ini:fim].split())))
+        if not achados:
+            self.sink.line(t("cmd.find.none", termo=termo), style="yellow")
+            return
+        self.sink.line(t("cmd.find.header", n=len(achados), termo=termo),
+                       style="bold")
+        mostrar = achados[-15:]   # os mais recentes sao os que a pessoa lembra
+        for papel, trecho in mostrar:
+            if papel == "user":
+                rotulo = t("cmd.find.user")
+            elif papel == "assistant":
+                rotulo = t("cmd.find.bot")
+            else:
+                rotulo = t("cmd.find.tool")
+            self.sink.line(f"  [{rotulo}] ...{trecho}...")
+        if len(achados) > len(mostrar):
+            self.sink.line(t("cmd.find.more", n=len(achados) - len(mostrar)),
+                           style="dim")
+
+    def _exportar_conversa(self, nome: str) -> None:
+        """/exportar: salva a conversa em ~/Documentos como texto simples.
+
+        So' o dialogo (pessoa e TEO): resultado de ferramenta e rascunho nao vao
+        para o arquivo que a pessoa vai mandar para alguem.
+        """
+        from .tools.documents import documents_dir
+
+        falas: list[tuple[str, str]] = []
+        for mensagem in self.agent.messages[1:]:
+            papel = str(mensagem.get("role") or "")
+            if papel not in ("user", "assistant"):
+                continue
+            texto = self._sem_marcas(self.agent._texto_de(mensagem)).strip()
+            if texto:
+                falas.append((papel, texto))
+        if not falas:
+            self.sink.line(t("cmd.export.empty"), style="yellow")
+            return
+        agora = datetime.datetime.now()
+        apelido = re.sub(r"[^a-zA-Z0-9]+", "-", nome or "").strip("-").lower()[:40]
+        arquivo = (f"teo-{apelido}-{agora:%Y-%m-%d_%H%M}.txt" if apelido
+                   else f"teo-conversa-{agora:%Y-%m-%d_%H%M}.txt")
+        alvo = documents_dir() / arquivo
+        linhas = [t("cmd.export.header", quando=agora.strftime("%d/%m/%Y %H:%M"),
+                    modelo=str(self.cfg.get("model", ""))), ""]
+        for papel, texto in falas:
+            rotulo = t("cmd.export.user") if papel == "user" else t("cmd.export.bot")
+            linhas += [f"[{rotulo}]", texto, ""]
+        try:
+            alvo.write_text("\n".join(linhas).rstrip() + "\n", encoding="utf-8")
+        except OSError:
+            self.sink.line(t("cmd.export.fail", caminho=self._caminho_curto(alvo)),
+                           style="yellow")
+            return
+        self.sink.line(t("cmd.export.ok", caminho=self._caminho_curto(alvo)),
+                       style="cyan")
+
+    def _mostrar_ultimo_erro(self) -> None:
+        """/erro: mostra o ultimo bloco do erro.log, pronto para copiar.
+
+        A tela nunca mostra traceback (assusta); aqui a pessoa PEDE, e recebe o
+        bloco para mandar para quem da suporte.
+        """
+        caminho = CONFIG_PATH.parent / "erro.log"
+        try:
+            linhas = caminho.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            linhas = []
+        if not linhas:
+            self.sink.line(t("cmd.erro.none"), style="cyan")
+            return
+        inicio = 0
+        for i, linha in enumerate(linhas):
+            if linha.startswith("====="):
+                inicio = i
+        bloco = linhas[inicio:][:40]
+        self.sink.border()
+        self.sink.line(t("cmd.erro.title", caminho=self._caminho_curto(caminho)),
+                       style="bold")
+        for linha in bloco:
+            self.sink.line(linha, style="dim")
+        self.sink.border()
+        self.sink.line(t("cmd.erro.hint"), style="dim")
+
+    def _destino_handoff(self, rest: str) -> Path:
+        """/handoff [pasta/nome]: onde salvar o documento.
+
+        Regras (as que uma pessoa espera):
+        - sem argumento          -> pasta atual/handoff-<data>.md
+        - pasta que ja' existe   -> aquela pasta/handoff-<data>.md
+        - .../algo/ (com barra)  -> cria a pasta e usa o nome padrao
+        - .../meu-nome           -> .../meu-nome.md (nao mexe em extensao que ja' e' .md/.txt)
+        Caminho relativo e' relativo a pasta atual.
+        """
+        agora = datetime.datetime.now()
+        padrao = f"handoff-{agora:%Y-%m-%d_%H%M}.md"
+        pedaco = (rest or "").strip().strip('"').strip("'")
+        if not pedaco:
+            return Path.cwd() / padrao
+        alvo = Path(os.path.expanduser(pedaco))
+        if not alvo.is_absolute():
+            alvo = Path.cwd() / alvo
+        if alvo.is_dir() or pedaco.endswith(("/", os.sep)):
+            return alvo / padrao
+        if alvo.suffix.lower() not in (".md", ".markdown", ".txt"):
+            alvo = alvo.with_name(alvo.name + ".md")
+        return alvo
+
+    def _passar_adiante(self, rest: str = "") -> None:
+        """/handoff [pasta/nome]: salva um .md com o que foi feito e o que falta.
+
+        O resumo vem do MODELO (ele tem a conversa). Se o modelo falhar, o arquivo
+        ainda sai com o registro das perguntas - um handoff pobre e' melhor que
+        nenhum, e a tela diz exatamente o que aconteceu.
+        """
+        falas = [m for m in self.agent.messages[1:]
+                 if str(m.get("role")) in ("user", "assistant")]
+        if not falas:
+            self.sink.line(t("cmd.handoff.empty"), style="yellow")
+            return
+        # Transcricao LIMITADA: o handoff nao pode depender do tamanho da conversa
+        # (contexto gigante = erro no provedor justo na hora de salvar).
+        transcript = "\n".join(
+            f"{m.get('role')}: {self.agent._texto_de(m)[:1500]}"
+            for m in falas[-30:]
+        )
+        corpo = ""
+        try:
+            resposta = self.llm.chat([
+                {"role": "system", "content": t("handoff.pedido")},
+                {"role": "user", "content": transcript},
+            ])
+            corpo = str(resposta.get("content") or "").strip()
+        except LLMError as exc:
+            self.sink.line(t("cmd.handoff.fail_llm",
+                             erro=str(exc).splitlines()[0][:160]), style="yellow")
+        if not corpo:
+            perguntas = [self.agent._texto_de(m)[:300] for m in falas[-20:]
+                         if str(m.get("role")) == "user"]
+            corpo = t("handoff.sem_resumo") + "\n\n" + "\n".join(
+                f"- {p}" for p in perguntas)
+        agora = datetime.datetime.now()
+        alvo = self._destino_handoff(rest)
+        ok, bloqueio = self.gate.path_ok(str(alvo))
+        if not ok:
+            self.sink.line(bloqueio, style="yellow")
+            return
+        cabecalho = t("handoff.titulo", quando=agora.strftime("%d/%m/%Y %H:%M"),
+                      modelo=str(self.cfg.get("model", "")),
+                      pasta=self._caminho_curto(alvo.parent), nome=alvo.name)
+        try:
+            alvo.parent.mkdir(parents=True, exist_ok=True)
+            alvo.write_text(cabecalho + "\n\n" + corpo + "\n", encoding="utf-8")
+        except OSError as exc:
+            self.sink.line(t("cmd.handoff.fail_write",
+                             caminho=self._caminho_curto(alvo), erro=exc),
+                           style="yellow")
+            return
+        self.sink.line(t("cmd.handoff.ok", caminho=self._caminho_curto(alvo),
+                         nome=alvo.name), style="cyan")
+
+    # ----- sessoes guardadas ---------------------------------------------------
+    def _abrir_sessao(self, rest: str) -> None:
+        """/abrir <numero>: troca a conversa pela guardada (numero do /sessoes).
+
+        A conversa que estava aberta tambem e' guardada antes - trocar de sessao
+        nunca perde nada.
+        """
+        numero = (rest or "").strip()
+        if not numero.isdigit():
+            self.sink.line(t("cmd.open.bad", cmd=i18n.cmd("sessions")), style="yellow")
+        else:
+            aberta = self.agent.abrir_sessao(int(numero))
+            if aberta is None:
+                self.sink.line(t("cmd.open.miss", n=numero,
+                                 cmd=i18n.cmd("sessions")), style="yellow")
+            else:
+                self.sink.line(t("cmd.open.done", data=aberta["data"],
+                                 titulo=aberta["titulo"], msgs=aberta["msgs"]),
+                               style="cyan")
+        self.print_ctx()   # medidor e contagem de mensagens da conversa na tela
+
     # ----- janela de contexto ---------------------------------------------------
+    def refresh_ctx(self, usage: dict | None = None) -> bool:
+        """Atualiza SO' o medidor da tela; True quando a tela tem barra fixa.
+
+        E' o pedaco do print_ctx que vale tambem NO MEIO do turno: a tela fixa
+        repinta a barra de baixo a cada 0,3s, mas desenhava o valor guardado no
+        ultimo print_ctx - e print_ctx so' rodava no FIM do turno. Agora cada
+        rodada do modelo (Agent._round_start) chama este metodo.
+        Nao imprime os avisos de "contexto enchendo/compactado": esses continuam
+        sendo do print_ctx, uma vez por fronteira de turno, para nao repetir a
+        mesma linha amarela a cada rodada.
+        """
+        if not hasattr(self.sink, "set_ctx"):
+            return False   # modo classico: sem barra fixa, nem vale medir o historico
+        uso = usage if usage is not None else self.agent.ctx_usage()
+        core, extra = self._ctx_parts(uso)
+        self.sink.set_ctx(core, uso["pct"], self.agent._compress_pct(), extra=extra)
+        return True
+
     def print_ctx(self) -> None:
         usage = self.agent.ctx_usage()
         limite_pct = self.agent._compress_pct()  # o aviso e a compactacao no mesmo ponto
         core, extra = self._ctx_parts(usage)
         txt = core + extra
-        if hasattr(self.sink, "set_ctx"):
-            # tela fixa: o medidor mora na ULTIMA linha da tela, nao no historico;
-            # o 'extra' so aparece quando cabe inteiro (a tela decide a ordem de corte)
-            self.sink.set_ctx(core, usage["pct"], limite_pct, extra=extra)
+        if self.refresh_ctx(usage):
             if self.agent.last_compressed:
                 self.sink.line(t("ctx.compacted"), style="dim")
             elif usage["pct"] >= limite_pct:
@@ -1021,6 +1287,13 @@ class ChatCore:
         anexos = [str(c) for c in (anexos or []) if str(c).strip()]
         if not text and not anexos:
             return "continue"
+        # Historico da seta-para-cima (~/.bgh/input_history.txt) e' UM so' para as
+        # duas telas. A tela fixa grava no ENTER e marca historico_proprio; o
+        # navegador e o modo classico nao tem quem grave - antes, conversa feita
+        # pelo navegador nao aparecia no terminal.
+        if text and not getattr(self.sink, "historico_proprio", False):
+            if i18n.canon(text.lstrip("/").lower()) != "exit":
+                add_input_history(text)
 
         # Atalho @ : menu de arquivos (tela fixa) ou lista de arquivos.
         if text.startswith("@"):
@@ -1084,7 +1357,17 @@ class ChatCore:
                     self.sink.line(t("listing.hint"), style="dim")
                 return "continue"
             alvo = os.path.expanduser(alvo) if alvo else os.getcwd()
-            self.sink.line(files_mod.list_dir(alvo))
+            # "/ <arquivo>" (o que o menu de setas poe na linha) mostra o ARQUIVO,
+            # nao a pasta dele - antes respondia "nao encontrei a pasta".
+            if os.path.isfile(alvo):
+                try:
+                    tamanho = files_mod.human_size(os.path.getsize(alvo))
+                except OSError:
+                    tamanho = "?"
+                self.sink.line(t("listing.file", path=alvo, size=tamanho))
+                self.sink.line(t("listing.hint"), style="dim")
+            else:
+                self.sink.line(files_mod.list_dir(alvo))
             return "continue"
 
         if text.startswith("/"):
@@ -1106,11 +1389,34 @@ class ChatCore:
                     self.sink.parts(seg_line)
                 self.sink.border()   # fecha a lista
             elif what == "new":
-                self.agent.new_session()
+                guardada = self.agent.new_session()
                 self.pending_attach = None
                 self.pending_image = None
                 self.sink.line(t("cmd.new.done"), style="dim")
+                if guardada is not None:
+                    # /nova nao apaga mais: a conversa anterior entra na lista.
+                    self.sink.line(t("cmd.new.saved", listar=i18n.cmd("sessions"),
+                                     abrir=i18n.cmd("open")), style="dim")
                 self.print_ctx()   # rodape tem que mostrar a leitura nova na hora, nao a velha
+            elif what == "sessions":
+                # Lista as conversas guardadas (mais recente primeiro). O numero de
+                # cada uma e' o que o /abrir aceita; a data evita abrir a errada.
+                guardadas = self.agent.sessoes_guardadas()
+                self.sink.border()
+                if not guardadas:
+                    self.sink.line(t("cmd.sessions.none", cmd=i18n.cmd("new")),
+                                   style="dim")
+                else:
+                    self.sink.line(t("cmd.sessions.title"), style="bold")
+                    for item in guardadas:
+                        self.sink.line(t("cmd.sessions.line", n=item["n"],
+                                         data=item["data"], titulo=item["titulo"],
+                                         msgs=item["msgs"]))
+                    self.sink.line(t("cmd.sessions.hint", cmd=i18n.cmd("open")),
+                                   style="dim")
+                self.sink.border()
+            elif what == "open":
+                self._abrir_sessao(rest)
             elif what == "mem" and rest:
                 from .tools import memory
 
@@ -1397,6 +1703,93 @@ class ChatCore:
                     self.sink.line(t("cmd.voz.on", voz=voz.nome_do_backend(),
                                      cmd=i18n.cmd("voice")), style="cyan")
                     voz.falar(t("cmd.voz.hello"))
+            elif what == "notify":
+                # Acessibilidade: som + notificacao do sistema quando o TEO para e
+                # espera a pessoa (licenca) ou termina um turno demorado. Sem
+                # argumento, cada /aviso inverte o estado (igual ao /voz).
+                alvo_n = rest.lower()
+                if alvo_n in ("liga", "ligar", "on", "enable", "activar", "activa",
+                              "encender", "sim", "yes", "si"):
+                    novo_n = True
+                elif alvo_n in ("desliga", "desligar", "off", "parar", "disable",
+                                "desactivar", "desactiva", "apagar", "nao", "no"):
+                    novo_n = False
+                elif not rest:
+                    novo_n = not bool(self.cfg.get("notify", True))
+                else:
+                    self.sink.line(t("cmd.aviso.bad", cmd=i18n.cmd("notify")),
+                                   style="yellow")
+                    return "continue"
+                self.cfg["notify"] = novo_n
+                save_config(self.cfg)
+                self.sink.line(t("cmd.aviso.on" if novo_n else "cmd.aviso.off"),
+                               style="cyan")
+            elif what == "find":
+                self._buscar_na_conversa(rest)
+            elif what == "export":
+                self._exportar_conversa(rest)
+            elif what == "error":
+                self._mostrar_ultimo_erro()
+            elif what == "simple":
+                # Tela para crianca/idoso: sem trilha do pedido e sem nome da
+                # ferramenta. Sem argumento, cada /simples inverte (igual /voz).
+                alvo_s = rest.lower()
+                if alvo_s in ("liga", "ligar", "on", "enable", "activar", "activa",
+                              "encender", "sim", "yes", "si"):
+                    novo_s = True
+                elif alvo_s in ("desliga", "desligar", "off", "parar", "disable",
+                                "desactivar", "desactiva", "apagar", "nao", "no"):
+                    novo_s = False
+                elif not rest:
+                    novo_s = not bool(self.cfg.get("tela_simples", False))
+                else:
+                    self.sink.line(t("cmd.simples.bad", cmd=i18n.cmd("simple")),
+                                   style="yellow")
+                    return "continue"
+                self.cfg["tela_simples"] = novo_s
+                save_config(self.cfg)
+                marcar = getattr(self.sink, "aplicar_simples", None)
+                if callable(marcar):
+                    marcar(novo_s)   # a tela troca na hora, sem reiniciar
+                self.sink.line(t("cmd.simples.on" if novo_s else "cmd.simples.off"),
+                               style="cyan")
+            elif what == "reserve":
+                # Provedor de reserva: nome de um perfil salvo (config["profiles"]).
+                # Sem argumento mostra a lista e o atual; com numero/nome define;
+                # "off" desliga. A troca automatica mora no Agent (uma vez por turno).
+                from .config import list_profiles as lp
+
+                nomes_r = lp(self.cfg)
+                if not rest:
+                    if not nomes_r:
+                        self.sink.line(t("cmd.reserva.empty",
+                                         cmd_provedor=i18n.cmd("provider")),
+                                       style="yellow")
+                        return "continue"
+                    self._list_profiles()
+                    atuais = [n for n in (self.cfg.get("fallback_profiles") or [])
+                              if n in nomes_r]
+                    estado_r = ", ".join(atuais) if atuais else t("onoff.off")
+                    self.sink.line(t("cmd.reserva.show", atual=estado_r,
+                                     cmd=i18n.cmd("reserve")), style="cyan")
+                elif rest.lower() in ("off", "desliga", "desligar", "nao", "no",
+                                      "none", "apagar"):
+                    self.cfg["fallback_profiles"] = []
+                    save_config(self.cfg)
+                    self.sink.line(t("cmd.reserva.off"), style="cyan")
+                else:
+                    alvo_r = rest
+                    if rest.isdigit() and 1 <= int(rest) <= len(nomes_r):
+                        alvo_r = nomes_r[int(rest) - 1]
+                    if alvo_r not in nomes_r:
+                        self.sink.line(t("cmd.reserva.bad", cmd=i18n.cmd("reserve")),
+                                       style="yellow")
+                        return "continue"
+                    self.cfg["fallback_profiles"] = [alvo_r]
+                    save_config(self.cfg)
+                    self.sink.line(t("cmd.reserva.set", perfil=alvo_r), style="cyan")
+            elif what == "handoff":
+                self._passar_adiante(rest)
             elif what == "clean":
                 # Rascunhos do TEO: scripts do run_python, textos da voz, temporarios
                 # dos comandos. Nada de conversa/memoria/skills mora aqui.
@@ -1691,6 +2084,7 @@ class ChatCore:
             elif imagens:
                 envio["imagens"] = list(imagens)
             imagens = []
+            inicio_turno = time.time()   # a captura de memoria compara com este instante
             try:
                 answer = self.agent.run_turn(turno, **envio)
             except KeyboardInterrupt:
@@ -1724,6 +2118,15 @@ class ChatCore:
             if envio and answer != STOPPED_NOTE and _parece_sem_imagem(answer):
                 self.sink.line(t("agent.image_lost", nova=i18n.cmd("new")),
                                style="yellow")
+            # Rede de seguranca da memoria: frase que e' pedido PERMANENTE
+            # ("meu nome e...", "prefiro...", "de agora em diante...") fica gravada
+            # mesmo quando o modelo esquece de chamar memory(action=add). A tela
+            # mostra o que ficou guardado - nada entra escondido.
+            from .tools import memory as memory_mod
+
+            guardado_mem = memory_mod.capturar(turno, depois_de=inicio_turno)
+            if guardado_mem:
+                self.sink.line(t("mem.captured", texto=guardado_mem), style="dim")
             if answer == STOPPED_NOTE:
                 # Usuario mandou parar: confirmar em uma linha proprio visivel.
                 self.sink.line(STOPPED_NOTE, style="yellow")
@@ -1776,5 +2179,9 @@ class ChatCore:
                     break
                 self.sink.line(t("turn.echo", texto=sobra), style="cyan")
                 fila_turnos.append(sobra)
+            # Compactacao no FIM do turno: a resposta ja foi entregue, entao a
+            # espera do resumo nao travava mais o meio do trabalho seguinte.
+            if answer != STOPPED_NOTE and self.agent.compactar_no_fim_do_turno():
+                self.agent.last_compressed = True
         self.print_ctx()
         return "continue"

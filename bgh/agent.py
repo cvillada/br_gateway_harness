@@ -4,19 +4,21 @@ Inclui compressao de contexto (resumo automatico quando passa do orcamento) e
 persistencia da conversa em ~/.bgh/session.json (retoma de onde parou).
 """
 
+import datetime
 import json
+import re
 import threading
 from pathlib import Path
 from typing import Callable
 
 from . import i18n
 from .approvals import Gate
-from .config import SESSION_FILE
+from .config import SESSION_FILE, SESSOES_DIR, SESSOES_MAX
 from .llm import ContextOverflowError, LLM, LLMError
 from .i18n import t
 from .prompts import build_system_prompt
 from .tools import ToolBox
-from .tools.memory import load_lines
+from .tools.memory import load_lines, relevant as memorias_relevantes
 from .tools.skills import discover, index_lines
 
 # Mensagem mostrada/quando o usuario manda parar (botao CTRL+C / ESC na UI).
@@ -37,6 +39,25 @@ MAX_IMAGENS = 4
 MARCA_IMAGEM = "IMAGEM: "
 # Prints por rodada: dois bastam para "gerou, abriu, olhou" e nao incham o contexto.
 MAX_PRINTS_RODADA = 2
+
+
+def _slug(texto: str) -> str:
+    """Pedaco de nome de arquivo a partir do assunto da conversa (ASCII, curto)."""
+    limpo = re.sub(r"[^a-zA-Z0-9]+", "-", str(texto or "")).strip("-").lower()
+    return limpo[:40].strip("-") or "sessao"
+
+
+def _data_do_nome(nome: str) -> str:
+    """'2026-11-27_143210-assunto' -> '27/11/2026 14:32'.
+
+    O nome do arquivo de sessao E' a assinatura (data + hora + assunto); nao
+    existe campo separado para envelhecer nem para ficar fora de sincronia.
+    """
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})", nome)
+    if not m:
+        return nome
+    ano, mes, dia, hora, minuto = m.group(1, 2, 3, 4, 5)
+    return f"{dia}/{mes}/{ano} {hora}:{minuto}"
 
 
 def _imagens_do_resultado(resultado: str) -> list[str]:
@@ -68,6 +89,10 @@ class Agent:
         self.last_reasoning: list[str] = []
         self.last_compressed = False
         self.last_streamed = False
+        # Reserva de provedor: cliente principal guardado quando a troca acontece,
+        # para voltar no turno seguinte (a reserva nao "gruda" na conversa).
+        self._llm_principal: LLM | None = None
+        self._reserva_usada = False
         # Compactacao que ja tentou e nao baixou o suficiente neste turno: repetir
         # seria uma chamada de modelo por rodada sem ganho (ver _compress_if_needed).
         self._compactacao_travada = False
@@ -93,16 +118,36 @@ class Agent:
         self.messages = [self._system_message()]
         self._load_session()
 
-    @staticmethod
-    def _system_message() -> dict:
-        """Prompt do sistema no idioma atual (tambem e o que /lingua refaz)."""
+    def _system_message(self) -> dict:
+        """Prompt do sistema no idioma atual (tambem e o que /lingua refaz).
+
+        Guarda quais linhas de memoria entraram AQUI: o bloco que viaja com cada
+        pedido (ver `_memorias_do_pedido`) nao repete o que ja esta no prompt.
+        """
         skills = discover()
+        linhas_user = load_lines("user")
+        linhas_note = load_lines("note")
+        self._mem_no_prompt = set(linhas_user) | set(linhas_note)
         return {
             "role": "system",
             "content": build_system_prompt(
-                load_lines("user"), load_lines("note"), index_lines(skills)
+                linhas_user, linhas_note, index_lines(skills)
             ),
         }
+
+    def _memorias_do_pedido(self, pedido: str) -> list[str]:
+        """Linhas da memoria permanente que combinam com ESTE pedido.
+
+        Vao no texto do usuario (e nao no prompt do sistema) pelo mesmo motivo da
+        linha de data: mexer no prompt a cada turno jogaria fora o cache de
+        contexto do servidor. Sem memoria parecida, devolve lista vazia - o
+        pedido nao ganha enfeite.
+        """
+        try:
+            return memorias_relevantes(
+                pedido, ja_no_prompt=getattr(self, "_mem_no_prompt", set()))
+        except Exception:  # noqa: BLE001 - memoria e' apoio, nunca derruba o turno
+            return []
 
     def refresh_prompt(self) -> None:
         """Refaz o pedido ao modelo depois de trocar o idioma (comando /lingua)."""
@@ -220,21 +265,160 @@ class Agent:
         except OSError:
             pass
 
-    def new_session(self) -> None:
+    def new_session(self) -> Path | None:
+        """Zera a conversa GUARDANDO a anterior em ~/.bgh/sessoes/.
+
+        Devolve o caminho da conversa guardada (None quando nao havia nada para
+        guardar). Antes, /nova apagava o session.json: a conversa de ontem ia
+        embora sem volta. Agora ela fica na lista do /sessoes e o /abrir <numero>
+        retoma de onde parou.
+        """
+        guardada = self._arquivar_atual()
         self.messages = [self._system_message()]
         self.gate.session_rules.clear()
         self.last_compressed = False   # aviso 'compactado' nao pode sobreviver ao zerar a conversa
         if SESSION_FILE.exists():
             SESSION_FILE.unlink()
+        return guardada
+
+    # ----- sessoes guardadas --------------------------------------------------
+    @classmethod
+    def _titulo(cls, mensagens: list) -> str:
+        """Assunto da conversa: a primeira pergunta da pessoa, em uma linha curta.
+
+        A linha (AGORA: ...) que viaja junto do pedido nao e' assunto: ela sai
+        do titulo (ultima linha em parenteses).
+        """
+        for m in mensagens:
+            if not isinstance(m, dict) or m.get("role") != "user":
+                continue
+            linhas = [ln for ln in cls._texto_de(m).splitlines() if ln.strip()]
+            if linhas and linhas[-1].startswith("(") and linhas[-1].endswith(")"):
+                linhas.pop()
+            texto = " ".join(" ".join(linhas).split())
+            if not texto:
+                continue
+            return texto if len(texto) <= 60 else texto[:57].rstrip() + "..."
+        return t("cmd.sessions.untitled")
+
+    def _arquivar_atual(self) -> Path | None:
+        """Copia a conversa ATUAL para ~/.bgh/sessoes/ antes de zerar ou trocar.
+
+        None quando a sessao so' tem o prompt de sistema (nao cria arquivo vazio).
+        """
+        corpo = [self._sem_imagem(m) for m in self.messages[1:]]
+        if not corpo:
+            return None
+        try:
+            SESSOES_DIR.mkdir(parents=True, exist_ok=True)
+            quando = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            assunto = _slug(self._titulo(corpo))
+            alvo = SESSOES_DIR / f"{quando}-{assunto}.json"
+            # Duas sessoes no mesmo segundo (teste, /nova em sequencia): nao
+            # sobrescreve uma conversa com a outra.
+            n = 2
+            while alvo.exists():
+                alvo = SESSOES_DIR / f"{quando}-{assunto}-{n}.json"
+                n += 1
+            alvo.write_text(json.dumps(corpo, ensure_ascii=False), encoding="utf-8")
+            self._podar_sessoes()
+            return alvo
+        except OSError:
+            return None
+
+    @staticmethod
+    def _podar_sessoes() -> None:
+        """Mantem no maximo SESSOES_MAX conversas guardadas (apaga as mais velhas)."""
+        try:
+            arquivos = sorted(SESSOES_DIR.glob("*.json"))
+        except OSError:
+            return
+        for velho in arquivos[:max(0, len(arquivos) - SESSOES_MAX)]:
+            try:
+                velho.unlink()
+            except OSError:
+                pass
+
+    def sessoes_guardadas(self) -> list[dict]:
+        """Conversas guardadas, da mais recente para a mais antiga.
+
+        Cada item: {"n": 1, "caminho": Path, "data": "27/11/2026 14:32",
+        "titulo": "...", "msgs": 12}. A tela so' desenha: a ordem e o numero saem
+        daqui, para TUI e navegador mostrarem a mesma lista.
+        """
+        saida: list[dict] = []
+        try:
+            arquivos = sorted(SESSOES_DIR.glob("*.json"), reverse=True)
+        except OSError:
+            return saida
+        for n, caminho in enumerate(arquivos, start=1):
+            try:
+                corpo = json.loads(caminho.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not isinstance(corpo, list) or not corpo:
+                continue
+            saida.append({"n": n, "caminho": caminho,
+                          "data": _data_do_nome(caminho.stem),
+                          "titulo": self._titulo(corpo),
+                          # +1 = o prompt do sistema, que o medidor do rodape
+                          # tambem conta: os dois numeros na tela batem.
+                          "msgs": len(corpo) + 1})
+        return saida
+
+    def abrir_sessao(self, n: int) -> dict | None:
+        """Troca a conversa atual por uma guardada; a atual tambem fica guardada.
+
+        Devolve o item aberto (com data e assunto) ou None quando o numero nao
+        existe/o arquivo esta corrompido. A sessao aberta SAI da lista: enquanto
+        estiver aberta ela e' a conversa atual, e volta para a lista no proximo
+        /nova (sem duplicar arquivo).
+        """
+        guardadas = self.sessoes_guardadas()
+        if not (1 <= int(n) <= len(guardadas)):
+            return None
+        alvo = guardadas[int(n) - 1]
+        try:
+            corpo = json.loads(Path(alvo["caminho"]).read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(corpo, list):
+            return None
+        self._arquivar_atual()
+        self.messages = [self.messages[0]] + [m for m in corpo if isinstance(m, dict)]
+        self.gate.session_rules.clear()
+        self.last_compressed = False
+        self._save_session()
+        try:
+            Path(alvo["caminho"]).unlink()
+        except OSError:
+            pass
+        return alvo
 
     # ----- turno --------------------------------------------------------------
     def run_turn(self, user_text: str, imagem: str | None = None,
                  imagens: list | None = None) -> str:
+        # Data/hora do pedido vai JUNTO do texto da pessoa (uma linha no fim).
+        # O prompt do sistema e' montado uma vez por sessao e envelhece; reescrever
+        # a mensagem[0] a cada turno jogaria fora o cache de contexto do servidor
+        # (no llama.cpp, reprocessar o historico inteiro a cada rodada). A mensagem
+        # da pessoa ja muda em cada turno: a data vai de graca nela.
+        # Mesma ideia para a memoria: o que combina com ESTE pedido viaja junto,
+        # entao uma preferencia antiga volta quando o assunto aparece.
+        extras = [t("agent.now_line", quando=i18n.when_now())]
+        lembretes = self._memorias_do_pedido(user_text)
+        if lembretes:
+            extras.append(t("agent.mem_block", itens=" | ".join(lembretes)))
+        # Guarda o pedido LITERAL do turno: a compactacao poe ele na frente do
+        # resumo, senao o objetivo da pessoa era o primeiro dado a virar adjetivo.
+        self._pedido_do_turno = user_text
+        user_text = user_text + "\n\n" + "\n".join(extras)
         self.last_reasoning = []
         self.last_compressed = False
         self._compactacao_travada = False   # cada turno tenta compactar de novo
         self._aviso_teto_dado = False       # aviso de orcamento ao modelo (uma vez)
         self.stop_event.clear()
+        self._voltar_ao_principal()   # turno novo: a reserva do turno anterior nao gruda
         fotos = [c for c in (imagens or []) if c]
         if imagem:
             fotos.insert(0, imagem)
@@ -281,22 +465,28 @@ class Agent:
                     raise LLMError(str(exc) + t("agent.overflow_still",
                                                 ctx=i18n.cmd("ctx"))) from exc
             except LLMError as exc:
+                # Provedor principal fora do ar / cota estourada: tenta a reserva
+                # (/reserva) UMA vez, com a mesma conversa e o mesmo pedido.
+                if self._trocar_para_reserva(exc):
+                    self._round_start()
+                    msg = self._call_model(use_stream)
                 # Modelo sem visao: segue sem a foto (nunca deixa a pessoa sem resposta).
-                if not (self._tem_imagem() and _parece_falta_de_visao(exc)):
+                elif not (self._tem_imagem() and _parece_falta_de_visao(exc)):
                     raise
-                self._tirar_imagem()
-                try:
-                    marca = self._chave_visao()
-                    lista = self.cfg.setdefault("vision_blocklist", [])
-                    if marca not in lista:
-                        lista.append(marca)
-                        from .config import save_config
-                        save_config(self.cfg)
-                except Exception:  # noqa: BLE001 - memoria de recurso nunca derruba o turno
-                    pass
-                self._note(t("agent.vision_refused", model=i18n.cmd("model")))
-                self._round_start()
-                msg = self._call_model(use_stream)
+                else:
+                    self._tirar_imagem()
+                    try:
+                        marca = self._chave_visao()
+                        lista = self.cfg.setdefault("vision_blocklist", [])
+                        if marca not in lista:
+                            lista.append(marca)
+                            from .config import save_config
+                            save_config(self.cfg)
+                    except Exception:  # noqa: BLE001 - memoria de recurso nunca derruba o turno
+                        pass
+                    self._note(t("agent.vision_refused", model=i18n.cmd("model")))
+                    self._round_start()
+                    msg = self._call_model(use_stream)
             if (not msg.get("tool_calls") and not msg.get("stopped")
                     and not str(msg.get("content") or "").strip()):
                 # Resposta SEM texto (o modelo gastou a saida pensando, tipico logo
@@ -591,6 +781,73 @@ class Agent:
             except Exception:  # noqa: BLE001 - reset de cabecalho nunca derruba o turno
                 pass
 
+    # ----- reserva de provedor ------------------------------------------------
+    def _cfg_do_perfil(self, nome: str) -> dict | None:
+        """Config temporaria de um perfil salvo (None quando o perfil nao serve)."""
+        perfis = self.cfg.get("profiles") or {}
+        perfil = perfis.get(nome) if isinstance(perfis, dict) else None
+        if (not isinstance(perfil, dict) or not perfil.get("base_url")
+                or not perfil.get("model")):
+            return None
+        novo = dict(self.cfg)   # copia: orcamento, thinking e o resto continuam valendo
+        for chave in ("base_url", "model", "api_key", "provider"):
+            if perfil.get(chave):
+                novo[chave] = perfil[chave]
+        return novo
+
+    def _trocar_para_reserva(self, exc: BaseException) -> bool:
+        """Troca para o primeiro perfil de reserva que responder (uma vez por turno).
+
+        O que NAO troca: sem reserva configurada (/reserva), contexto estourado (o
+        caminho e' compactar), texto ja' mostrado na tela (repetir duplicaria a
+        resposta) e quando a pessoa mandou parar. Nada e' gravado no config: a
+        reserva vale para ESTE turno e o principal volta no turno seguinte.
+        """
+        if isinstance(exc, ContextOverflowError) or self._reserva_usada:
+            return False
+        if self.stop_event.is_set():
+            return False
+        if bool(getattr(self.llm, "mostrou_texto", False)):
+            return False
+        lista = self.cfg.get("fallback_profiles") or []
+        if not isinstance(lista, list):
+            return False
+        atual = (str(self.cfg.get("base_url", "")), str(self.cfg.get("model", "")))
+        for nome in lista:
+            novo_cfg = self._cfg_do_perfil(str(nome))
+            if novo_cfg is None:
+                continue
+            if (str(novo_cfg.get("base_url", "")),
+                    str(novo_cfg.get("model", ""))) == atual:
+                continue   # e' o proprio provedor que acabou de falhar
+            reserva = LLM(novo_cfg)
+            # Os ganchos da tela viajam com o cliente novo: sem isso o aviso de
+            # espera e a contagem de tokens sumiam justamente no turno com problema.
+            reserva.on_note = getattr(self.llm, "on_note", None)
+            modelo_que_falhou = str(self.cfg.get("model", ""))
+            self._llm_principal = self.llm
+            self.llm = reserva
+            self._reserva_usada = True
+            # Motivo em UMA frase (a mensagem amigavel vem comprida: corta no
+            # primeiro ponto para o aviso nao virar paragrafo na tela).
+            motivo = (str(exc).splitlines()[0].split(". ")[0][:120]
+                      if str(exc) else type(exc).__name__)
+            self._note(t("agent.fallback_on",
+                         modelo=modelo_que_falhou or str(novo_cfg.get("model", "")),
+                         perfil=str(nome), motivo=motivo))
+            return True
+        return False
+
+    def _voltar_ao_principal(self) -> None:
+        """Turno novo comeca no provedor principal (a reserva foi so' uma vez)."""
+        if self._llm_principal is None:
+            return
+        self.llm = self._llm_principal
+        self._llm_principal = None
+        self._reserva_usada = False
+        self._note(t("agent.fallback_back",
+                     modelo=str(self.cfg.get("model", ""))))
+
     def _call_model(self, use_stream: bool) -> dict:
         if use_stream:
             return self.llm.chat_stream(
@@ -636,6 +893,7 @@ class Agent:
         budget = int(self.cfg.get("context_budget_chars", 250000))
         teto = min(int(budget * self.FRACAO_DADOS), self.MAX_DADOS_CHARS)
         partes: list[str] = []
+        vistos: set[str] = set()
         total = 0
         cortados = 0
         anteriores = ""
@@ -660,6 +918,13 @@ class Agent:
             texto = self._texto_de(mensagem).strip()
             if not texto:
                 continue
+            # Leitura repetida do MESMO arquivo (ou o mesmo comando rodado de novo)
+            # entrava N vezes no bloco de dados: a mais recente basta, e o espaco
+            # que sobra fica para resultados diferentes.
+            impressao = " ".join(texto.split())[:400]
+            if impressao in vistos:
+                continue
+            vistos.add(impressao)
             pedaco = (texto if len(texto) <= 2000
                       else texto[:1400] + "\n[...]\n" + texto[-600:])
             if total + len(pedaco) > teto:
@@ -707,10 +972,17 @@ class Agent:
         dados = self._dados_verbatim(head)
         if dados:
             corpo += "\n\n" + t("agent.data_header") + "\n" + dados
+        blocos: list[str] = []
+        pedido = str(getattr(self, "_pedido_do_turno", "") or "").strip()
+        if pedido:
+            # O pedido da pessoa vai LITERAL e na frente do resumo: e' o dado que
+            # mais sumia (achatado em "30 pontos") e o que o turno precisa para
+            # nao entregar outra coisa depois de compactar.
+            blocos.append(t("agent.pinned_header") + "\n" + pedido[:2000])
+        blocos.append(t("agent.summary_header") + corpo)
         self.messages = [self.messages[0]] + [
             {"role": "system",
-             "content": t("agent.summary_header") + corpo + "\n\n"
-                        + t("agent.summary_guard")}
+             "content": "\n\n".join(blocos) + "\n\n" + t("agent.summary_guard")}
         ] + tail
         self._save_session()
         return True
@@ -756,6 +1028,26 @@ class Agent:
             self._compactacao_travada = True
             self._note(t("agent.ctx_stuck", ctx=i18n.cmd("ctx"), new=i18n.cmd("new")))
         return did
+
+    def compactar_no_fim_do_turno(self) -> bool:
+        """Compacta ao FIM do turno quando o contexto ja passou do limiar.
+
+        A espera do resumo passa a acontecer DEPOIS da resposta entregue, e o
+        proximo turno comeca com espaco - antes a compactacao travava o meio do
+        trabalho seguinte. Nada aqui pode derrubar a tela: o turno ja terminou.
+        """
+        try:
+            if self._compactacao_travada:
+                return False
+            budget = max(int(self.cfg.get("context_budget_chars", 250000)), 1)
+            if self._estimate_chars() * 100 // budget < self._compress_pct():
+                return False
+            # Alvo logo abaixo do limiar: compactar ate' 70% no fim do turno
+            # jogaria fora troca de ferramenta recente sem necessidade.
+            alvo = max(0.5, (self._compress_pct() - 10) / 100)
+            return self._force_compress(alvo)
+        except Exception:  # noqa: BLE001 - compactacao nunca derruba a tela
+            return False
 
     def _abrir_espaco_para_imagem(self, pct: float = 0.55) -> bool:
         """Compacta ANTES de mandar foto quando a conversa ja encheu o contexto.

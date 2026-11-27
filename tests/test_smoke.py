@@ -634,6 +634,123 @@ ok("/ctx pelo ChatCore mostra o medidor", act == "continue" and any("contexto:" 
 act = core_obj.submit("/sair")
 ok("/sair pelo ChatCore encerra", act == "exit")
 
+# --- medidor de contexto anda DURANTE o turno (barra amarela do TUI) ---------
+# Regressao do caso do dono: com um turno de 6 minutos cheio de ferramentas, a
+# barra amarela mostrava "ctx 3% ... (1 msg)" parado - print_ctx so' rodava no fim.
+class _SinkMedidor(RecSink):
+    """Tela de teste que registra cada leitura do medidor (set_ctx)."""
+
+    def __init__(self):
+        super().__init__()
+        self.ctx_leituras: list[dict] = []
+
+    def set_ctx(self, text, pct=None, hot_pct=None, extra=""):
+        self.ctx_leituras.append({"pct": pct, "texto": str(text)})
+
+    def ask_approval(self, label, detail, allow_always):
+        return "o"   # ferramenta liberada: o turno tem que atravessar as rodadas
+
+
+_llm_med = FakeLLM([
+    {"role": "assistant", "content": "", "tool_calls": [
+        {"id": f"m{i}", "type": "function",
+         "function": {"name": "run_command", "arguments": '{"command": "echo r%d"}' % i}}]}
+    for i in (1, 2, 3)
+] + [{"role": "assistant", "content": "acabaram as rodadas"}])
+_sink_med = _SinkMedidor()
+_core_med = ChatCore(dict(core_cfg), _sink_med, llm=_llm_med)
+_core_med.submit("rode tres comandos e me diga o resultado")
+_leituras = _sink_med.ctx_leituras
+ok("medidor atualiza a cada rodada do turno (barra do TUI nao congela)",
+   len(_leituras) >= 4)
+ok("medidor mostra numero novo no meio do turno, nao o do inicio",
+   len(_leituras) >= 2 and _leituras[0]["texto"] != _leituras[-1]["texto"]
+   and _leituras[-1]["pct"] >= _leituras[0]["pct"])
+
+# --- v0.2.47: sessoes guardadas, data/hora no pedido e historico de entrada ---
+import re as _re  # noqa: E402
+
+from bgh.config import INPUT_HISTORY_FILE, SESSOES_DIR  # noqa: E402
+from bgh.i18n import when_now as _when_now  # noqa: E402
+
+ok("when_now devolve dia, data, hora e fuso",
+   _re.match(r"[a-z-]+, \d{2}/\d{2}/\d{4}, \d{2}:\d{2}( \([-+]\d{2}\))?$", _when_now())
+   is not None)
+
+# Isola a sessao: os testes de cima deixaram conversa no session.json e um
+# ChatCore novo RETOMA esse arquivo - o assunto da "sessao nova" seria o de antes.
+_sessao_disco = Path(os.environ["BGH_HOME"], "session.json")
+if _sessao_disco.exists():
+    _sessao_disco.unlink()
+
+_rec_ses = RecSink()
+_core_ses = ChatCore(dict(core_cfg), _rec_ses, llm=FakeLLM([
+    {"role": "assistant", "content": "ok 1"},
+    {"role": "assistant", "content": "ok 2"},
+]))
+_core_ses.submit("preciso de ajuda com a impressora")
+_pedido = next(m for m in reversed(_core_ses.agent.messages)
+               if m.get("role") == "user")
+ok("data/hora do pedido viaja junto da mensagem da pessoa",
+   "(AGORA:" in _pedido["content"]
+   and _re.search(r"\d{2}/\d{2}/\d{4}, \d{2}:\d{2}", _pedido["content"]) is not None)
+ok("a data/hora nao entra no titulo da sessao",
+   "AGORA" not in _core_ses.agent._titulo(_core_ses.agent.messages))
+
+_core_ses.submit("/nova")
+ok("/nova avisa que a conversa ficou guardada",
+   any("guardada" in ln for ln in _rec_ses.lines))
+_lista_ses = _core_ses.agent.sessoes_guardadas()
+_alvo_ses = next((i for i in _lista_ses if "impressora" in i["titulo"]), None)
+ok("/nova guarda a conversa com data e assunto",
+   _alvo_ses is not None and _re.search(r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}", _alvo_ses["data"])
+   is not None)
+ok("arquivo da sessao tem data no nome (assinatura estavel)",
+   _alvo_ses is not None
+   and _re.match(r"\d{4}-\d{2}-\d{2}_\d{6}-", Path(_alvo_ses["caminho"]).name) is not None)
+
+_rec_ses.lines.clear()
+_core_ses.submit("/sessoes")
+ok("/sessoes lista a conversa guardada com data e mensagens",
+   any("impressora" in ln and "mensagens" in ln for ln in _rec_ses.lines))
+_core_ses.submit(f"/abrir {_alvo_ses['n']}")
+ok("/abrir retoma a conversa guardada",
+   any("impressora" in str(m.get("content")) for m in _core_ses.agent.messages)
+   and any("retomada" in ln for ln in _rec_ses.lines))
+ok("sessao aberta sai da lista (nao duplica arquivo)",
+   not Path(_alvo_ses["caminho"]).exists())
+_core_ses.submit("/abrir 999")
+ok("/abrir com numero fora da lista nao quebra e ensina",
+   any("Nao achei" in ln or "Use /sessoes" in ln for ln in _rec_ses.lines))
+
+_hist_antes = (INPUT_HISTORY_FILE.read_text(encoding="utf-8")
+               if INPUT_HISTORY_FILE.exists() else "")
+_core_hist = ChatCore(dict(core_cfg), RecSink(), llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+_core_hist.submit("mensagem vinda do navegador")
+_hist_depois = INPUT_HISTORY_FILE.read_text(encoding="utf-8")
+ok("mensagem de outra tela entra no historico da seta-para-cima",
+   len(_hist_depois) > len(_hist_antes)
+   and "+mensagem vinda do navegador" in _hist_depois)
+
+
+class _SinkHistoricoProprio(RecSink):
+    """Tela que ja grava o historico sozinha (a tela fixa, via FileHistory)."""
+
+    historico_proprio = True
+
+
+_core_hist2 = ChatCore(dict(core_cfg), _SinkHistoricoProprio(), llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+_core_hist2.submit("nao deve entrar no arquivo")
+ok("tela que grava sozinha nao ganha linha dobrada no historico",
+   "nao deve entrar no arquivo"
+   not in INPUT_HISTORY_FILE.read_text(encoding="utf-8"))
+
+# Limpeza: os testes daqui para baixo criam Agent que RETOMA o session.json; sem
+# isto eles herdariam a conversa de teste (e o /nova guarda essa conversa).
+_core_hist2.agent.new_session()
+
 opts_ap, codes_ap = build_approval_options(True)
 ok("menu de licenca tem 4 opcoes o/s/a/d", len(opts_ap) == 4 and codes_ap == ["o", "s", "a", "d"])
 ok("Enter sozinho ou invalido = nao (falha fechada)",
@@ -721,8 +838,11 @@ ok("request_timeout_s do config manda no teto",
    _timeout_for25({"base_url": "https://x/v1/", "request_timeout_s": 45}) == 45.0)
 _llm_remote = LLM25({"base_url": "https://ia.nubesbr.com/v1/", "model": "m"})
 ok("o cliente OpenAI recebe o teto calculado", float(_llm_remote.client.timeout) == 300.0)
+# 0.2.48: quem repete e' o LLM._pedido (1 + cfg["max_retries"] tentativas). O SDK
+# fica com max_retries=0: ele repetiria 429 as escuras (gastando cota) e nao sabe
+# que um timeout longo ja pagou a espera inteira.
 ok("uma pergunta nao vira fila de pedidos: retries padrao = 1",
-   _llm_remote.retries == 1 and int(_llm_remote.client.max_retries) == 1)
+   _llm_remote.retries == 1 and int(_llm_remote.client.max_retries) == 0)
 ok("LLM tem canal de aviso para a tela (espera nunca e silencio)", _llm_remote.on_note is None)
 ok("tetos de busca vem do config e tem piso/teto proprios",
    _limit_s({"search_time_limit_s": 9999}, "search_time_limit_s", 20) == 600
@@ -1767,6 +1887,623 @@ _llm_stream429 = _llm_falha27(_StatusErr27("429 rate limit reached"))
 _err_stream429 = _captura27(lambda: _llm_stream429.chat_stream([{"role": "user", "content": "oi"}]))
 ok("429 no streaming nao dispara um segundo pedido sem streaming",
    isinstance(_err_stream429, _RateErr27) and len(_llm_stream429.client.pedidos) == 1)
+
+# ---------- 0.2.48: repeticao de falha passageira (rede/5xx) ------------------
+# Sem httpx no ambiente (o openai daqui usa httpx2): o objeto 'request' das
+# excecoes do SDK so' precisa existir, o codigo nao le nada dele.
+from openai import APIConnectionError as _Conn28  # noqa: E402
+from openai import APITimeoutError as _Timeout28  # noqa: E402
+
+
+class _CompRede28:
+    """create() que falha N vezes e depois responde (servidor voltando)."""
+
+    def __init__(self, falhas, exc, texto="recuperei"):
+        self._falhas = falhas
+        self._exc = exc
+        self._texto = texto
+        self.pedidos = 0
+
+    def create(self, **kwargs):
+        self.pedidos += 1
+        if self.pedidos <= self._falhas:
+            raise self._exc
+        msg = types.SimpleNamespace(content=self._texto, reasoning_content=None,
+                                    tool_calls=None)
+        escolha = types.SimpleNamespace(finish_reason="stop", message=msg)
+        return types.SimpleNamespace(choices=[escolha], usage=None)
+
+
+class _ClientRede28:
+    def __init__(self, comp):
+        self.chat = types.SimpleNamespace(completions=comp)
+
+
+def _llm_rede28(falhas, exc):
+    llm = _LLM27({"base_url": "http://fake/v1", "model": "m"})
+    llm.client = _ClientRede28(_CompRede28(falhas, exc))
+    return llm
+
+
+_req28 = types.SimpleNamespace(method="POST", url="http://fake/v1")
+
+_llm_pass = _llm_rede28(1, _Conn28(request=_req28))
+_avisos28: list[str] = []
+_llm_pass.on_note = _avisos28.append
+_out_pass = _llm_pass.chat([{"role": "user", "content": "oi"}])
+ok("falha passageira de rede repete o pedido e a resposta chega",
+   _out_pass.get("content") == "recuperei"
+   and _llm_pass.client.chat.completions.pedidos == 2)
+ok("a repeticao avisa a tela (silencio nao pode parecer trava)",
+   any("tentando de novo" in a for a in _avisos28))
+
+_llm_to28 = _llm_rede28(9, _Timeout28(request=_req28))
+_err_to28 = _captura27(lambda: _llm_to28.chat([{"role": "user", "content": "oi"}]))
+ok("timeout NAO e' repetido (a espera ja foi inteira)",
+   _llm_to28.client.chat.completions.pedidos == 1 and isinstance(_err_to28, _LLMErr27)
+   and "nao respondeu" in str(_err_to28))
+
+_llm_off28 = _llm_rede28(9, _Conn28(request=_req28))
+_err_off28 = _captura27(lambda: _llm_off28.chat([{"role": "user", "content": "oi"}]))
+ok("servidor fora do ar vira frase de gente, com o endereco do servidor",
+   isinstance(_err_off28, _LLMErr27) and "http://fake/v1" in str(_err_off28)
+   and "APIConnectionError" not in str(_err_off28))
+ok("servidor fora do ar: duas tentativas (1 + max_retries) e depois desiste",
+   _llm_off28.client.chat.completions.pedidos == 2)
+
+_llm_5x28 = _llm_rede28(9, _StatusErr27("Internal server error", status=503))
+_err_5x28 = _captura27(lambda: _llm_5x28.chat([{"role": "user", "content": "oi"}]))
+ok("5xx repete uma vez e depois avisa em frase simples, com o codigo",
+   _llm_5x28.client.chat.completions.pedidos == 2
+   and isinstance(_err_5x28, _LLMErr27) and "503" in str(_err_5x28))
+
+# Contexto grande NAO entra na repeticao: o caminho e' compactar e tentar de novo.
+_llm_ctx28 = _llm_rede28(9, _StatusErr27("the request exceeds the available context size",
+                                        status=500))
+_err_ctx28 = _captura27(lambda: _llm_ctx28.chat([{"role": "user", "content": "oi"}]))
+ok("contexto estourado nao gasta repeticao (segue para a compactacao)",
+   _llm_ctx28.client.chat.completions.pedidos == 1
+   and type(_err_ctx28).__name__ == "ContextOverflowError")
+
+# ---------- 0.2.49: aviso quando o TEO para e espera voce --------------------
+from bgh import tui as _tui49  # noqa: E402
+
+ok("turno curto nao faz barulho; turno demorado avisa",
+   not _tui49.deve_avisar(3, {"notify": True})
+   and _tui49.deve_avisar(_tui49.AVISO_MIN_SEG, {"notify": True}))
+ok("/aviso desligado nao faz som nem notificacao",
+   not _tui49.deve_avisar(999, {"notify": False}))
+ok("aviso vem ligado de fabrica (quem sai da frente precisa saber)",
+   DEFAULTS.get("notify") is True)
+
+_which49 = _tui49.shutil.which
+if os.name == "posix":
+    try:
+        _tui49.shutil.which = lambda nome: "/usr/bin/" + nome
+        _argv49 = _tui49.argv_notificacao("TEO", "pronto")
+    finally:
+        _tui49.shutil.which = _which49
+    ok("aviso do sistema monta o comando do SO (notify-send/osascript)",
+       bool(_argv49) and _argv49[0] in ("notify-send", "osascript")
+       and "pronto" in _argv49)
+    try:
+        _tui49.shutil.which = lambda nome: None
+        _sem49 = _tui49.argv_notificacao("TEO", "pronto")
+    finally:
+        _tui49.shutil.which = _which49
+    ok("sem notificador instalado nao quebra: fica so' o bip", _sem49 is None)
+
+_sink49 = _tui49.TuiSink(lambda *a, **k: None, lambda: None, {}, width_fn=None)
+_chamadas49: list[tuple[str, str]] = []
+_sink49.avisar_fn = lambda titulo, corpo: _chamadas49.append((titulo, corpo))
+_sink49.avisar("TEO", "pronto")
+ok("a tela entrega o pedido de aviso para quem sabe avisar",
+   _chamadas49 == [("TEO", "pronto")])
+
+# A licenca que aparece no meio do turno PRECISA avisar: dali em diante o TEO
+# esta parado esperando a pessoa (o fio que pode enferrujar sem ninguem ver).
+import threading as _th49  # noqa: E402
+import time as _time49  # noqa: E402
+
+_state_pend: dict = {}
+_sink_pend = _tui49.TuiSink(lambda *a, **k: None, lambda: None, _state_pend, width_fn=None)
+_avisos_pend: list[tuple[str, str]] = []
+_sink_pend.avisar_fn = lambda titulo, corpo: _avisos_pend.append((titulo, corpo))
+_th_ask = _th49.Thread(target=_sink_pend.ask_approval,
+                       args=("Apagar arquivo /tmp/a.txt", "detalhe", False), daemon=True)
+_th_ask.start()
+for _ in range(300):
+    if _avisos_pend:
+        break
+    _time49.sleep(0.01)
+ok("licenca esperando resposta dispara o aviso (som + notificacao)",
+   bool(_avisos_pend) and "Apagar arquivo" in _avisos_pend[0][1])
+if _state_pend.get("approval") is not None:   # libera a thread: negar
+    _state_pend["approval"]["choice"] = "d"
+    _state_pend["approval"]["ev"].set()
+_th_ask.join(timeout=2)
+
+_core_av49 = ChatCore(dict(core_cfg), RecSink(), llm=FakeLLM([
+    {"role": "assistant", "content": "ok"}]))
+_core_av49.cfg["notify"] = True
+_core_av49.submit("/aviso")
+ok("/aviso sem argumento desliga (e fica salvo)", _core_av49.cfg["notify"] is False)
+_core_av49.submit("/aviso liga")
+ok("/aviso liga volta a ligar", _core_av49.cfg["notify"] is True)
+
+# ---------- 0.2.50: memoria por relevancia (FTS5) e captura automatica -------
+from bgh.tools import memory as _mem50  # noqa: E402
+
+_mem50.load_lines("note")   # abre a base: garante que o indice foi tentado
+ok("busca da memoria usa indice FTS5 nesta maquina", _mem50._FTS["ok"] is True)
+
+_mem50.add("a impressora da sala usa o comando lp e papel A4", "note")
+for _i50 in range(50):
+    _mem50.add(f"nota antiga numero {_i50} sobre assuntos variados", "note")
+ok("busca acha por assunto mesmo com 50 gravacoes novas na frente",
+   "impressora" in _mem50.search("impressora"))
+ok("busca sem resultado devolve a frase de 'nao achei' (nao explode)",
+   "nada_a_ver_xyz" in _mem50.search("nada_a_ver_xyz"))
+
+_relev50 = _mem50.relevant("preciso imprimir um documento na impressora da sala")
+ok("memorias que combinam com o pedido sao selecionadas (nao as 50 ultimas)",
+   any("impressora" in item for item in _relev50))
+ok("busca entende as palavras fora de ordem (indice FTS, nao LIKE puro)",
+   "impressora" in _mem50.search("sala impressora"))
+ok("busca frouxa acha por radical quando a palavra exata nao existe "
+   "(imprimir -> impressora)", "impressora" in _mem50.search("imprimir"))
+ok("pedido sem assunto conhecido nao puxa memoria nenhuma",
+   _mem50.relevant("quanto e 2 mais 2") == [])
+ok("o bloco por turno nao repete o que ja esta no prompt",
+   _mem50.relevant("impressora da sala",
+                   ja_no_prompt={"a impressora da sala usa o comando lp e papel A4"})
+   == [])
+
+class _LLM50:
+    def __init__(self):
+        self.last_usage = None
+
+    def chat(self, messages, tools=None):
+        return {"role": "assistant", "content": "ok"}
+
+
+_cfg50 = dict(core_cfg)
+_ag50 = Agent(_cfg50, _LLM50(), Gate(_cfg50, lambda *a: "o"))
+_ag50.new_session()
+_ag50.run_turn("como faco para usar a impressora da sala?")
+_pedido50 = str(_ag50.messages[1].get("content"))
+ok("o pedido leva as memorias que combinam junto da mensagem",
+   "(MEMORIAS QUE JA SEI" in _pedido50 and "impressora" in _pedido50
+   and "(AGORA:" in _pedido50)
+
+_mem50._ULTIMO_ADD["quando"] = 0.0
+ok("frase de pedido permanente e' guardada sozinha (rede de seguranca)",
+   _mem50.capturar("meu nome e Maria e eu prefiro respostas curtas")
+   == "meu nome e Maria e eu prefiro respostas curtas")
+ok("captura nao duplica o que ja esta na memoria",
+   _mem50.capturar("meu nome e Maria e eu prefiro respostas curtas") is None)
+ok("pedido comum do dia a dia nao vira memoria",
+   _mem50.capturar("apague o arquivo da area de trabalho") is None)
+_mem50._ULTIMO_ADD["quando"] = _time49.time()
+ok("captura cala quando o modelo ja gravou algo no mesmo turno",
+   _mem50.capturar("prefiro respostas curtas",
+                   depois_de=_mem50._ULTIMO_ADD["quando"] - 1) is None)
+_mem50._ULTIMO_ADD["quando"] = 0.0
+
+# ---------- 0.2.51: compactacao (pedido fixado, dedupe, fim de turno) --------
+class _LLM70(_LLM50):
+    """Modelo falso que tambem resume (a compactacao chama summarize)."""
+
+    def __init__(self, resumo="RESUMO OK"):
+        super().__init__()
+        self.resumo = resumo
+
+    def summarize(self, text):
+        return self.resumo
+
+
+def _troca70(i: int, conteudo: str) -> list:
+    """Um par (assistant com tool_calls, resultado da ferramenta)."""
+    return [{"role": "assistant", "content": "", "tool_calls": [
+                {"id": f"c{i}", "type": "function",
+                 "function": {"name": "read_file", "arguments": "{}"}}]},
+            {"role": "tool", "content": conteudo}]
+
+
+_cfg70 = dict(core_cfg)
+_cfg70.update({"context_budget_chars": 8000, "context_compress_pct": 50})
+_ag70 = Agent(dict(_cfg70), _LLM70(), Gate(dict(_cfg70), lambda *a: "o"))
+_ag70.messages = [{"role": "system", "content": "prompt do sistema"}]
+for _i70 in range(6):
+    _ag70.messages += _troca70(_i70, f"resultado {_i70} " + "x" * 900)
+_ag70._pedido_do_turno = "quero um relatorio da rede com os IPs"
+ok("compactacao acontece de fato (a conversa encolhe)",
+   _ag70._compress_once() and len(_ag70.messages) < 12)
+_resumo70 = str(_ag70.messages[1].get("content"))
+ok("compactacao fixa o pedido atual LITERAL na frente do resumo",
+   "PEDIDO ATUAL DA PESSOA" in _resumo70 and "relatorio da rede" in _resumo70
+   and "RESUMO OK" in _resumo70)
+
+_ag70b = Agent(dict(_cfg70), _LLM70(), Gate(dict(_cfg70), lambda *a: "o"))
+_ag70b.messages = [{"role": "system", "content": "p"}]
+_ag70b.messages += _troca70(1, "MESMA LEITURA DO ARQUIVO " + "y" * 300)
+_ag70b.messages += _troca70(2, "MESMA LEITURA DO ARQUIVO " + "y" * 300)
+_ag70b.messages += _troca70(3, "outro resultado " + "z" * 300)
+_dados70 = _ag70b._dados_verbatim(_ag70b.messages[1:])
+ok("bloco de dados nao repete a mesma leitura duas vezes",
+   _dados70.count("MESMA LEITURA DO ARQUIVO") == 1
+   and "outro resultado" in _dados70)
+
+_ag71 = Agent(dict(_cfg70), _LLM70(), Gate(dict(_cfg70), lambda *a: "o"))
+_ag71.messages = [{"role": "system", "content": "p"}]
+for _i71 in range(6):
+    _ag71.messages += _troca70(_i71, f"resultado {_i71} " + "w" * 900)
+_antes71 = len(_ag71.messages)
+ok("compactacao NO FIM do turno roda quando passou do limiar",
+   _ag71.compactar_no_fim_do_turno() is True and len(_ag71.messages) < _antes71)
+_ag74 = Agent(dict(_cfg70), _LLM70(), Gate(dict(_cfg70), lambda *a: "o"))
+_ag74.messages = [{"role": "system", "content": "p"},
+                  {"role": "user", "content": "oi"}]
+ok("compactacao no fim do turno nao roda quando nao precisa",
+   _ag74.compactar_no_fim_do_turno() is False)
+
+class _Comp72:
+    """create() do SDK falso: anota o modelo pedido e pode falhar na 1a vez."""
+
+    def __init__(self, falhas=0):
+        self.vistos: list[str] = []
+        self.falhas = falhas
+
+    def create(self, **kwargs):
+        self.vistos.append(str(kwargs.get("model")))
+        if len(self.vistos) <= self.falhas:
+            raise Exception("boom")
+        msg = types.SimpleNamespace(content="resumo do modelo falso",
+                                    reasoning_content=None, tool_calls=None)
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(finish_reason="stop", message=msg)],
+            usage=None)
+
+
+from bgh.llm import LLM as _LLM72  # noqa: E402
+
+_llm72 = _LLM72({"base_url": "http://fake/v1", "model": "grande",
+                 "summary_model": "pequeno"})
+_llm72.client = types.SimpleNamespace(
+    chat=types.SimpleNamespace(completions=_Comp72()))
+ok("resumo usa o modelo dedicado (cfg summary_model)",
+   _llm72.summarize("conversa") == "resumo do modelo falso"
+   and _llm72.client.chat.completions.vistos == ["pequeno"])
+
+_llm73 = _LLM72({"base_url": "http://fake/v1", "model": "grande",
+                 "summary_model": "pequeno"})
+_llm73.client = types.SimpleNamespace(
+    chat=types.SimpleNamespace(completions=_Comp72(falhas=1)))
+ok("modelo de resumo que falha cai no modelo principal (nao perde a compactacao)",
+   _llm73.summarize("conversa") == "resumo do modelo falso"
+   and _llm73.client.chat.completions.vistos == ["pequeno", "grande"])
+
+# ---------- 0.2.52: buscar, exportar, /erro e tela simples -------------------
+_rec52 = RecSink()
+_core52 = ChatCore(dict(core_cfg), _rec52, llm=FakeLLM([
+    {"role": "assistant", "content": "anotei o assunto do orquidario"},
+    {"role": "assistant", "content": "ok"},
+    {"role": "assistant", "content": "ok"},
+]))
+_core52.submit("como cuido do orquidario no inverno")
+_rec52.lines.clear()
+_core52.submit("/buscar orquidario")
+ok("/buscar acha o trecho na conversa (inclusive na fala do TEO)",
+   any("Achei" in ln for ln in _rec52.lines)
+   and sum(1 for ln in _rec52.lines if "orquidario" in ln) >= 2)
+_rec52.lines.clear()
+_core52.submit("/buscar zzzzinho")
+ok("/buscar sem resultado avisa em vez de ficar mudo",
+   any("Nao achei" in ln for ln in _rec52.lines))
+
+_docs52 = TMP / "Documentos_teste"
+_osd52 = os.environ.get("XDG_DOCUMENTS_DIR")
+os.environ["XDG_DOCUMENTS_DIR"] = str(_docs52)
+_rec52.lines.clear()
+_core52.submit("/exportar teste-do-teo")
+if _osd52 is None:
+    os.environ.pop("XDG_DOCUMENTS_DIR", None)
+else:
+    os.environ["XDG_DOCUMENTS_DIR"] = _osd52
+_arquivos52 = sorted(_docs52.glob("teo-teste-do-teo-*.txt")) if _docs52.exists() else []
+_exportado52 = _arquivos52[0].read_text(encoding="utf-8") if _arquivos52 else ""
+ok("/exportar salva a conversa em ~/Documentos (nome pedido no arquivo)",
+   bool(_arquivos52))
+ok("conversa exportada tem as falas e nao leva a marca (AGORA:)",
+   "orquidario" in _exportado52 and "AGORA" not in _exportado52
+   and "[Voce]" in _exportado52 and "[TEO]" in _exportado52)
+
+_erro52 = Path(os.environ["BGH_HOME"], "erro.log")
+_erro52.write_text("===== 2026-11-27T10:00:00 | teste da suite\n"
+                   "ValueError: algo deu errado de proposito\n",
+                   encoding="utf-8")
+_rec52.lines.clear()
+_core52.submit("/erro")
+ok("/erro mostra o ultimo bloco do erro.log, pronto para copiar",
+   any("ValueError: algo deu errado de proposito" in ln for ln in _rec52.lines))
+
+_core52.cfg["tela_simples"] = False
+_core52.submit("/simples")
+ok("/simples sem argumento liga a tela simples", _core52.cfg["tela_simples"] is True)
+_core52.submit("/simples desliga")
+ok("/simples desliga volta a tela normal", _core52.cfg["tela_simples"] is False)
+
+_sink52 = _tui49.TuiSink(lambda *a, **k: None, lambda: None, {}, width_fn=None)
+_sink52.state["simples"] = True
+_emits52: list = []
+_sink52.emit = lambda *a, **k: _emits52.append(a)
+_sink52.tool_event("read_file", "/home/x/segredo.txt")
+ok("tela simples nao imprime a ferramenta (nem o caminho do arquivo)",
+   _emits52 == [] and _sink52.state["tool"] == "read_file")
+_sink52.aplicar_simples(False)
+ok("aplicar_simples troca a tela na hora", _sink52.state["simples"] is False)
+
+_estado52 = {"busy": True, "spin": 0, "busy_since": _time49.time() - 30,
+             "tool": "read_file", "tool_since": _time49.time() - 10,
+             "approval": None, "ctx": "", "simples": True}
+ok("barra de baixo esconde o nome da ferramenta na tela simples",
+   "read_file" not in _tui49._status_text(dict(_estado52), 120)[0][1])
+_estado52["simples"] = False
+ok("barra de baixo mostra a ferramenta na tela normal",
+   "read_file" in _tui49._status_text(dict(_estado52), 120)[0][1])
+
+# ---------- 0.2.53: reserva de provedor --------------------------------------
+import bgh.agent as _agmod53  # noqa: E402
+from bgh.llm import ContextOverflowError as _CtxErr53  # noqa: E402
+
+
+class _LLMCai53:
+    """Provedor principal que nao responde (retry ja esgotado)."""
+
+    def __init__(self, exc=None):
+        self.exc = exc or _LLMErr27("servidor fora do ar")
+        self.last_usage = None
+        self.last_finish = None
+        self.mostrou_texto = False
+        self.on_note = None
+
+    def chat(self, messages, tools=None, model=None):
+        raise self.exc
+
+    def chat_stream(self, *a, **k):
+        raise self.exc
+
+
+_cfg53 = dict(core_cfg)
+_cfg53.update({
+    "stream": False,
+    "profiles": {
+        "principal": {"base_url": "http://principal/v1", "model": "modelo-principal"},
+        "reserva": {"base_url": "http://reserva/v1", "model": "modelo-reserva"},
+    },
+    "active_profile": "principal",
+    "base_url": "http://principal/v1",
+    "model": "modelo-principal",
+    "fallback_profiles": ["reserva"],
+})
+_vistos53: list[tuple] = []
+
+
+class _Reserva53:
+    """Cliente do perfil de reserva (substitui LLM so' no teste)."""
+
+    def __init__(self, cfg):
+        _vistos53.append((cfg.get("base_url"), cfg.get("model")))
+        self.cfg = cfg
+        self.last_usage = None
+        self.last_finish = None
+        self.mostrou_texto = False
+        self.on_note = None
+
+    def chat(self, messages, tools=None, model=None):
+        return {"role": "assistant", "content": "respondi pela reserva"}
+
+
+_orig_LLM53 = _agmod53.LLM
+try:
+    _agmod53.LLM = _Reserva53
+    _ag53 = Agent(dict(_cfg53), _LLMCai53(), Gate(dict(_cfg53), lambda *a: "o"))
+    _notas53: list[str] = []
+    _ag53.on_note = _notas53.append
+    _resposta53 = _ag53.run_turn("quem descobriu o brasil?")
+    _vistos53_turno1 = list(_vistos53)
+    _notas53_turno2: list[str] = []
+    _ag53.on_note = _notas53_turno2.append
+    _resposta53b = _ag53.run_turn("e o segundo turno?")
+
+    _llm53b = _LLMCai53()
+    _llm53b.mostrou_texto = True
+    _ag53b = Agent(dict(_cfg53), _llm53b, Gate(dict(_cfg53), lambda *a: "o"))
+    _err53b = _captura27(lambda: _ag53b.run_turn("oi"))
+
+    _vistos53.clear()
+    _ag53c = Agent(dict(_cfg53), _LLMCai53(_CtxErr53("context length exceeded")),
+                   Gate(dict(_cfg53), lambda *a: "o"))
+    _err53c = _captura27(lambda: _ag53c.run_turn("resuma tudo"))
+finally:
+    _agmod53.LLM = _orig_LLM53
+
+ok("provedor que cai troca para a reserva e a resposta chega",
+   "reserva" in _resposta53
+   and ("http://reserva/v1", "modelo-reserva") in _vistos53_turno1)
+ok("a troca e' avisada na tela (nunca troca calado)",
+   any("reserva" in nota for nota in _notas53))
+ok("a reserva nao gruda: o turno seguinte avisa que voltou ao principal",
+   _resposta53b == "respondi pela reserva"
+   and any("principal" in nota for nota in _notas53_turno2))
+ok("texto ja' mostrado na tela NAO dispara reserva (duplicaria a resposta)",
+   isinstance(_err53b, _LLMErr27))
+ok("contexto estourado nao vira troca de provedor (o caminho e' compactar)",
+   _vistos53 == [] and isinstance(_err53c, _LLMErr27))
+
+_rec53 = RecSink()
+_core53 = ChatCore(dict(_cfg53), _rec53, llm=_LLM50())
+_core53.submit("/reserva")
+ok("/reserva sem argumento mostra a lista e o atual",
+   any("Reserva de provedor" in ln for ln in _rec53.lines))
+_core53.submit("/reserva 2")
+ok("/reserva <numero> define o perfil de reserva",
+   _core53.cfg["fallback_profiles"] == ["reserva"])
+_core53.submit("/reserva off")
+ok("/reserva off desliga a troca automatica", _core53.cfg["fallback_profiles"] == [])
+
+# ---------- 0.2.54: lembrete e documentos docx/xlsx/pdf ----------------------
+from bgh.tools import documents as _doc54  # noqa: E402
+from bgh.tools import lembrete as _lem54  # noqa: E402
+
+
+class _Ctx54:
+    """Contexto minimo da ferramenta lembrete (so' o canal de aviso)."""
+
+    def __init__(self):
+        self.avisos: list[str] = []
+
+    def avisar(self, texto):
+        self.avisos.append(str(texto))
+
+
+_ctx54 = _Ctx54()
+_res54 = _lem54.run({"minutos": 0.005, "texto": "tomar remedio"}, _ctx54)
+ok("lembrete marcado responde com o texto e avisa que vale com o TEO aberto",
+   "tomar remedio" in _res54 and "aberto" in _res54)
+_time49.sleep(0.6)
+ok("lembrete toca na hora certa (timer de verdade)",
+   any("tomar remedio" in aviso for aviso in _ctx54.avisos))
+ok("lembrete sem minutos nao marca nada", "ERRO" in _lem54.run({"texto": "x"}, _ctx54))
+ok("lembrete acima de 24 horas recusa",
+   "ERRO" in _lem54.run({"minutos": 5000, "texto": "x"}, _ctx54))
+
+_rec54 = RecSink()
+_core54 = ChatCore(dict(core_cfg), _rec54, llm=_LLM50())
+_core54.agent.tools.ctx.avisar("LEMBRETE: teste de canal")
+ok("o nucleo liga o canal do lembrete na tela",
+   any("LEMBRETE: teste de canal" in ln for ln in _rec54.lines))
+
+_ctx_doc54 = types.SimpleNamespace(cfg=dict(core_cfg),
+                                   gate=Gate({"command_allowlist": []}, lambda *a: "o"))
+_pasta54 = TMP / "docs54"
+_pasta54.mkdir(parents=True, exist_ok=True)
+_res_fmt54 = _doc54.make_document({"title": "x", "content_markdown": "y", "fmt": "rtf",
+                                   "path": str(_pasta54 / "x.rtf")}, _ctx_doc54)
+ok("formato desconhecido lista os que existem",
+   "ERRO" in _res_fmt54 and "pdf" in _res_fmt54 and "xlsx" in _res_fmt54)
+
+for _fmt54, _mod54, _pkg54 in (("docx", "docx", "python-docx"),
+                               ("xlsx", "openpyxl", "openpyxl"),
+                               ("pdf", "reportlab", "reportlab")):
+    _alvo54 = _pasta54 / f"doc.{_fmt54}"
+    _res54b = _doc54.make_document({"title": "Planilha de gastos",
+                                    "content_markdown": "| item | valor |\n|---|---|\n| luz | 120 |",
+                                    "fmt": _fmt54, "path": str(_alvo54)}, _ctx_doc54)
+    try:
+        __import__(_mod54)
+        _tem54 = True
+    except ImportError:
+        _tem54 = False
+    if _tem54:
+        ok(f"{_fmt54}: gera o arquivo quando a biblioteca existe",
+           _res54b.startswith("OK") and _alvo54.is_file() and _alvo54.stat().st_size > 0)
+    else:
+        ok(f"{_fmt54}: sem a biblioteca, ensina a instalar (nao falha calado)",
+           _pkg54 in _res54b and "instalar_pacote" in _res54b)
+
+# ---------- 0.2.55: handoff (.md na pasta do projeto) ------------------------
+class _LLM55(_LLM50):
+    """Modelo falso que devolve o documento de handoff."""
+
+    def __init__(self, texto="# Handoff\n\n## O que foi feito\n- mexi na impressora"):
+        super().__init__()
+        self.texto = texto
+        self.pedidos: list = []
+
+    def chat(self, messages, tools=None, model=None):
+        self.pedidos.append(messages)
+        return {"role": "assistant", "content": self.texto}
+
+
+class _LLMCai55(_LLM50):
+    def chat(self, messages, tools=None, model=None):
+        raise _LLMErr27("servidor fora do ar")
+
+
+def _handoff55(llm, comando="/handoff"):
+    """Roda o /handoff numa pasta temporaria e devolve (pasta, arquivos, texto, linhas)."""
+    rec = RecSink()
+    core = ChatCore(dict(core_cfg), rec, llm=llm)
+    core.submit("arrume a impressora da sala")
+    pasta = TMP / f"projeto55_{len(list(TMP.glob('projeto55_*')))}"
+    pasta.mkdir(exist_ok=True)
+    cwd = os.getcwd()
+    try:
+        os.chdir(pasta)
+        core.submit(comando)
+    finally:
+        os.chdir(cwd)
+    arquivos = sorted(pasta.rglob("*.md"))
+    texto = arquivos[0].read_text(encoding="utf-8") if arquivos else ""
+    return pasta, arquivos, texto, rec.lines
+
+
+_pasta55, _arquivos55, _texto55, _linhas55 = _handoff55(_LLM55())
+ok("handoff grava o .md na pasta do projeto (nome com data)",
+   len(_arquivos55) == 1 and _arquivos55[0].name.startswith("handoff-2"))
+ok("handoff tem cabecalho (data, modelo, pasta) e o resumo do modelo",
+   "Handoff do TEO" in _texto55 and "fake-model" in _texto55
+   and "mexi na impressora" in _texto55)
+ok("a tela diz o caminho e como continuar amanha",
+   any("Handoff salvo" in ln for ln in _linhas55)
+   and any("amanha" in ln.lower() for ln in _linhas55))
+
+_pasta55b, _arquivos55b, _texto55b, _linhas55b = _handoff55(
+    _LLMCai55(), "/handoff meu-nome")
+ok("handoff sem modelo ainda sai, com o registro das perguntas da conversa",
+   bool(_arquivos55b) and "resumo automatico" in _texto55b
+   and "arrume a impressora" in _texto55b)
+ok("/handoff <nome> usa o nome que a pessoa escolheu",
+   any(a.name == "meu-nome.md" for a in _arquivos55b))
+
+_pasta55c, _arquivos55c, _texto55c, _ = _handoff55(_LLM55(), "/handoff pasta-x/nota")
+ok("/handoff <pasta/nome> cria a pasta e salva o arquivo la",
+   (_pasta55c / "pasta-x" / "nota.md").is_file())
+
+_pasta55d, _arquivos55d, _, _ = _handoff55(_LLM55(), "/handoff sub/")
+ok("/handoff <pasta/> (com barra) entra na pasta e usa o nome padrao",
+   (_pasta55d / "sub").is_dir()
+   and any(a.name.startswith("handoff-") for a in (_pasta55d / "sub").glob("*.md")))
+
+# ---------- 0.2.56: menu de @ e / com setas (modelo testavel) ----------------
+_pasta56 = TMP / "menu56"
+(_pasta56 / "subpasta").mkdir(parents=True, exist_ok=True)
+(_pasta56 / "relatorio.pdf").write_text("x", encoding="utf-8")
+(_pasta56 / "nota.txt").write_text("y", encoding="utf-8")
+(_pasta56 / "outro.md").write_text("z", encoding="utf-8")
+
+_rot56 = [i["rotulo"] for i in _tui49.menu_itens(str(_pasta56))]
+ok("menu lista '..' primeiro, depois pastas e arquivos",
+   _rot56[0] == ".." and any(r.startswith("subpasta") for r in _rot56)
+   and "relatorio.pdf" in _rot56)
+ok("menu filtra pelo que a pessoa digita (sem ligar maiuscula)",
+   [i["rotulo"] for i in _tui49.menu_itens(str(_pasta56), "REL")] == ["relatorio.pdf"])
+ok("menu com filtro que nao acha nada devolve lista vazia",
+   _tui49.menu_itens(str(_pasta56), "zzz") == [])
+ok("setas dao a volta na lista (cima no primeiro vai para o ultimo)",
+   _tui49.menu_mover(0, 3, -1) == 2 and _tui49.menu_mover(2, 3, 1) == 0)
+ok("menu rola para manter o escolhido visivel",
+   _tui49.menu_janela(20, 0) == (0, _tui49.MENU_MAX)
+   and _tui49.menu_janela(20, 19)[1] == 20)
+_arq56 = {"rotulo": "nota.txt", "alvo": str(_pasta56 / "nota.txt"), "tipo": "file"}
+ok("@ poe o caminho para ANEXAR e / poe o caminho para ABRIR",
+   _tui49.menu_linha(_arq56, "arquivo") == "@" + _arq56["alvo"]
+   and _tui49.menu_linha(_arq56, "pasta") == "/ " + _arq56["alvo"])
+ok("a barra de baixo ensina as teclas do menu",
+   "setas" in _tui49._status_text({"busy": False, "approval": None,
+                                   "menu": {"pasta": "/x"}, "ctx": "",
+                                   "simples": False}, 120)[0][1])
 
 
 class _SinkStyle27(RecSink):

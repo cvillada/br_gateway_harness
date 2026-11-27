@@ -12,8 +12,22 @@ revisao fica lado a lado.
 - Texto e ASCII puro (regra do projeto): sem acento em portugues e espanhol.
 """
 
+from datetime import datetime
+
 LANGS = ("pt", "en", "es")
 LANG_NAMES = {"pt": "Portugues", "en": "English", "es": "Espanol"}
+
+# Nome do dia da semana por idioma (strftime("%A") depende do locale da maquina,
+# que costuma estar em ingles - o modelo receberia "Friday" numa sessao em pt).
+WEEKDAYS = {
+    "pt": ("segunda-feira", "terca-feira", "quarta-feira", "quinta-feira",
+           "sexta-feira", "sabado", "domingo"),
+    "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+           "Sunday"),
+    "es": ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado",
+           "domingo"),
+}
+
 _LANG = "pt"
 
 
@@ -73,6 +87,14 @@ ALIASES = {
     "update": ("atualizar", "update", "actualizar"),
     "lang": ("lingua", "language", "idioma", "lang"),
     "voice": ("voz", "voice", "voz"),
+    "notify": ("aviso", "avisos", "notify", "notificacao", "notificacion"),
+    # Buscar/exportar/erro/simples (0.2.52)
+    "find": ("buscar", "find", "buscar", "procurar"),
+    "export": ("exportar", "export", "exportar", "salvar"),
+    "error": ("erro", "error", "erro", "errores"),
+    "simple": ("simples", "simple", "sencillo", "facil"),
+    "reserve": ("reserva", "reserve", "reserva", "respaldo"),
+    "handoff": ("handoff", "passar", "passagem", "continuar-depois"),
     "clean": ("limpar", "clean", "limpiar"),
     "background": ("fundo", "background", "fondo"),
     "font": ("fonte", "font", "fuente"),
@@ -84,6 +106,10 @@ ALIASES = {
     # entendi". "app"/"navegador"/"webapp" sao apelidos antigos, seguem valendo.
     "screen": ("tela", "screen", "pantalla", "app", "navegador", "webapp",
                "browser"),
+    # Sessoes guardadas: /novo ARQUIVA em vez de apagar, /sessoes lista e /abrir
+    # retoma. Apelidos curtos porque quem usa TEO digita pouco (idoso/crianca).
+    "sessions": ("sessoes", "sessions", "sesiones", "historicos", "historico"),
+    "open": ("abrir", "open", "abrir", "retomar", "resume"),
 }
 
 # Como cada comando aparece ESCRITO na ajuda/avisos, por idioma.
@@ -104,6 +130,13 @@ CMD = {
     "update": ("/atualizar", "/update", "/actualizar"),
     "lang": ("/lingua", "/language", "/idioma"),
     "voice": ("/voz", "/voice", "/voz"),
+    "notify": ("/aviso", "/notify", "/aviso"),
+    "find": ("/buscar", "/find", "/buscar"),
+    "export": ("/exportar", "/export", "/exportar"),
+    "error": ("/erro", "/error", "/erro"),
+    "simple": ("/simples", "/simple", "/sencillo"),
+    "reserve": ("/reserva", "/reserve", "/reserva"),
+    "handoff": ("/handoff", "/handoff", "/handoff"),
     "clean": ("/limpar", "/clean", "/limpiar"),
     "background": ("/fundo", "/background", "/fondo"),
     "font": ("/fonte", "/font", "/fuente"),
@@ -112,6 +145,8 @@ CMD = {
     "screen": ("/tela", "/screen", "/pantalla"),
     "site": ("/site", "/site", "/site"),
     "zoom": ("/zoom", "/zoom", "/zoom"),
+    "sessions": ("/sessoes", "/sessions", "/sesiones"),
+    "open": ("/abrir", "/open", "/abrir"),
 }
 
 
@@ -255,9 +290,17 @@ HELP_SECTIONS = [
         ("/ajuda", "/help", "/ayuda",
          "esta lista", "this list", "esta lista"),
         ("/nova", "/new", "/nuevo",
-         "conversa nova (limpa contexto; memoria e skills continuam)",
-         "new conversation (clears context; memory and skills stay)",
-         "conversacion nueva (limpia el contexto; memoria y skills siguen)"),
+         "conversa nova (guarda a atual nas sessoes; memoria e skills continuam)",
+         "new conversation (saves the current one in sessions; memory and skills stay)",
+         "conversacion nueva (guarda la actual en sesiones; memoria y skills siguen)"),
+        ("/sessoes", "/sessions", "/sesiones",
+         "conversas guardadas: lista as ultimas com data e assunto",
+         "saved conversations: lists the latest with date and subject",
+         "conversaciones guardadas: lista las ultimas con fecha y asunto"),
+        ("/abrir <numero>", "/open <number>", "/abrir <numero>",
+         "volta numa conversa guardada (o numero sai da lista do /sessoes)",
+         "goes back to a saved conversation (number comes from the /sessions list)",
+         "vuelve a una conversacion guardada (el numero sale de la lista de /sesiones)"),
         ("/mem <texto>", "/mem <text>", "/mem <texto>",
          "grava uma preferencia sua na memoria permanente",
          "saves a preference of yours in permanent memory",
@@ -337,6 +380,55 @@ HELP_SECTIONS = [
          "type it again to turn off (ESC silences the voice)",
          "accesibilidad: lee las respuestas en voz alta con la voz del sistema; "
          "escribirlo otra vez apaga (ESC calla la voz)"),
+        ("/aviso", "/notify", "/aviso",
+         "som e notificacao do sistema quando o TEO termina um turno demorado ou "
+         "fica esperando sua resposta; digitar de novo desliga",
+         "beep and system notification when TEO finishes a long turn or is "
+         "waiting for your answer; type it again to turn off",
+         "bip y notificacion del sistema cuando el TEO termina un turno largo o "
+         "queda esperando tu respuesta; escribirlo otra vez apaga"),
+        ("/buscar <palavra>", "/find <word>", "/buscar <palabra>",
+         "procura uma palavra na conversa e mostra os trechos (ela mesma, "
+         "resumida pelo /exportar)",
+         "looks for a word in the conversation and shows the snippets (the "
+         "conversation itself, summarized by /export)",
+         "busca una palabra en la conversacion y muestra los trozos (la "
+         "conversacion misma, resumida por /exportar)"),
+        ("/exportar", "/export", "/exportar",
+         "salva a conversa em ~/Documentos (texto simples) para mandar a alguem; "
+         "aceita um nome: /exportar carta",
+         "saves the conversation in ~/Documentos (plain text) to send to someone; "
+         "takes a name: /export letter",
+         "guarda la conversacion en ~/Documentos (texto simple) para mandarla a "
+         "alguien; acepta un nombre: /exportar carta"),
+        ("/erro", "/error", "/erro",
+         "mostra o ultimo erro tecnico registrado, pronto para copiar e pedir ajuda",
+         "shows the last recorded technical error, ready to copy and ask for help",
+         "muestra el ultimo error tecnico registrado, listo para copiar y pedir ayuda"),
+        ("/simples", "/simple", "/sencillo",
+         "tela simples: esconde a trilha do pedido e o nome da ferramenta (para "
+         "crianca ou para quem se distrai com muita informacao)",
+         "simple screen: hides the request trail and the tool name (for a child or "
+         "for anyone distracted by too much information)",
+         "pantalla simple: esconde el recorrido del pedido y el nombre de la "
+         "herramienta (para ninos o para quien se distrae con mucha informacion)"),
+        ("/reserva <numero>", "/reserve <number>", "/reserva <numero>",
+         "provedor de reserva: se o principal nao responder, o TEO tenta esse UMA "
+         "vez no turno; /reserva off desliga",
+         "backup provider: if the main one does not answer, TEO tries this one ONCE "
+         "in the turn; /reserve off turns it off",
+         "proveedor de reserva: si el principal no responde, el TEO intenta ese UNA "
+         "vez en el turno; /reserva off lo apaga"),
+        ("/handoff [pasta/nome]", "/handoff [folder/name]", "/handoff [carpeta/nombre]",
+         "salva um .md com o que foi feito, onde paramos e os proximos passos, para "
+         "continuar em outro dia; sem argumento vai na pasta atual, e voce pode "
+         "escolher a pasta e o nome",
+         "saves a .md with what was done, where we stopped and the next steps, to "
+         "continue another day; with no argument it goes in the current folder, and you "
+         "can choose the folder and the name",
+         "guarda un .md con lo que se hizo, donde quedamos y los proximos pasos, para "
+         "continuar otro dia; sin argumento va en la carpeta actual, y puedes elegir la "
+         "carpeta y el nombre"),
         ("/limpar", "/clean", "/limpiar",
          "apaga os rascunhos que o TEO guarda na pasta scratch (scripts, textos "
          "da voz e temporarios) e diz quanto espaco foi liberado; com um tamanho "
@@ -659,6 +751,181 @@ CHAT = {
                      "(long answer: the voice reads only the beginning; the rest is on the screen)",
                      "(respuesta larga: la voz lee solo el comienzo; el resto esta en pantalla)"),
 
+    # /aviso: som no terminal + notificacao do sistema quando o TEO para e espera
+    # a pessoa (licenca) ou termina um turno demorado.
+    "cmd.aviso.on": ("Aviso LIGADO: quando um turno demorar, eu bipo e mostro uma "
+                     "notificacao ao terminar - e aviso na hora se ficar esperando "
+                     "sua resposta (licenca).",
+                     "Alert ON: when a turn takes long I beep and show a "
+                     "notification at the end - and I warn you right away if I am "
+                     "waiting for your answer (license).",
+                     "Aviso ACTIVADO: cuando un turno demore, hago un bip y muestro "
+                     "una notificacion al terminar - y aviso enseguida si quedo "
+                     "esperando tu respuesta (licencia)."),
+    "cmd.aviso.off": ("Aviso desligado: sem som e sem notificacao. As respostas "
+                      "continuam na tela normalmente.",
+                      "Alert off: no beep and no notification. Answers keep showing "
+                      "on screen as usual.",
+                      "Aviso desactivado: sin bip y sin notificacion. Las respuestas "
+                      "siguen en la pantalla normalmente."),
+    "cmd.aviso.bad": ("Use {cmd} para ligar/desligar o aviso (ou {cmd} ligar / "
+                      "desligar).",
+                      "Use {cmd} to turn the alert on/off (or {cmd} on / off).",
+                      "Usa {cmd} para activar/desactivar el aviso (o {cmd} activar / "
+                      "desactivar)."),
+    # /buscar: achar um trecho na conversa atual (o historico da tela nao e'
+    # pesquisavel pelo terminal; a conversa guardada, sim).
+    "cmd.find.header": ("Achei {n} trecho(s) com \"{termo}\" (do mais antigo para o "
+                        "mais novo):",
+                        "Found {n} snippet(s) with \"{termo}\" (oldest first):",
+                        "Encontre {n} trozo(s) con \"{termo}\" (del mas antiguo al "
+                        "mas nuevo):"),
+    "cmd.find.user": ("voce", "you", "tu"),
+    "cmd.find.bot": ("TEO", "TEO", "TEO"),
+    "cmd.find.tool": ("ferramenta", "tool", "herramienta"),
+    "cmd.find.none": ("Nao achei \"{termo}\" nesta conversa.",
+                      "I did not find \"{termo}\" in this conversation.",
+                      "No encontre \"{termo}\" en esta conversacion."),
+    "cmd.find.bad": ("Escreva o que procurar. Exemplo: {cmd} impressora",
+                     "Write what to look for. Example: {cmd} printer",
+                     "Escribe lo que buscar. Ejemplo: {cmd} impresora"),
+    "cmd.find.more": ("(+{n} trechos anteriores nao mostrados)",
+                      "(+{n} older snippets not shown)",
+                      "(+{n} trozos anteriores no mostrados)"),
+    # /exportar: a conversa vira um arquivo de texto para mandar a alguem.
+    "cmd.export.header": ("Conversa com o TEO - {quando} - modelo: {modelo}",
+                          "Conversation with TEO - {quando} - model: {modelo}",
+                          "Conversacion con TEO - {quando} - modelo: {modelo}"),
+    "cmd.export.user": ("Voce", "You", "Tu"),
+    "cmd.export.bot": ("TEO", "TEO", "TEO"),
+    "cmd.export.ok": ("Conversa salva em: {caminho}",
+                      "Conversation saved at: {caminho}",
+                      "Conversacion guardada en: {caminho}"),
+    "cmd.export.empty": ("Nao ha conversa para salvar ainda.",
+                         "There is no conversation to save yet.",
+                         "No hay conversacion para guardar todavia."),
+    "cmd.export.fail": ("Nao consegui escrever o arquivo em {caminho}.",
+                        "I could not write the file at {caminho}.",
+                        "No pude escribir el archivo en {caminho}."),
+    # /erro: o bloco tecnico pronto para copiar e mandar para quem da suporte.
+    "cmd.erro.title": ("Ultimo erro registrado ({caminho}):",
+                       "Last recorded error ({caminho}):",
+                       "Ultimo error registrado ({caminho}):"),
+    "cmd.erro.none": ("Nenhum erro registrado ate agora (bom sinal).",
+                      "No error recorded so far (good sign).",
+                      "Ningun error registrado hasta ahora (buena senal)."),
+    "cmd.erro.hint": ("Para pedir ajuda, copie o bloco acima e mande para quem da "
+                      "suporte.",
+                      "To ask for help, copy the block above and send it to whoever "
+                      "supports you.",
+                      "Para pedir ayuda, copia el bloque de arriba y mandalo a quien "
+                      "te da soporte."),
+    # /simples: tela para crianca/idoso - sem trilha do pedido e sem nome da
+    # ferramenta; ficam o relogio da espera, o aviso de parar e o medidor.
+    "cmd.simples.on": ("Tela simples LIGADA: sem a trilha do pedido e sem o nome da "
+                       "ferramenta - so o essencial na tela.",
+                       "Simple screen ON: no request trail and no tool name - only "
+                       "the essentials.",
+                       "Pantalla simple ACTIVADA: sin el recorrido del pedido y sin "
+                       "el nombre de la herramienta - solo lo esencial."),
+    "cmd.simples.off": ("Tela simples desligada: a trilha e a ferramenta voltam a "
+                        "aparecer.",
+                        "Simple screen off: the trail and the tool name are back.",
+                        "Pantalla simple desactivada: el recorrido y la herramienta "
+                        "vuelven a aparecer."),
+    "cmd.simples.bad": ("Use {cmd} para ligar/desligar a tela simples (ou {cmd} "
+                        "ligar / desligar).",
+                        "Use {cmd} to turn the simple screen on/off (or {cmd} on / "
+                        "off).",
+                        "Usa {cmd} para activar/desactivar la pantalla simple (o "
+                        "{cmd} activar / desactivar)."),
+    # /reserva: provedor de reserva (troca sozinho quando o principal nao responde).
+    "cmd.reserva.show": ("Reserva de provedor: {atual}. Use {cmd} <numero ou nome> "
+                         "para escolher e {cmd} off para desligar.",
+                         "Backup provider: {atual}. Use {cmd} <number or name> to "
+                         "pick one and {cmd} off to turn it off.",
+                         "Proveedor de reserva: {atual}. Usa {cmd} <numero o nombre> "
+                         "para elegir y {cmd} off para apagar."),
+    "cmd.reserva.set": ("Reserva definida: \"{perfil}\". Se o principal nao "
+                        "responder, o TEO tenta ele UMA vez no turno e volta ao "
+                        "principal no turno seguinte.",
+                        "Backup set: \"{perfil}\". If the main one does not answer, "
+                        "TEO tries it ONCE in the turn and goes back to the main one "
+                        "next turn.",
+                        "Reserva definida: \"{perfil}\". Si el principal no responde, "
+                        "el TEO lo intenta UNA vez en el turno y vuelve al principal "
+                        "en el turno siguiente."),
+    "cmd.reserva.off": ("Reserva desligada: o TEO nao troca de provedor sozinho.",
+                        "Backup off: TEO does not switch providers by itself.",
+                        "Reserva apagada: el TEO no cambia de proveedor solo."),
+    "cmd.reserva.bad": ("Nao achei esse perfil. Use {cmd} sozinho para ver a lista.",
+                        "I did not find that profile. Use {cmd} alone to see the list.",
+                        "No encontre ese perfil. Usa {cmd} solo para ver la lista."),
+    "cmd.reserva.empty": ("Nenhum provedor salvo ainda. Configure um segundo com "
+                          "{cmd_provedor}.",
+                          "No provider saved yet. Set up a second one with "
+                          "{cmd_provedor}.",
+                          "Ningun proveedor guardado todavia. Configura un segundo "
+                          "con {cmd_provedor}."),
+    # /handoff: documento de passagem para o dia seguinte (na pasta atual).
+    "handoff.pedido": (
+        "Voce vai escrever um documento de PASSAGEM DE TURNO (handoff) para a proxima "
+        "sessao do TEO, que nao lembra de nada desta conversa. Escreva em markdown, em "
+        "portugues simples, com estas secoes e nada mais: '## O que foi feito' (bullets "
+        "curtos com o resultado), '## Onde paramos' (o ponto exato em que ficou), "
+        "'## Proximos passos' (numerados, um por linha), '## Arquivos e comandos "
+        "importantes' (caminhos reais que apareceram), '## Cuidados' (o que NAO repetir, "
+        "erros que apareceram e como foram resolvidos). Use so' o que esta na conversa; "
+        "nao invente. Responda so' com o documento.",
+        "You will write a HANDOFF document for the next TEO session, which remembers "
+        "nothing from this conversation. Write in markdown, in plain language, with "
+        "these sections and nothing else: '## What was done' (short bullets with the "
+        "result), '## Where we stopped' (the exact point), '## Next steps' (numbered, one "
+        "per line), '## Important files and commands' (real paths that appeared), "
+        "'## Warnings' (what NOT to repeat, errors that showed up and how they were "
+        "solved). Use only what is in the conversation; do not invent. Answer only with "
+        "the document.",
+        "Vas a escribir un documento de PASE DE TURNO para la proxima sesion del TEO, "
+        "que no recuerda nada de esta conversacion. Escribe en markdown, en lenguaje "
+        "simple, con estas secciones y nada mas: '## Que se hizo' (vinetas cortas con el "
+        "resultado), '## Donde quedamos' (el punto exacto), '## Proximos pasos' "
+        "(numerados, uno por linea), '## Archivos y comandos importantes' (rutas reales), "
+        "'## Cuidados' (que NO repetir, errores que aparecieron y como se resolvieron). "
+        "Usa solo lo que esta en la conversacion; no inventes. Responde solo con el "
+        "documento."),
+    "handoff.titulo": (
+        "# Handoff do TEO - {quando}\n\nModelo: {modelo}\nPasta: {pasta}\n\n"
+        "Este arquivo foi escrito para continuar o trabalho em outro dia. "
+        "Abra o TEO nesta pasta e diga: \"leia {nome} e continue de onde paramos\".",
+        "# TEO handoff - {quando}\n\nModel: {modelo}\nFolder: {pasta}\n\n"
+        "This file was written to continue the work on another day. "
+        "Open TEO in this folder and say: \"read {nome} and continue where we stopped\".",
+        "# Handoff del TEO - {quando}\n\nModelo: {modelo}\nCarpeta: {pasta}\n\n"
+        "Este archivo fue escrito para continuar el trabajo otro dia. "
+        "Abre el TEO en esta carpeta y di: \"lee {nome} y continua donde quedamos\"."),
+    "handoff.sem_resumo": (
+        "_(O resumo automatico nao saiu; abaixo ficam as perguntas desta conversa.)_",
+        "_(The automatic summary failed; below are the questions from this conversation.)_",
+        "_(El resumen automatico no salio; abajo quedan las preguntas de esta conversacion.)_"),
+    "cmd.handoff.ok": ("Handoff salvo em {caminho}. Amanha, abra o TEO nesta pasta e "
+                       "diga: \"leia {nome} e continue de onde paramos\".",
+                       "Handoff saved at {caminho}. Tomorrow, open TEO in this folder "
+                       "and say: \"read {nome} and continue where we stopped\".",
+                       "Handoff guardado en {caminho}. Manana, abre el TEO en esta "
+                       "carpeta y di: \"lee {nome} y continua donde quedamos\"."),
+    "cmd.handoff.empty": ("Nao ha conversa para passar adiante ainda.",
+                          "There is no conversation to hand off yet.",
+                          "No hay conversacion para pasar todavia."),
+    "cmd.handoff.fail_llm": ("Nao consegui pedir o resumo ao modelo ({erro}). Salvei o "
+                             "registro das perguntas da conversa.",
+                             "I could not ask the model for the summary ({erro}). I "
+                             "saved the record of the conversation questions.",
+                             "No pude pedir el resumen al modelo ({erro}). Guarde el "
+                             "registro de las preguntas de la conversacion."),
+    "cmd.handoff.fail_write": ("Nao consegui escrever o handoff em {caminho} ({erro}).",
+                               "I could not write the handoff at {caminho} ({erro}).",
+                               "No pude escribir el handoff en {caminho} ({erro})."),
+
     "cmd.unknown": ("Comando desconhecido. {help} mostra a lista.",
                     "Unknown command. {help} shows the list.",
                     "Comando desconocido. {help} muestra la lista."),
@@ -709,6 +976,36 @@ CHAT = {
     "cmd.new.done": ("Conversa zerada (memoria e skills preservadas).",
                      "Conversation cleared (memory and skills kept).",
                      "Conversacion reiniciada (memoria y skills conservadas)."),
+    # /novo nao apaga mais: ARQUIVA a conversa (v0.2.47). A pessoa pode voltar
+    # nela depois - "aquela conversa de ontem" e' o pedido real.
+    "cmd.new.saved": ("A conversa anterior ficou guardada. Use {listar} para ver a "
+                      "lista e {abrir} <numero> para voltar nela.",
+                      "The previous conversation was saved. Use {listar} to see "
+                      "the list and {abrir} <number> to go back to it.",
+                      "La conversacion anterior quedo guardada. Usa {listar} para "
+                      "ver la lista y {abrir} <numero> para volver a ella."),
+    "cmd.sessions.title": ("Sessoes guardadas (a mais recente primeiro):",
+                           "Saved sessions (newest first):",
+                           "Sesiones guardadas (la mas reciente primero):"),
+    "cmd.sessions.line": ("[{n}] {data} - {titulo} ({msgs} mensagens)",
+                          "[{n}] {data} - {titulo} ({msgs} messages)",
+                          "[{n}] {data} - {titulo} ({msgs} mensajes)"),
+    "cmd.sessions.none": ("(nenhuma sessao guardada ainda; {cmd} guarda a conversa atual)",
+                          "(no session saved yet; {cmd} saves the current conversation)",
+                          "(ninguna sesion guardada todavia; {cmd} guarda la conversacion actual)"),
+    "cmd.sessions.hint": ("Para retomar uma: {cmd} <numero>.",
+                          "To resume one: {cmd} <number>.",
+                          "Para retomar una: {cmd} <numero>."),
+    "cmd.sessions.untitled": ("(sem assunto)", "(no subject)", "(sin asunto)"),
+    "cmd.open.done": ("Sessao de {data} retomada: {titulo} ({msgs} mensagens).",
+                      "Session from {data} resumed: {titulo} ({msgs} messages).",
+                      "Sesion del {data} retomada: {titulo} ({msgs} mensajes)."),
+    "cmd.open.bad": ("Numero invalido. Use {cmd} para ver a lista.",
+                     "Invalid number. Use {cmd} to see the list.",
+                     "Numero invalido. Usa {cmd} para ver la lista."),
+    "cmd.open.miss": ("Nao achei a sessao {n}. Use {cmd} para ver a lista.",
+                      "Session {n} not found. Use {cmd} to see the list.",
+                      "No encontre la sesion {n}. Usa {cmd} para ver la lista."),
     "cmd.skills.empty": ("(nenhuma skill ainda)", "(no skills yet)",
                          "(ninguna skill todavia)"),
     # /zoom: tamanho da TELA DO NAVEGADOR (v0.2.40). Notebook de 14" corta o
@@ -1072,6 +1369,14 @@ CHAT = {
                    "Current folder: {atual}\nType the number and press ENTER. Number 1 cancels.",
                    "Carpeta actual: {atual}\nEscribe el numero y ENTER. El numero 1 cancela."),
     "menu.entering": ("entrando em: {alvo}", "entering: {alvo}", "entrando en: {alvo}"),
+    # Menu com SETAS (@ e / enquanto se digita): cabecalho, vazio e a dica na barra.
+    "menu.pasta": ("Pasta: {pasta}", "Folder: {pasta}", "Carpeta: {pasta}"),
+    "menu.pasta_vazia": ("(pasta vazia)", "(empty folder)", "(carpeta vacia)"),
+    "menu.vazio": ("(nada aqui com \"{filtro}\")", "(nothing here matching \"{filtro}\")",
+                   "(nada aqui con \"{filtro}\")"),
+    "menu.hint": ("setas: escolher | ENTER: pegar/entrar | ESC: fechar | digitar: filtrar",
+                  "arrows: choose | ENTER: pick/enter | ESC: close | type: filter",
+                  "flechas: elegir | ENTER: tomar/entrar | ESC: cerrar | escribir: filtrar"),
 
     "attach.image_ok": (
         "Imagem anexada: {target} ({size}). Agora faca sua pergunta sobre ela.",
@@ -1248,6 +1553,31 @@ CHAT = {
 # Agente (agent.py): avisos de tela e instrucoes que vao ao modelo
 # ---------------------------------------------------------------------------
 AGENT = {
+    # Linha que vai JUNTO da mensagem da pessoa, em cada turno: e' assim que o
+    # modelo sabe que dia e' hoje (o prompt do sistema e' montado uma vez so' na
+    # sessao e envelhece). Fica curta de proposito: entra no texto do usuario,
+    # que ja muda a cada turno, entao nao custa cache de contexto no servidor.
+    "agent.now_line": ("(AGORA: {quando})", "(NOW: {quando})", "(AHORA: {quando})"),
+    # Memorias antigas que combinam com o pedido atual: vao na mesma linha do
+    # pedido, para uma preferencia de semanas atras voltar quando o assunto surge.
+    "agent.mem_block": ("(MEMORIAS QUE JA SEI E QUE COMBINAM COM O PEDIDO: {itens})",
+                        "(MEMORIES I ALREADY HAVE THAT MATCH THIS REQUEST: {itens})",
+                        "(MEMORIAS QUE YA SE Y QUE ENCAJAN CON EL PEDIDO: {itens})"),
+    # Cabecalho do pedido LITERAL que fica na frente do resumo da compactacao.
+    "agent.pinned_header": ("PEDIDO ATUAL DA PESSOA (literal, continua valendo):",
+                            "CURRENT REQUEST FROM THE PERSON (verbatim, still applies):",
+                            "PEDIDO ACTUAL DE LA PERSONA (literal, sigue valiendo):"),
+    # Reserva de provedor (/reserva): o TEO troca sozinho quando o principal nao
+    # responde. A tela diz o que aconteceu - nunca troca calado.
+    "agent.fallback_on": ("Nao consegui falar com {modelo} ({motivo}). Tentando pelo "
+                          "perfil de reserva \"{perfil}\".",
+                          "I could not talk to {modelo} ({motivo}). Trying the backup "
+                          "profile \"{perfil}\".",
+                          "No pude hablar con {modelo} ({motivo}). Intentando por el "
+                          "perfil de reserva \"{perfil}\"."),
+    "agent.fallback_back": ("De volta ao provedor principal: {modelo}.",
+                            "Back to the main provider: {modelo}.",
+                            "De vuelta al proveedor principal: {modelo}."),
     "agent.vision_blocked": (
         "Este modelo ja recusou imagem antes, entao nao vou mandar a foto. Para ver "
         "imagens, escolha um modelo com visao ({model}) - ou me peca para ler por OCR.",
@@ -1678,6 +2008,20 @@ TUI = {
                   "normalmente. El detalle tecnico quedo en erro.log de la carpeta .bgh."),
     "tui.running": ("rodando... {s}s", "running... {s}s", "corriendo... {s}s"),
     "tui.listening": ("ouvindo", "listening", "escuchando"),
+    # Aviso com som + notificacao do sistema: e' o unico sinal para quem saiu da
+    # frente da tela (turno demorado / licenca esperando resposta).
+    "tui.done_title": ("TEO terminou", "TEO finished", "TEO termino"),
+    "tui.done_body": ("A resposta esta pronta (depois de {s}s). Volte para a tela "
+                      "para ler.",
+                      "The answer is ready (after {s}s). Come back to the screen "
+                      "to read it.",
+                      "La respuesta esta lista (despues de {s}s). Vuelve a la "
+                      "pantalla para leerla."),
+    "tui.need_you_title": ("TEO esta esperando voce", "TEO is waiting for you",
+                           "TEO esta esperando por ti"),
+    "tui.need_you_body": ("Preciso da sua resposta para continuar: {label}",
+                          "I need your answer to continue: {label}",
+                          "Necesito tu respuesta para continuar: {label}"),
     "tui.stop_keys": ("PARA PARAR: CTRL+C ou ESC", "TO STOP: CTRL+C or ESC",
                       "PARA PARAR: CTRL+C o ESC"),
     "tui.footer_long": (
@@ -1758,6 +2102,31 @@ LLM = {
     "llm.fail": ("Falha ao falar com o modelo ({tipo}): {erro}",
                  "Failed to talk to the model ({tipo}): {erro}",
                  "Falla al hablar con el modelo ({tipo}): {erro}"),
+    # Rede/servidor fora do ar: frase de gente (o tecnico vai para o erro.log).
+    "llm.offline": (
+        "Nao consegui falar com o servidor do modelo em {url}. Confira se ele esta "
+        "ligado (no modelo local, o llama.cpp/LM Studio) ou se a internet esta "
+        "funcionando, e mande a pergunta de novo.",
+        "I could not reach the model server at {url}. Check that it is running (for "
+        "a local model, llama.cpp/LM Studio) or that the internet works, then send "
+        "the question again.",
+        "No pude hablar con el servidor del modelo en {url}. Revisa que este "
+        "encendido (en modelo local, llama.cpp/LM Studio) o que la internet "
+        "funcione, y manda la pregunta otra vez."),
+    # Repeticao automatica de uma falha passageira (ver LLM._pedido).
+    "llm.retry": ("O servidor do modelo nao respondeu; tentando de novo "
+                  "(tentativa {n} de {total}).",
+                  "The model server did not answer; trying again (attempt {n} of "
+                  "{total}).",
+                  "El servidor del modelo no respondio; intentando otra vez "
+                  "(intento {n} de {total})."),
+    "llm.server_error": (
+        "O servidor do modelo esta com problema agora (erro {code}). Costuma ser "
+        "passageiro: mande a pergunta de novo em alguns segundos.",
+        "The model server has a problem right now (error {code}). It is usually "
+        "temporary: send the question again in a few seconds.",
+        "El servidor del modelo tiene un problema ahora (error {code}). Suele ser "
+        "pasajero: manda la pregunta otra vez en unos segundos."),
     "llm.fail_fallback": ("Falha ao falar com o modelo (fallback esgotado).",
                           "Failed to talk to the model (fallback exhausted).",
                           "Falla al hablar con el modelo (sin mas intentos)."),
@@ -2189,12 +2558,18 @@ TOOLS = {
     "tool.skill.arg.section": ("Trecho a acrescentar (append)", "Piece to add (append)",
                                "Trecho a agregar (append)"),
     "tool.make_document.desc": (
-        "Cria um documento para o usuario (relatorio, carta, guia) em Markdown ou HTML e "
-        "salva na pasta de Documentos. Devolve o caminho completo do arquivo.",
-        "Creates a document for the user (report, letter, guide) in Markdown or HTML and "
-        "saves it in the Documents folder. Returns the full file path.",
-        "Crea un documento para el usuario (informe, carta, guia) en Markdown o HTML y lo "
-        "guarda en la carpeta de Documentos. Devuelve la ruta completa del archivo."),
+        "Cria um documento para o usuario (relatorio, carta, guia, planilha) e salva na "
+        "pasta de Documentos. md e html saem prontos; docx, xlsx e pdf precisam da "
+        "biblioteca instalada - se faltar, a resposta diz qual instalar (instalar_pacote). "
+        "Devolve o caminho completo do arquivo.",
+        "Creates a document for the user (report, letter, guide, spreadsheet) and saves it "
+        "in the Documents folder. md and html are ready to go; docx, xlsx and pdf need the "
+        "library installed - if missing, the answer says which one to install "
+        "(instalar_pacote). Returns the full file path.",
+        "Crea un documento para el usuario (informe, carta, guia, planilla) y lo guarda en "
+        "la carpeta de Documentos. md y html salen listos; docx, xlsx y pdf necesitan la "
+        "biblioteca instalada - si falta, la respuesta dice cual instalar (instalar_pacote). "
+        "Devuelve la ruta completa del archivo."),
     "tool.make_document.arg.title": ("Titulo do documento", "Document title",
                                      "Titulo del documento"),
     "tool.make_document.arg.content_markdown": ("Conteudo em markdown simples",
@@ -2205,6 +2580,51 @@ TOOLS = {
     "tool.make_document.arg.path": ("Opcional: caminho explicito de saida",
                                     "Optional: explicit output path",
                                     "Opcional: ruta explicita de salida"),
+    # ----- lembrete (tools/lembrete.py): vale enquanto o TEO estiver aberto ------
+    "tool.lembrete.desc": (
+        "Marca um lembrete para daqui a N minutos. O aviso aparece na tela do TEO e faz "
+        "som quando a hora chega. SO' funciona enquanto o TEO estiver aberto: se a "
+        "pessoa fechar, o lembrete se perde - diga isso a ela.",
+        "Sets a reminder for N minutes from now. The notice shows on the TEO screen and "
+        "beeps when the time comes. ONLY works while TEO is open: if the person closes "
+        "it, the reminder is lost - tell them that.",
+        "Marca un recordatorio para dentro de N minutos. El aviso aparece en la pantalla "
+        "del TEO y hace un bip cuando llega la hora. SOLO funciona con el TEO abierto: si "
+        "la persona lo cierra, el recordatorio se pierde - diselo."),
+    "tool.lembrete.arg.minutos": (
+        "Daqui a quantos minutos (aceita 0.5, 2, 90)",
+        "In how many minutes (accepts 0.5, 2, 90)",
+        "Dentro de cuantos minutos (acepta 0.5, 2, 90)"),
+    "tool.lembrete.arg.texto": (
+        "O que devo lembrar (frase curta)",
+        "What should I remind (short sentence)",
+        "Que debo recordar (frase corta)"),
+    "lembrete.ok": ("Lembrete marcado: em {quando} eu aviso \"{texto}\". Vale enquanto o "
+                    "TEO estiver aberto.",
+                    "Reminder set: in {quando} I will warn \"{texto}\". Valid while TEO "
+                    "is open.",
+                    "Recordatorio marcado: en {quando} aviso \"{texto}\". Vale mientras "
+                    "el TEO este abierto."),
+    "lembrete.agora": ("LEMBRETE: {texto}", "REMINDER: {texto}", "RECORDATORIO: {texto}"),
+    "lembrete.titulo": ("Lembrete do TEO", "TEO reminder", "Recordatorio del TEO"),
+    "lembrete.segundos": ("{s} segundo(s)", "{s} second(s)", "{s} segundo(s)"),
+    "lembrete.minutos": ("{m} minuto(s)", "{m} minute(s)", "{m} minuto(s)"),
+    "lembrete.horas": ("{h} hora(s)", "{h} hour(s)", "{h} hora(s)"),
+    "lembrete.bad_min": ("ERRO: informe em quantos minutos (numero, ex.: 20).",
+                         "ERROR: say in how many minutes (number, e.g. 20).",
+                         "ERROR: di en cuantos minutos (numero, ej.: 20)."),
+    "lembrete.bad_text": ("ERRO: escreva o que devo lembrar.",
+                          "ERROR: write what I should remind.",
+                          "ERROR: escribe que debo recordar."),
+    "lembrete.bad_range": ("ERRO: o lembrete vale de 0,01 a 1440 minutos (24 horas).",
+                           "ERROR: the reminder ranges from 0.01 to 1440 minutes (24 hours).",
+                           "ERROR: el recordatorio va de 0,01 a 1440 minutos (24 horas)."),
+    "lembrete.cheio": ("ERRO: ja ha {n} lembretes marcados; espere um deles tocar.",
+                       "ERROR: there are already {n} reminders set; wait for one to fire.",
+                       "ERROR: ya hay {n} recordatorios marcados; espera que uno suene."),
+    "lembrete.sem_canal": ("ERRO: esta tela nao tem como mostrar aviso de lembrete.",
+                           "ERROR: this screen cannot show reminder notices.",
+                           "ERROR: esta pantalla no puede mostrar avisos de recordatorio."),
     "tool.instalar_pacote.desc": (
         "Instala uma biblioteca Python que esta faltando para a tarefa (PyPI oficial). Use "
         "quando um import falhar com ModuleNotFoundError. O usuario ve o motivo em "
@@ -2379,6 +2799,11 @@ MEMORY = {
                   "Memoria grabada [{target}]: {texto}"),
     "mem.no_query": ("ERRO: informe a palavra-chave", "ERROR: give the keyword",
                      "ERROR: informa la palabra clave"),
+    # Captura automatica (rede de seguranca do modelo): a tela diz o que ficou
+    # guardado para a pessoa poder corrigir na hora.
+    "mem.captured": ("Guardei na memoria para as proximas conversas: {texto}",
+                     "Saved to memory for next conversations: {texto}",
+                     "Guardado en la memoria para las proximas conversaciones: {texto}"),
     "mem.none": ("Nenhuma memoria contendo '{query}'.",
                  "No memory containing '{query}'.", "Ninguna memoria con '{query}'."),
     "mem.empty_base": ("A memoria esta vazia.", "The memory is empty.",
@@ -2539,9 +2964,38 @@ APP = {
                        "while answering, the Send button becomes Stop; it stops right away",
                        "mientras responde, el boton Enviar pasa a Parar; para al instante"),
     "app.cmd.novo": ("/nova", "/new", "/nuevo"),
-    "app.help.novo": ("conversa nova; a memoria e as skills continuam",
-                      "new conversation; memory and skills stay",
-                      "conversacion nueva; memoria y skills siguen"),
+    "app.help.novo": ("conversa nova; a atual fica guardada nas sessoes; a memoria "
+                      "e as skills continuam",
+                      "new conversation; the current one is saved in sessions; "
+                      "memory and skills stay",
+                      "conversacion nueva; la actual queda guardada en sesiones; "
+                      "la memoria y las skills siguen"),
+    "app.cmd.sessoes": ("/sessoes", "/sessions", "/sesiones"),
+    "app.help.sessoes": ("conversas guardadas, com data e assunto; /abrir <numero> "
+                         "volta numa delas",
+                         "saved conversations with date and subject; /open <number> "
+                         "goes back to one",
+                         "conversaciones guardadas con fecha y asunto; /abrir <numero> "
+                         "vuelve a una"),
+    "app.cmd.buscar": ("/buscar <palavra>", "/find <word>", "/buscar <palabra>"),
+    "app.help.buscar": ("procura uma palavra na conversa e mostra os trechos",
+                        "looks for a word in the conversation and shows the snippets",
+                        "busca una palabra en la conversacion y muestra los trozos"),
+    "app.cmd.exportar": ("/exportar", "/export", "/exportar"),
+    "app.help.exportar": ("salva a conversa em ~/Documentos (texto simples) para "
+                          "mandar a alguem",
+                          "saves the conversation in ~/Documentos (plain text) to "
+                          "send to someone",
+                          "guarda la conversacion en ~/Documentos (texto simple) "
+                          "para mandarla a alguien"),
+    "app.cmd.reserva": ("/reserva <numero>", "/reserve <number>", "/reserva <numero>"),
+    "app.help.reserva": ("provedor de reserva para quando o principal nao responde",
+                         "backup provider for when the main one does not answer",
+                         "proveedor de reserva para cuando el principal no responde"),
+    "app.cmd.handoff": ("/handoff", "/handoff", "/handoff"),
+    "app.help.handoff": ("salva um .md com o que foi feito, para continuar outro dia",
+                         "saves a .md with what was done, to continue another day",
+                         "guarda un .md con lo que se hizo, para continuar otro dia"),
     "app.cmd.modelo": ("/modelo", "/model", "/modelo"),
     "app.help.modelo": ("lista e troca o modelo do servidor (fica salvo)",
                         "lists and switches the server model (saved)",
@@ -2705,3 +3159,19 @@ def lang_from_answer(raw: str) -> str | None:
         if texto.startswith(codigo):
             return codigo
     return None
+
+
+def when_now(agora: datetime | None = None) -> str:
+    """Data e hora locais no formato que vai para o modelo: 'sexta-feira, 27/11/2026, 14:32 (-03)'.
+
+    Fonte unica do "que dia e' hoje": o prompt do sistema e' montado uma vez por
+    sessao e envelhece, entao a linha (AGORA: ...) viaja junto da mensagem da
+    pessoa em cada turno (ver agent.py). Dia da semana vem de WEEKDAYS porque
+    strftime depende do locale da maquina.
+    """
+    momento = agora or datetime.now().astimezone()
+    dia = WEEKDAYS[get_lang()][momento.weekday()]
+    fuso = momento.strftime("%z") or ""
+    sufixo = f" ({fuso[:3]})" if fuso else ""
+    return f"{dia}, {momento.strftime('%d/%m/%Y, %H:%M')}{sufixo}"
+

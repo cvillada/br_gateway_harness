@@ -5,6 +5,7 @@ Variaveis de ambiente util para testes/implantacao: BGH_HOME, BGH_BASE_URL,
 BGH_API_KEY, BGH_MODEL.
 """
 
+import datetime
 import json
 import os
 import stat
@@ -17,6 +18,10 @@ MEMORY_DB = BGH_HOME / "memory.db"
 SESSION_FILE = BGH_HOME / "session.json"
 INPUT_HISTORY_FILE = BGH_HOME / "input_history.txt"
 SCRATCH_DIR = BGH_HOME / "scratch"
+# Conversas guardadas: /nova ARQUIVA a sessao atual aqui (em vez de apagar) e
+# /abrir <numero> volta nela. SESSOES_MAX poda as mais antigas.
+SESSOES_DIR = BGH_HOME / "sessoes"
+SESSOES_MAX = 50
 
 # Presets oferecidos no `bgh setup`.
 PRESETS = {
@@ -66,6 +71,10 @@ DEFAULTS = {
     # Acessibilidade (/voz): le cada resposta em voz alta com a voz do SISTEMA
     # (spd-say/espeak-ng, SAPI do Windows, say do Mac). Desligado por padrao.
     "voz": False,
+    # Acessibilidade (/aviso): bip + notificacao do sistema quando o TEO termina
+    # um turno demorado ou fica esperando resposta (licenca). Ligado por padrao:
+    # quem usa a tela sabe que tem alguem esperando; quem saiu da frente, nao.
+    "notify": True,
     # Acessibilidade visual (/fundo): cor de fundo da tela. "padrao" = a do
     # terminal; as outras pintam a janela e escolhem letra de contraste.
     "cor_fundo": "padrao",
@@ -131,6 +140,12 @@ DEFAULTS = {
     # desenhada acima da linha de digitar, SO enquanto o TEO trabalha. False =
     # tela exatamente como antes (o /palco liga|desliga no chat faz o mesmo).
     "palco": True,
+    # Tela simples (/simples): sem a trilha do palco e sem o nome da ferramenta -
+    # so o relogio da espera, o aviso de parar e o medidor. Para crianca/idoso.
+    "tela_simples": False,
+    # Reserva de provedor (/reserva): nomes de perfil (config["profiles"]) para
+    # onde o TEO troca sozinho quando o principal nao responde. Lista vazia = off.
+    "fallback_profiles": [],
     # Checagem de versao nova na ABERTURA (uma vez, em segundo plano). False =
     # nao consulta o GitHub ao abrir (maquina sem internet, rede restrita).
     "update_check": True,
@@ -391,3 +406,28 @@ def save_config(cfg: dict) -> None:
     )
     # Guarda a API key com permissao de dono apenas.
     os.chmod(CONFIG_PATH, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def add_input_history(text: str) -> None:
+    """Grava uma mensagem no historico da seta-para-cima (~/.bgh/input_history.txt).
+
+    O historico e' UM so' para as duas telas: a tela fixa ja grava no ENTER (e
+    marca `historico_proprio`, para o nucleo nao gravar de novo); o navegador e o
+    modo classico nao tem quem grave, entao o nucleo chama esta funcao. Antes,
+    conversa feita pelo navegador nao aparecia na seta-para-cima do terminal.
+
+    Formato igual ao do prompt_toolkit FileHistory (o mesmo que ja esta no
+    arquivo): linha em branco, "# <data>", e cada linha do texto com "+".
+    """
+    texto = (text or "").strip("\n")
+    if not texto.strip():
+        return
+    try:
+        INPUT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with INPUT_HISTORY_FILE.open("a", encoding="utf-8") as arq:
+            arq.write(f"\n# {datetime.datetime.now()}\n")
+            for linha in texto.split("\n"):
+                arq.write(f"+{linha}\n")
+    except OSError:
+        pass   # historico e' conforto: nunca derruba o turno
+
