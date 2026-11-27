@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmark Qwen3.8-Flash-Next: IQ3_XXS x IQ3_S x UD-IQ4_XS v31 (Strata) - 20/11/2026</title>
+<style>
+  :root { --txt:#1b1f24; --dim:#6b7681; --linha:#e6eaee; --fundo:#f7f9fb; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fundo); color:var(--txt);
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height:1.55; }
+  header { background:linear-gradient(135deg,#141b22,#28323d 60%,#3a4a58); color:#fff; padding:48px 24px 40px; }
+  .wrap { max-width:1080px; margin:0 auto; }
+  header h1 { margin:0 0 6px; font-size:clamp(26px,4vw,40px); line-height:1.15; }
+  header p { margin:6px 0 0; color:#c8d3dc; }
+  .tag { display:inline-block; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25);
+         border-radius:999px; padding:4px 12px; font-size:13px; margin:14px 8px 0 0; }
+  main { padding:28px 24px 64px; }
+  section { background:#fff; border:1px solid var(--linha); border-radius:14px; padding:22px 24px; margin:0 0 18px;
+            box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  h2 { font-size:21px; margin:0 0 4px; }
+  h3 { font-size:15px; margin:0 0 10px; color:var(--dim); font-weight:600; }
+  .desc { color:var(--dim); margin:0 0 14px; font-size:14.5px; }
+  .modelos { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin:0 0 18px; }
+  .modelo { background:#fff; border:1px solid var(--linha); border-left:6px solid var(--c); border-radius:12px; padding:16px 18px; }
+  .modelo b { display:block; font-size:16px; }
+  .modelo small { color:var(--dim); display:block; margin-top:6px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-bottom:18px; }
+  .card { background:#fff; border:1px solid var(--linha); border-radius:14px; padding:16px 18px; }
+  .valores { display:grid; gap:14px; }
+  .lado b { display:block; font-size:22px; line-height:1.2; }
+  .rot { font-size:12px; letter-spacing:.02em; text-transform:uppercase; font-weight:700; }
+  .barra { background:#eef2f6; border-radius:999px; height:7px; overflow:hidden; margin-top:8px; }
+  .barra span { display:block; height:100%; border-radius:999px; }
+  .nota { color:var(--dim); font-size:13px; margin:12px 0 0; }
+  table.tab { width:100%; border-collapse:collapse; margin:14px 0 0; font-size:14.5px; }
+  table.tab th, table.tab td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--linha); }
+  table.tab th { font-size:12.5px; text-transform:uppercase; letter-spacing:.02em; color:var(--dim); }
+  table.tab tbody tr:last-child td { border-bottom:none; }
+  .chamada { background:#f2f7fb; border:1px solid #d6e4ef; border-left:6px solid #2f6f8f; border-radius:12px;
+             padding:16px 20px; margin:0 0 16px; font-size:16px; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; }
+  .sim { color:#1a7f4b; font-weight:600; } .nao { color:#b3261e; font-weight:600; }
+  .dim { color:var(--dim); } .ok { color:#1a7f4b; }
+  .veredito { background:#fff; border:1px solid var(--linha); border-left:6px solid #1b1f24; border-radius:12px;
+              padding:18px 20px; font-size:16px; }
+  ul.metodo { margin:8px 0 0; padding-left:20px; color:#3c454e; font-size:14.5px; }
+  ul.metodo li { margin:5px 0; }
+  footer { color:var(--dim); font-size:13px; text-align:center; padding:8px 24px 40px; }
+  @media print { body { background:#fff; } section, .card, .modelo { box-shadow:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Qwen3.8-Flash-Next: IQ3_XXS x IQ3_S x UD-IQ4_XS v31</h1>
+    <p>Mesmo modelo, mesmo motor, mesma maquina, tres arquivos de pesos: dois de 3 bits (ISTA-DASLab GSQ-RCO,
+    um lido do SSD e o outro com experts fixados na RAM) contra o dinamico de 4 bits. Medido com o modelo
+    aquecido, que e' como ele roda no dia a dia.</p>
+    <span class="tag">2x RTX 5070 Ti 16 GB</span><span class="tag">Ryzen 9 9800X3D</span><span class="tag">60 GB de RAM</span>
+    <span class="tag">Strata 0.1.62</span><span class="tag">ctx 262.144, KV k8v4</span><span class="tag">MTP spec 4</span>
+    <span class="tag">reasoning medium</span><span class="tag">20/11/2026</span>
+  </div>
+</header>
+<main class="wrap">
+
+  <div class="modelos">
+    <div class="modelo" style="--c:#e07a3f">
+      <b>IQ3_XXS (SSD)</b>
+      <small>ISTA-DASLab, quant GSQ-RCO de 3 bits (IQ3_XXS) &middot; 2 shards, 70,6 GiB</small>
+      <small>lidos do arquivo em disco (--mmap-experts), chegam pela memoria de arquivo do Linux. 46,1 GiB de RAM disponivel para o resto da maquina.</small>
+    </div>
+    <div class="modelo" style="--c:#2e7d32">
+      <b>IQ3_S (ISTA)</b>
+      <small>ISTA-DASLab, quant GSQ-RCO de 3 bits (IQ3_S) &middot; 2 shards, 77,9 GiB (83,6 GB)</small>
+      <small>pack iq3_s + native part1 + PLE part2, com --resident-experts: 32,4 GiB de experts fixados na RAM e o resto no tier de arquivo (mmap). 15,2 GiB de RAM disponivel para o resto da maquina.</small>
+    </div>
+    <div class="modelo" style="--c:#2f6f8f">
+      <b>UD-IQ4_XS v31</b>
+      <small>unsloth Dynamic Quant de 4 bits (v3.1) &middot; 4 shards, 87,2 GiB</small>
+      <small>32 GiB de experts fixados na RAM (--resident-budget-gib 32); os outros 24,2 GiB vem do SSD a cada uso. 14,4 GiB de RAM disponivel para o resto da maquina.</small>
+    </div>
+    
+  </div>
+
+  <section>
+    <h2>Resultado em uma olhada</h2>
+    <p class="desc">Temperatura 0, corretores por script, mesmos itens nos tres lados: 296 respostas no
+    IQ3_XXS, 296 no IQ3_S e 296 no UD-IQ4_XS. Nenhum item cortado por teto de tokens.</p>
+    <div class="cards">
+    <div class="card">
+      <h3>Codigo (HumanEval pass@1)</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>99,4%</b><div class="barra"><span style="width:100.0%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>98,2%</b><div class="barra"><span style="width:98.8%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>98,8%</b><div class="barra"><span style="width:99.4%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">164 tarefas, testes executados de verdade &middot; <b>empate tecnico (diferenca dentro do ruido)</b></p>
+    </div>
+    <div class="card">
+      <h3>Instrucoes verificaveis (IFEval estrito)</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>86,7%</b><div class="barra"><span style="width:91.2%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>95,0%</b><div class="barra"><span style="width:100.0%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>88,3%</b><div class="barra"><span style="width:93.0%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">120 prompts do IFEval com os verificadores oficiais &middot; <b>melhor: IQ3_S (ISTA)</b></p>
+    </div>
+    <div class="card">
+      <h3>IFEval por instrucao</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>90,3%</b><div class="barra"><span style="width:93.3%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>96,8%</b><div class="barra"><span style="width:100.0%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>92,5%</b><div class="barra"><span style="width:95.6%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">cada regra do prompt, isolada &middot; <b>melhor: IQ3_S (ISTA)</b></p>
+    </div>
+    <div class="card">
+      <h3>Uso de ferramentas</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>83,3%</b><div class="barra"><span style="width:100.0%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>33,3%</b><div class="barra"><span style="width:40.0%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>66,7%</b><div class="barra"><span style="width:80.0%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">6 tarefas com esquemas reais, ate 3 turnos &middot; <b>melhor: IQ3_XXS (SSD)</b></p>
+    </div>
+    <div class="card">
+      <h3>Contexto longo (16k e 52k)</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>100,0%</b><div class="barra"><span style="width:100.0%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>100,0%</b><div class="barra"><span style="width:100.0%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>100,0%</b><div class="barra"><span style="width:100.0%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">agulha escondida em log sintetico &middot; <b>empate entre os tres</b></p>
+    </div>
+    <div class="card">
+      <h3>Geracao (decode, tok/s)</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>121,9</b><div class="barra"><span style="width:100.0%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>104,3</b><div class="barra"><span style="width:85.6%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>90,1</b><div class="barra"><span style="width:73.9%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">mediana estabilizada de 6 amostras de texto longo, motor aquecido &middot; <b>melhor: IQ3_XXS (SSD)</b></p>
+    </div>
+    <div class="card">
+      <h3>Leitura de prompt (prefill, tok/s)</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>2.076,8</b><div class="barra"><span style="width:98.6%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>2.106,8</b><div class="barra"><span style="width:100.0%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>791,6</b><div class="barra"><span style="width:37.6%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">mediana de 3 prompts NOVOS de ~29 mil tokens &middot; <b>melhor: IQ3_S (ISTA)</b></p>
+    </div>
+    <div class="card">
+      <h3>Raciocinio por item (mediana, caracteres)</h3>
+      <div class="valores"><div class="lado"><span class="rot" style="color:#e07a3f">IQ3_XXS (SSD)</span><b>986,0</b><div class="barra"><span style="width:81.6%;background:#e07a3f"></span></div></div><div class="lado"><span class="rot" style="color:#2e7d32">IQ3_S (ISTA)</span><b>1.208,5</b><div class="barra"><span style="width:100.0%;background:#2e7d32"></span></div></div><div class="lado"><span class="rot" style="color:#2f6f8f">UD-IQ4_XS v31</span><b>921,0</b><div class="barra"><span style="width:76.2%;background:#2f6f8f"></span></div></div></div>
+      <p class="nota">custo de deliberacao antes da resposta (menos caracteres = menos deliberacao, nao mais acerto)</p>
+    </div></div>
+    <div class="veredito"><b>Em uma frase:</b> Nao ha um vencedor unico em qualidade nesta bateria: cada quant fica a frente em um bloco, e o IQ3_S so' aparece claramente atras no de ferramentas (2/6). <b>Bloco a bloco</b>: <b>Codigo</b> empatado (163/164, 161/164 e 162/164) - diferenca de no maximo 2 itens, dentro do ruido de 1 a 2 itens entre rodadas; <b>IFEval estrito</b>: IQ3_S (ISTA) leva (104/120, 114/120 e 106/120), 10 itens acima do pior e acima do ruido de 1 a 2 itens entre rodadas; <b>Ferramentas</b>: IQ3_XXS (SSD) leva (5/6, 2/6 e 4/6), 3 itens acima do pior e acima do ruido de 1 a 2 itens entre rodadas; <b>Contexto longo</b>: 2/2, 2/2 e 2/2.
+    Em <b>custo</b>: decode 121,9 / 104,3 / 90,1 tok/s e prefill 2.076,8 / 2.106,8 / 791,6 tok/s (na ordem IQ3_XXS (SSD), IQ3_S (ISTA), UD-IQ4_XS v31); mais rapido para gerar: <b>IQ3_XXS (SSD)</b>; mais rapido para ler prompt: <b>IQ3_S (ISTA)</b>. O de 4 bits nao comprou acerto, comprou custo; o IQ3_S
+    paga RAM (37,9 GiB presos contra 5,4 do IQ3_XXS) para ficar no mesmo patamar de codigo e ganhar o IFEval.</div>
+  </section>
+
+  <section>
+    <h2>Velocidade: como o modelo se comporta com tudo aquecido</h2>
+    <p class="desc">Sonda de prompt fixo lendo o bloco <code>timings</code> do proprio motor (nao o relogio do cliente).
+    Decode: 6 amostras de texto longo com 1.200 tokens pedidos, headline = mediana das 3 ultimas (estabilizadas).
+    Prefill: 3 prompts de ~29 mil tokens, <b>cada um novo</b> (prompt repetido volta do cache e reportaria
+    centenas de milhares de tok/s). Receita identica nas tres corridas.</p>
+    <table class='tab'><thead><tr><th>&nbsp;</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th></tr></thead><tbody><tr><td>geracao: as 6 amostras (tok/s)</td><td>90,6 / 106,9 / 118,3 / 121,9 / 120,5 / 123,3</td><td>101,2 / 104,0 / 103,8 / 107,3 / 103,2 / 104,3</td><td>87,5 / 87,4 / 90,2 / 91,1 / 86,4 / 90,1</td></tr><tr><td>geracao: mediana estabilizada (tok/s)</td><td><b>121,9</b></td><td><b>104,3</b></td><td><b>90,1</b></td></tr><tr><td>prefill: as amostras (tok/s)</td><td>974,4 / 2.074,2 / 2.079,4</td><td>2167,4 / 2060,1 / 2153,6</td><td>716,1 / 791,4 / 791,7</td></tr><tr><td>prefill: mediana (tok/s)</td><td><b>2.076,8</b></td><td><b>2.106,8</b></td><td><b>791,6</b></td></tr><tr><td>prefill: tokens de prompt por amostra</td><td>28.982</td><td>26.961</td><td>28.982</td></tr><tr><td>1a leitura do disco depois de subir o modelo (GiB)</td><td>19,8</td><td>0,0</td><td>10,1</td></tr><tr><td>leitura do disco com o modelo aquecido (MiB por prompt de 29k)</td><td>25</td><td>2</td><td>1.263</td></tr><tr><td>geracao dentro das tarefas reais (mediana, tok/s)</td><td>142,3</td><td>116,4</td><td>97,5</td></tr><tr><td>latencia media por item de codigo (s)</td><td>4,7</td><td>7,3</td><td>9,5</td></tr><tr><td>tempo de parede somado na bateria (min)</td><td>30</td><td>43</td><td>54</td></tr></tbody></table>
+    <p class="nota">A linha "geracao dentro das tarefas reais" e' a mais justa das tres: mesma tarefa, mesmo
+    prompt e correcao por script em todos os lados &mdash; ela nao depende do texto que a sonda escolheu.</p>
+  </section>
+
+  <section>
+    <h2>O que "aquecido" significa neste teste</h2>
+    <p class="desc">Na primeira passada depois de subir o modelo, os experts que nao estao no cache vem do disco;
+    depois disso o Linux mantem as paginas na memoria de arquivo e o motor praticamente nao toca o SSD. Por isso
+    o mesmo tipo de prompt de ~29 mil tokens foi medido duas vezes: frio e quente.</p>
+    <table class='tab'><thead><tr><th>Momento</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th></tr></thead><tbody><tr><td>modelo recem-subido, primeiro prompt de ~29k</td><td>974,4 tok/s</td><td>2.167,4 tok/s</td><td>716,1 tok/s</td></tr><tr><td>mesmo prompt, ja com o arquivo no cache do sistema</td><td><b>2.076,8 tok/s</b></td><td><b>2.106,8 tok/s</b></td><td><b>791,6 tok/s</b></td></tr><tr><td>ganho do aquecimento</td><td>+113,1%</td><td>-2,8%</td><td>+10,5%</td></tr></tbody></table>
+    <p class="nota">Leitura de disco medida por <code>/proc/diskstats</code> (setores lidos da nvme0n1) durante
+    cada prompt: IQ3_XXS (SSD) 19,8 GiB e depois 25 MiB / IQ3_S (ISTA) 0,0 GiB e depois 2 MiB / UD-IQ4_XS v31 10,1 GiB e depois 1.263 MiB.
+    No IQ3_S nao ha frio a mostrar: os experts ja' estao fixados (37,9 GiB de RAM anonima,
+    0,3 GiB de memoria de arquivo (descartavel)) e o disco praticamente nao e' tocado nos dois casos - por isso o "ganho do
+    aquecimento" dele sai levemente negativo, dentro da variacao da medicao. Aquecer antes de medir nao e' truque:
+    e' o estado em que o servidor passa o dia.</p>
+  </section>
+
+  <section>
+    <h2>Onde cada um guarda o modelo (RAM, VRAM, SSD)</h2>
+    <p class="desc">Lido do <code>/proc</code> do motor, do <code>nvidia-smi</code> e do log de subida, com o
+    modelo no ar.</p>
+    <table class='tab'><thead><tr><th>&nbsp;</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th></tr></thead><tbody><tr><td>arquivo do modelo no disco</td><td>2 shards, 70,6 GiB</td><td>2 shards, 77,9 GiB (83,6 GB)</td><td>4 shards, 87,2 GiB</td></tr><tr><td>como os experts ficam</td><td>lidos do arquivo em disco (--mmap-experts), chegam pela memoria de arquivo do Linux</td><td>pack iq3_s + native part1 + PLE part2, com --resident-experts: 32,4 GiB de experts fixados na RAM e o resto no tier de arquivo (mmap)</td><td>32 GiB de experts fixados na RAM (--resident-budget-gib 32); os outros 24,2 GiB vem do SSD a cada uso</td></tr><tr><td>RAM presa pelo motor (anonima)</td><td>5,4 GiB</td><td>37,9 GiB</td><td>36,8 GiB</td></tr><tr><td>RAM disponivel para o resto do sistema</td><td>46,1 GiB</td><td>15,2 GiB</td><td>14,4 GiB</td></tr><tr><td>VRAM por placa</td><td>15,3 + 15,2 GB (652 e 744 MiB livres)</td><td>15,0 + 14,8 GB (986 e 1.098 MiB livres)</td><td>15,4 + 15,3 GB (580 e 670 MiB livres)</td></tr><tr><td>cache de experts na VRAM</td><td>6.093 slots / 9,45 GiB</td><td>4.905 slots / 9,08 GiB (GPU0) + 5.120 slots / 10,73 GiB (GPU1)</td><td>4.586 slots / 10,37 GiB</td></tr><tr><td>KV (262.144 de contexto, k8v4)</td><td>KV k8v4 inteiro na VRAM</td><td>KV k8v4 inteiro na VRAM</td><td>k8v4 com --kv-resident 32768 (1,59 GiB de RAM fixada)</td></tr><tr><td>reparticao entre as duas placas</td><td>automatico: camadas 0-35 na GPU0, 36-47 na GPU1</td><td>automatico: camadas 0-37 na GPU0, 38-47 na GPU1</td><td>layer-split 32: camadas 0-31 na GPU0, 32-47 na GPU1</td></tr><tr><td>tempo para ficar pronto</td><td>47 s</td><td>~40 s (do log de subida; 16 s so' para fixar 32,5 GiB de experts)</td><td>~100 s</td></tr></tbody></table>
+    <p class="nota">RAM anonima e' a que o motor prende e o sistema nao recupera; o resto e' cache de arquivo do
+    Linux, devolvido na hora em que outro programa pede memoria. O IQ3_S prende 37,9 GiB de RAM anonima e deixa 15,2 GiB disponiveis - menos que o IQ3_XXS (46,1 GiB), porque 32,4 GiB dos experts vivem fixados na RAM. Em troca ele nao le' o disco durante o uso: 2 MiB por prompt de 27 mil tokens, contra 1.263 MiB do IQ4_XS. O tempo para ficar pronto sai do log
+    do motor (carregamento + fixacao do cache de experts + primeira sessao aceita).</p>
+  </section>
+
+  <section>
+    <h2>Codigo (HumanEval)</h2>
+    <p class="desc">164 tarefas. O codigo gerado e' EXECUTADO: os testes do HumanEval rodam de verdade, em
+    subprocesso. pass@1 estrito, sem juiz humano.</p>
+    <table class='tab'><thead><tr><th>&nbsp;</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th><th style='color:#7d5ba6'>bf16 (referencia)</th></tr></thead><tbody><tr><td>acertos</td><td><b>163/164</b></td><td><b>161/164</b></td><td><b>162/164</b></td><td><b>162/164</b></td></tr><tr><td>taxa</td><td><b>99,4%</b></td><td><b>98,2%</b></td><td><b>98,8%</b></td><td>98,8%</td></tr></tbody></table>
+    <p class="nota">Do melhor ao pior ha' 2 item(ns) em 164 - dentro do ruido medido de uma
+    rodada para outra (veja o metodo). Mediana de raciocinio por item: 986 caracteres no
+    IQ3_XXS, 1.208 no IQ3_S e 921 no UD-IQ4_XS.</p>
+  </section>
+
+  <section>
+    <h2>Instrucoes verificaveis (IFEval)</h2>
+    <p class="desc">120 prompts do IFEval (Google) com os verificadores oficiais: "responda em JSON",
+    "sem a letra e", "exatamente 3 paragrafos". Checado por script.</p>
+    <table class="tab"><thead><tr><th>&nbsp;</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th><th style='color:#7d5ba6'>bf16 (referencia)</th></tr></thead><tbody>
+      <tr><td>acertos (estrito)</td><td><b>104/120</b></td><td><b>114/120</b></td><td><b>106/120</b></td><td><b>100/120</b></td></tr>
+      <tr><td>estrito</td><td>86,7%</td><td>95,0%</td><td>88,3%</td><td>83,3%</td></tr>
+      <tr><td>folgado (loose)</td><td>89,2%</td><td>96,7%</td><td>90,0%</td><td>89,2%</td></tr>
+      <tr><td>por instrucao</td><td>90,3%</td><td>96,8%</td><td>92,5%</td><td>87,5%</td></tr>
+    </tbody></table>
+    <p class="nota">Fora do ruido de amostragem: 10 itens separam o melhor do pior, e o IQ3_S e' o melhor dos tres neste bloco (114/120 contra 104/120 e 106/120). Nao e' efeito de tamanho de arquivo - o IQ3_S tem 7,3 GiB mais pesos que o IQ3_XXS, e o IQ4_XS tem 9,3 GiB mais que o IQ3_S. Mediana de raciocinio por item: 986 caracteres no
+    IQ3_XXS, 1.208 no IQ3_S e 921 no UD-IQ4_XS.</p>
+  </section>
+
+  <section>
+    <h2>Uso de ferramentas (tool calling)</h2>
+    <p class="desc">6 tarefas no estilo do agente daqui, com esquemas reais de funcao e ate 3 turnos de conversa.</p>
+    <table class='tab'><thead><tr><th>&nbsp;</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th><th style='color:#7d5ba6'>bf16 (referencia)</th></tr></thead><tbody><tr><td>acertos</td><td><b>5/6</b></td><td><b>2/6</b></td><td><b>4/6</b></td><td><b>5/6</b></td></tr><tr><td>taxa</td><td><b>83,3%</b></td><td><b>33,3%</b></td><td><b>66,7%</b></td><td>83,3%</td></tr></tbody></table>
+    <table class='tab'><thead><tr><th>Tarefa</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th></tr></thead><tbody><tr><td>ler faixa de linhas de um arquivo</td><td><span class='sim'>ok</span></td><td><span class='nao'>falhou</span></td><td><span class='sim'>ok</span></td></tr><tr><td>checar espaco em disco via terminal</td><td><span class='sim'>ok</span></td><td><span class='sim'>ok</span></td><td><span class='sim'>ok</span></td></tr><tr><td>buscar na web e resumir o resultado</td><td><span class='nao'>falhou</span></td><td><span class='nao'>falhou</span></td><td><span class='nao'>falhou</span></td></tr><tr><td>agendar tarefa recorrente (cron)</td><td><span class='sim'>ok</span></td><td><span class='nao'>falhou</span></td><td><span class='nao'>falhou</span></td></tr><tr><td>escrever um arquivo</td><td><span class='sim'>ok</span></td><td><span class='nao'>falhou</span></td><td><span class='sim'>ok</span></td></tr><tr><td>responder sem usar ferramenta</td><td><span class='sim'>ok</span></td><td><span class='sim'>ok</span></td><td><span class='sim'>ok</span></td></tr></tbody></table>
+    <p class="nota">O <i>tipo</i> de erro importa mais que a contagem: escolher a <b>ferramenta errada</b>
+    (terminal no lugar de <code>create_cronjob</code> ou <code>write_file</code>) vira comando de shell em um
+    agente real. A busca na web falhando em tres turnos e' a falha comum a todos os modelos ja' medidos
+    nesta maquina.</p>
+  </section>
+
+  <section>
+    <h2>Contexto longo (agulha no palheiro)</h2>
+    <p class="desc">Um fato escondido no meio de um log sintetico, em duas profundidades.</p>
+    <table class='tab'><thead><tr><th>&nbsp;</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th><th style='color:#7d5ba6'>bf16 (referencia)</th></tr></thead><tbody><tr><td>acertos</td><td><b>2/2</b></td><td><b>2/2</b></td><td><b>2/2</b></td><td><b>2/2</b></td></tr><tr><td>taxa</td><td><b>100,0%</b></td><td><b>100,0%</b></td><td><b>100,0%</b></td><td>100,0%</td></tr></tbody></table>
+    <table class='tab'><thead><tr><th>Teste</th><th style='color:#e07a3f'>IQ3_XXS (SSD)</th><th style='color:#2e7d32'>IQ3_S (ISTA)</th><th style='color:#2f6f8f'>UD-IQ4_XS v31</th></tr></thead><tbody><tr><td>agulha com ~16 mil tokens de prompt</td><td><span class='sim'>lembrou</span> <span class='dim'>(1.812,4 tok/s de prefill)</span></td><td><span class='sim'>lembrou</span> <span class='dim'>(1.961,3 tok/s de prefill)</span></td><td><span class='sim'>lembrou</span> <span class='dim'>(601,0 tok/s de prefill)</span></td></tr><tr><td>agulha com ~52 mil tokens de prompt</td><td><span class='sim'>lembrou</span> <span class='dim'>(2.491,9 tok/s de prefill)</span></td><td><span class='sim'>lembrou</span> <span class='dim'>(2.752,1 tok/s de prefill)</span></td><td><span class='sim'>lembrou</span> <span class='dim'>(687,3 tok/s de prefill)</span></td></tr></tbody></table>
+    <p class="nota">O que muda entre eles nao e' achar a agulha, e' o custo de chegar la': prefill de
+    2.076,8, 2.106,8 e 791,6 tok/s (IQ3_XXS (SSD), IQ3_S (ISTA) e UD-IQ4_XS v31).</p>
+  </section>
+
+  <section>
+    <h2>Distancia ate o modelo original (bf16, na nuvem)</h2>
+    <p class="desc">Cada quant comparado apenas nos itens que o Qwen3.8-27B bf16 da DeepInfra tambem respondeu,
+    na mesma tarefa. Mede a diferenca ponta a ponta (pesos + pilha de servidor de terceiro).</p>
+    <table class="tab"><thead><tr><th>&nbsp;</th><th>HumanEval<br><span class="dim">164 itens pareados</span></th>
+    <th>IFEval<br><span class="dim">120 itens pareados</span></th></tr></thead><tbody><tr><td><b>IQ3_XXS (SSD)</b></td><td>99,4% <span class='dim'>(163/164 contra 162/164 do bf16)</span></td><td>86,7% <span class='dim'>(104/120 contra 100/120 do bf16)</span></td></tr><tr><td><b>IQ3_S (ISTA)</b></td><td>98,2% <span class='dim'>(161/164 contra 162/164 do bf16)</span></td><td>95,0% <span class='dim'>(114/120 contra 100/120 do bf16)</span></td></tr><tr><td><b>UD-IQ4_XS v31</b></td><td>98,8% <span class='dim'>(162/164 contra 162/164 do bf16)</span></td><td>88,3% <span class='dim'>(106/120 contra 100/120 do bf16)</span></td></tr></tbody></table>
+    <p class="nota">Os tres quants ficam no mesmo patamar ou acima do modelo original nos dois blocos: o efeito
+    medido nao e' da compressao "melhorar" o modelo, e' a pilha local (Strata 0.1.62, MTP, temperature 0,
+    reasoning medium) contra a pilha de terceiro da nuvem.</p>
+  </section>
+  <section>
+    <h2>Falhas, sem esconder nada</h2>
+    <p class="desc">Lista crua dos itens que cada um errou, com o motivo que o corretor registrou.</p>
+    <h3 style="color:#e07a3f;margin-top:22px">IQ3_XXS (SSD) &mdash; 18 falhas</h3>
+    <table class='tab'><thead><tr><th>Bloco</th><th>Item</th><th>O que aconteceu</th></tr></thead><tbody><tr><td>Codigo</td><td><code>code_HumanEval_32</code></td><td>AssertionError</td></tr><tr><td>IFEval</td><td><code>ifeval_2247</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1259</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: sim)</td></tr><tr><td>IFEval</td><td><code>ifeval_1843</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2653</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: sim)</td></tr><tr><td>IFEval</td><td><code>ifeval_2359</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: sim)</td></tr><tr><td>IFEval</td><td><code>ifeval_1858</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2266</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_201</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3084</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3478</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3633</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3505</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1954</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2305</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1174</code></td><td>cumpriu 2 de 3 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1300</code></td><td>cumpriu 2 de 3 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>Ferramentas</td><td><code>tools_tool_search_docs</code></td><td>buscou na web mas nao fechou a resposta final em 3 turnos</td></tr></tbody></table>
+    <h3 style="color:#2e7d32;margin-top:22px">IQ3_S (ISTA) &mdash; 13 falhas</h3>
+    <table class='tab'><thead><tr><th>Bloco</th><th>Item</th><th>O que aconteceu</th></tr></thead><tbody><tr><td>Codigo</td><td><code>code_HumanEval_116</code></td><td>AssertionError</td></tr><tr><td>Codigo</td><td><code>code_HumanEval_145</code></td><td>AssertionError</td></tr><tr><td>Codigo</td><td><code>code_HumanEval_47</code></td><td>AssertionError</td></tr><tr><td>IFEval</td><td><code>ifeval_1372</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2359</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: sim)</td></tr><tr><td>IFEval</td><td><code>ifeval_3633</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1127</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2305</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1174</code></td><td>cumpriu 2 de 3 instrucoes (estrito: nao, folgado: sim)</td></tr><tr><td>Ferramentas</td><td><code>tools_tool_read_range</code></td><td>resposta final nao usou o resultado da ferramenta</td></tr><tr><td>Ferramentas</td><td><code>tools_tool_search_docs</code></td><td>buscou na web mas nao fechou a resposta final em 3 turnos</td></tr><tr><td>Ferramentas</td><td><code>tools_tool_cron_weekly</code></td><td>chamou run_terminal em vez de create_cronjob</td></tr><tr><td>Ferramentas</td><td><code>tools_tool_write_report</code></td><td>chamou run_terminal em vez de write_file</td></tr></tbody></table>
+    <h3 style="color:#2f6f8f;margin-top:22px">UD-IQ4_XS v31 &mdash; 18 falhas</h3>
+    <table class='tab'><thead><tr><th>Bloco</th><th>Item</th><th>O que aconteceu</th></tr></thead><tbody><tr><td>Codigo</td><td><code>code_HumanEval_32</code></td><td>AssertionError</td></tr><tr><td>Codigo</td><td><code>code_HumanEval_67</code></td><td>ValueError: invalid literal for int() with base 10: &#x27;oranges&#x27;</td></tr><tr><td>IFEval</td><td><code>ifeval_1300</code></td><td>cumpriu 2 de 3 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3710</code></td><td>cumpriu 2 de 3 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1843</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2653</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: sim)</td></tr><tr><td>IFEval</td><td><code>ifeval_2359</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: sim)</td></tr><tr><td>IFEval</td><td><code>ifeval_3617</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1653</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3478</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3633</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_3505</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1954</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2305</code></td><td>cumpriu 1 de 2 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_1174</code></td><td>cumpriu 2 de 3 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>IFEval</td><td><code>ifeval_2563</code></td><td>cumpriu 0 de 1 instrucoes (estrito: nao, folgado: nao)</td></tr><tr><td>Ferramentas</td><td><code>tools_tool_search_docs</code></td><td>buscou na web mas nao fechou a resposta final em 3 turnos</td></tr><tr><td>Ferramentas</td><td><code>tools_tool_cron_weekly</code></td><td>chamou run_terminal em vez de create_cronjob</td></tr></tbody></table>
+    
+  </section>
+
+  <section>
+    <h2>Qual escolher para cada uso</h2>
+    <div class="chamada"><b>Resumindo:</b> para texto com formato imposto (JSON estrito, instrucao verificavel) o <b>IQ3_S</b> e' o melhor da bateria: 114/120 estrito contra 104/120 e 106/120; para agente com ferramentas o <b>IQ3_XXS (SSD)</b> e' a escolha: 5/6, 2/6 e 4/6 tarefas (o IQ3_S troca a ferramenta certa pelo terminal em 2 delas); para tempo de resposta e RAM livre o <b>IQ3_XXS (SSD)</b> ganha: 121,9 tok/s de geracao e 46,1 GiB disponiveis; para ler prompt grande o <b>IQ3_S (ISTA)</b> e o <b>IQ3_XXS (SSD)</b> estao praticamente empatados (2.106,8 x 2.076,8 tok/s), muito a frente do UD-IQ4_XS v31 (791,6). Codigo fica empatado entre os tres.</div>
+    <table class="tab"><thead><tr><th>Uso</th><th>Primeiro palpite</th><th>Por que (medido)</th></tr></thead><tbody>
+      <tr><td>Agente com ferramentas (cron, arquivos, web)</td><td><b>IQ3_XXS (SSD)</b></td><td>5/6, 2/6 e 4/6 tarefas</td></tr><tr><td>Codigo Python (IDE, agente de dev)</td><td class='dim'>empate tecnico</td><td>HumanEval executado: 163/164, 161/164 e 162/164</td></tr><tr><td>Texto com formato imposto (JSON estrito, relatorio)</td><td><b>IQ3_S (ISTA)</b></td><td>IFEval estrito 86,7%, 95,0% e 88,3%</td></tr><tr><td>Contexto longo (16k e 52k tokens)</td><td class='dim'>empate entre os tres</td><td>2/2, 2/2 e 2/2 agulhas achadas</td></tr><tr><td>Arquivo grande / sessao longa no prompt</td><td><b>IQ3_S (ISTA)</b></td><td>prefill 2.076,8, 2.106,8 e 791,6 tok/s</td></tr><tr><td>Tempo de resposta percebido pelo usuario</td><td><b>IQ3_XXS (SSD)</b></td><td>4,7 s, 7,3 s e 9,5 s por item de codigo</td></tr><tr><td>Conforto de RAM (deixar a maquina livre)</td><td><b>IQ3_XXS (SSD)</b></td><td>46,1 GiB, 15,2 GiB, 14,4 GiB disponiveis</td></tr>
+    </tbody></table>
+  </section>
+
+  <section>
+    <h2>Como este teste foi feito (metodo)</h2>
+    <ul class="metodo">
+      <li>Mesmo harness dos relatorios de 23/09, 11/10, 19/11 e da comparacao de 2 quants de hoje
+      (<code>bench_ab.py</code>, em <code>/home/amd/scripts/bench_llama/ab</code>): blocos code / ifeval /
+      tools / needle / speed.</li>
+      <li>Um modelo por vez na porta 30000, subido pelo painel - nunca dois motores ao mesmo tempo. A corrida do
+      IQ3_S foi feita com o modelo que ja' estava no ar, sem reiniciar o servidor.</li>
+      <li>Temperatura 0 em todos os requests, tetos de token identicos (code 6000, ifeval 8000, tools 4000,
+      needle 400). Reasoning <b>medium</b> nos tres (padrao do servidor, budget de 8.192 tokens).</li>
+      <li>Correcao por script: HumanEval executa os testes; IFEval usa os verificadores oficiais do Google.
+      Nenhum juiz humano, nenhuma nota subjetiva.</li>
+      <li>Velocidade: valor <b>reportado pelo motor</b> no bloco <code>timings</code>, nunca o relogio do cliente.
+      Prefill sempre com prompt novo.</li>
+      <li>Dados item a item: <code>results/IQ3XXS.jsonl</code> (296 itens),
+      <code>results/IQ3S.jsonl</code> (296 itens) e <code>results/IQ4XS.jsonl</code> (296 itens),
+      os tres em 20/11/2026, mesma maquina, mesmo engine 0.1.62.</li>
+      <li>Itens cortados por teto de token no resultado final: 0 no IQ3_XXS,
+      0 no IQ3_S e 0 no UD-IQ4_XS. No IQ3_S cinco itens bateram no teto
+      do <b>servidor</b> (nao no do harness) e foram <b>refeitos</b> com teto de 14.000 tokens, 3 deles em duas
+      tentativas: erro de metodo, nao do modelo - as taxas acima ja' sao as dos itens refeitos.</li>
+      <li>Prompts de prefill da sonda: 28.982, 26.961 e
+      28.982 tokens (IQ3_XXS (SSD), IQ3_S (ISTA) e UD-IQ4_XS v31). Tamanho levemente diferente porque o
+      texto da sonda e' montado na hora; por isso a linha de tok/s das tarefas reais e' a comparavel.</li>
+      <li>Regua de ruido: a mesma bateria no UD-IQ4_XS rodou em 19/11 (163/164 em codigo, 104/120 em IFEval,
+      3/6 em ferramentas) e em 20/11 (162/164, 106/120, 4/6). Variacao de 1 a 2 itens entre rodadas identicas
+      <b>nao separa</b> um quant do outro.</li>
+      <li>tok/s das sondas depende do texto gerado, nao so' do quant: a comparacao que nao depende de conteudo
+      e' a linha "geracao dentro das tarefas reais", com os mesmos itens nos tres lados.</li>
+    </ul>
+  </section>
+
+</main>
+<footer>
+  Relatorio gerado em 20/11/2026 a partir das corridas do harness local.
+  Numeros de qualidade lidos direto dos JSONL; numeros de velocidade das sondas de prompt fixo.
+</footer>
+</body>
+</html>
