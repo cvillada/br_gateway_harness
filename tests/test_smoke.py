@@ -2497,9 +2497,26 @@ ok("menu rola para manter o escolhido visivel",
    _tui49.menu_janela(20, 0) == (0, _tui49.MENU_MAX)
    and _tui49.menu_janela(20, 19)[1] == 20)
 _arq56 = {"rotulo": "nota.txt", "alvo": str(_pasta56 / "nota.txt"), "tipo": "file"}
-ok("@ poe o caminho para ANEXAR e / poe o caminho para ABRIR",
-   _tui49.menu_linha(_arq56, "arquivo") == "@" + _arq56["alvo"]
-   and _tui49.menu_linha(_arq56, "pasta") == "/ " + _arq56["alvo"])
+ok("@ poe o caminho para ANEXAR (e o nucleo le text[1:])",
+   _tui49.menu_linha(_arq56, "arquivo") == "@" + _arq56["alvo"])
+
+# ----- menu de COMANDOS ("/"): lista, filtro e "digitei o comando inteiro" -----
+_cmds57 = _tui49.comandos_da_ajuda()
+_nomes57 = [c["rotulo"] for c in _cmds57]
+ok("menu de comandos vem da ajuda (e tem os comandos desta sessao)",
+   "/modelo" in _nomes57 and "/handoff" in _nomes57 and "/ajuda" in _nomes57
+   and _nomes57 == sorted(_nomes57))
+ok("menu de comandos filtra pelo nome digitado",
+   [c["rotulo"] for c in _tui49.menu_itens(".", "hand", "comando")] == ["/handoff"])
+ok("escolher um comando poe o comando na linha, com espaco para o argumento",
+   _tui49.menu_linha({"rotulo": "/modelo", "alvo": "/modelo", "tipo": "cmd"},
+                     "comando") == "/modelo ")
+ok("/modelo digitado inteiro E' comando (ENTER executa, nao escolhe no menu)",
+   _tui49.eh_comando("/modelo") and _tui49.eh_comando("/model")
+   and _tui49.eh_comando("/handoff notas/x"))
+ok("'/' sozinho, texto comum e comando inventado NAO sao comando",
+   not _tui49.eh_comando("/") and not _tui49.eh_comando("oi")
+   and not _tui49.eh_comando("/inventado123"))
 ok("a barra de baixo ensina as teclas do menu",
    "setas" in _tui49._status_text({"busy": False, "approval": None,
                                    "menu": {"pasta": "/x"}, "ctx": "",

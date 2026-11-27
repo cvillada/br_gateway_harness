@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.57
+
+Correcao do menu: "/" lista COMANDOS, e o comando digitado inteiro executa.
+
+- BUG (relatado pelo dono): digitar "/" abria o menu e "/modelo" + ENTER nao
+  executava nada - o ENTER do menu engolia o texto, e o menu do "/" era o navegador
+  de PASTAS (nao a lista de comandos, que e' o que a pessoa espera ver ali).
+- AGORA: "/" abre o menu de COMANDOS, montado da propria tabela do /ajuda (comando
+  novo entra na ajuda e aparece no menu sozinho), com o nome e a explicacao curta,
+  filtro pelo nome enquanto se digita e setas para escolher. "@" continua sendo o
+  menu de arquivos/pastas (com ".." e subpastas).
+- ENTER no menu de comandos POE o comando na linha ("/modelo " com espaco, para
+  digitar o argumento) - mas se a pessoa ja digitou o comando inteiro, o ENTER
+  EXECUTA: "/modelo" + ENTER roda o /modelo, e "/handoff notas/x" + ENTER roda com
+  o argumento. Reconhecido pelos apelidos dos tres idiomas (`tui.eh_comando`).
+- Lista de itens vazia (texto que nao e' comando nem arquivo, ex.: "/ notas/")
+  agora FECHA o menu e deixa o ENTER seguir para o nucleo; antes a linha era
+  apagada.
+- Ajuda do "/" e do "@" atualizada nos tres idiomas (menu com setas, nao numerado).
+- Suite local: 792 verificacoes gerais (5 novas: lista de comandos vinda da ajuda e
+  ordenada, filtro por nome, ENTER que poe o comando na linha, "/modelo" e
+  "/handoff notas/x" reconhecidos como comando, e "/", texto comum e comando
+  inventado NAO reconhecidos) + 191 da tela.
+
 ## 0.2.56
 
 Menu de arquivos e pastas com as SETAS: "@" e "/" abrem na hora em que se digita.

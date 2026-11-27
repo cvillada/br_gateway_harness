@@ -109,17 +109,59 @@ def notificar(titulo: str, corpo: str) -> None:
 MENU_MAX = 6   # itens visiveis (o cabecalho com a pasta conta separado)
 
 
-def menu_itens(pasta: str, filtro: str = "", modo: str = "arquivo") -> list[dict]:
-    """Entradas do menu: '..', pastas e arquivos, na ordem, ja' filtradas.
+def comandos_da_ajuda() -> list[dict]:
+    """Comandos de barra para o menu do / (nome + a explicacao da ajuda).
 
-    modo decide o que o ENTER faz com um ARQUIVO ('arquivo' anexa com @, 'pasta'
-    abre com /); a lista e' a mesma nas duas. Pasta com muita coisa: a lista chega
-    ate' 200 por tipo (teto do tools/files) e o filtro resolve o resto.
+    Fonte unica: a MESMA tabela de ajuda que a pessoa ve (/ajuda) - comando novo
+    entra na ajuda e aparece no menu sem ninguem lembrar de mexer aqui. Entradas
+    que nao sao comando ("/ <pasta>", "@<arquivo>", "Ctrl+J", "F2") ficam de fora.
     """
+    vistos: set[str] = set()
+    itens: list[dict] = []
+    for _cabecalho, pares in i18n.help_table():
+        for cmd, explicacao in pares:
+            nome = str(cmd).split()[0].strip() if str(cmd).strip() else ""
+            if not nome.startswith("/") or len(nome) < 2 or nome in vistos:
+                continue
+            vistos.add(nome)
+            itens.append({"rotulo": nome, "alvo": nome, "tipo": "cmd",
+                          "dica": str(explicacao)})
+    return sorted(itens, key=lambda item: item["rotulo"])
+
+
+# Nomes de comando que nao estao em i18n.ALIASES (tratados direto no chat_core).
+COMANDOS_EXTRAS = ("ls",)
+
+
+def eh_comando(texto: str) -> bool:
+    """'/modelo' e' um comando de verdade? (o ENTER, entao, executa em vez de escolher).
+
+    Reconhece pelos apelidos de i18n (os tres idiomas) e pelos extras do nucleo.
+    Assim digitar "/modelo" e ENTER executa, enquanto "/" sozinho abre o menu.
+    """
+    limpo = str(texto or "").strip()
+    if not limpo.startswith("/") or len(limpo) < 2:
+        return False
+    nome = limpo.split()[0].lstrip("/").lower()
+    if not nome:
+        return False
+    return i18n.canon(nome) in i18n.ALIASES or nome in COMANDOS_EXTRAS
+
+
+def menu_itens(pasta: str, filtro: str = "", modo: str = "arquivo") -> list[dict]:
+    """Entradas do menu: '..', pastas e arquivos (ou comandos de barra).
+
+    modo: 'arquivo' (@, escolher arquivo para anexar), 'comando' (/ , escolher um
+    comando). Pasta com muita coisa: a lista chega ate' 200 por tipo (teto do
+    tools/files) e o filtro resolve o resto.
+    """
+    baixo = str(filtro or "").strip().lower()
+    if modo == "comando":
+        return [item for item in comandos_da_ajuda()
+                if not baixo or baixo in item["rotulo"].lower()]
     pastas, arquivos, erro = files_mod.entries(pasta)
     if erro:
         return []
-    baixo = str(filtro or "").strip().lower()
     itens: list[dict] = []
     atual = os.path.abspath(pasta)
     pai = os.path.dirname(atual)
@@ -157,13 +199,15 @@ def menu_mover(cursor: int, total: int, passo: int) -> int:
 
 
 def menu_linha(item: dict, modo: str) -> str:
-    """O que entra na LINHA quando a pessoa escolhe um arquivo com ENTER.
+    """O que entra na LINHA quando a pessoa escolhe um item com ENTER.
 
-    '@' anexa (o nucleo le text[1:] como caminho); '/' abre/lista, e a forma que o
-    nucleo entende e' '/ <caminho>' (barra, espaco, caminho).
+    Comando: '/modelo ' (com espaco, para digitar o argumento). Arquivo com @:
+    '@<caminho>' (o nucleo le text[1:] como caminho e anexa).
     """
     alvo = str(item.get("alvo", ""))
-    return ("/ " if modo == "pasta" else "@") + alvo
+    if modo == "comando":
+        return alvo + " "
+    return "@" + alvo
 
 
 def linhas_de_tela(texto: str, largura: int) -> int:
@@ -713,7 +757,7 @@ def run_tui(cfg: dict) -> int:
         return menu
 
     def _menu_abrir(modo: str) -> None:
-        gatilho = "/" if modo == "pasta" else "@"
+        gatilho = "/" if modo == "comando" else "@"
         state["menu"] = {"modo": modo, "gatilho": gatilho, "pasta": os.getcwd(),
                          "filtro": None, "cursor": 0, "itens": []}
         _menu_atual()
@@ -733,18 +777,24 @@ def run_tui(cfg: dict) -> int:
         return 1 + min(MENU_MAX, max(1, len(menu["itens"])))
 
     def _menu_frags() -> list:
-        """Texto do menu: primeira linha = pasta atual; depois os itens."""
+        """Texto do menu: cabecalho (pasta ou 'comandos') e os itens."""
         menu = _menu_atual()
         if menu is None:
             return []
         largura = max(20, _largura() - 2)
-        cabecalho = t("menu.pasta", pasta=menu["pasta"])
+        if menu["modo"] == "comando":
+            cabecalho = t("menu.comandos")
+        else:
+            cabecalho = t("menu.pasta", pasta=menu["pasta"])
         frags: list = [("class:palco.dim", cabecalho[:largura])]
         itens = menu["itens"]
         if not itens:
-            vazio = (t("menu.vazio", filtro=menu["filtro"]) if menu["filtro"]
-                     else t("menu.pasta_vazia"))
-            frags.append(("class:palco.dim", "\n" + vazio))
+            if menu["filtro"]:
+                chave = "menu.sem_comando" if menu["modo"] == "comando" else "menu.vazio"
+                vazio = t(chave, filtro=menu["filtro"])
+            else:
+                vazio = t("menu.pasta_vazia")
+            frags.append(("class:palco.dim", "\n" + vazio[:largura]))
             return frags
         inicio, fim = menu_janela(len(itens), menu["cursor"])
         for i in range(inicio, fim):
@@ -752,7 +802,11 @@ def run_tui(cfg: dict) -> int:
             marcado = i == menu["cursor"]
             marca = "> " if marcado else "  "
             estilo = "class:palco.sel" if marcado else "class:palco"
-            frags.append((estilo, "\n" + marca + str(item["rotulo"])[:largura]))
+            linha = str(item["rotulo"])
+            dica = str(item.get("dica") or "")
+            if dica:
+                linha = f"{linha:<16} {dica}"
+            frags.append((estilo, "\n" + marca + linha[:largura]))
         return frags
 
     def _menu_trocar_pasta(menu: dict, nova: str) -> None:
@@ -765,23 +819,31 @@ def run_tui(cfg: dict) -> int:
         if app is not None:
             _schedule(app.invalidate)
 
-    def _menu_escolher(menu: dict) -> None:
-        """ENTER no menu: entra na pasta, sobe, ou poe o caminho na linha."""
+    def _menu_escolher(menu: dict) -> bool:
+        """ENTER no menu. True = tratado aqui; False = deixa o ENTER enviar a linha.
+
+        Devolve False em dois casos, para o ENTER nao "comer" o que a pessoa
+        digitou: quando ela digitou o COMANDO inteiro ("/modelo" + ENTER executa) e
+        quando a lista esta vazia (o texto vai para o nucleo, que sabe o que fazer).
+        """
+        if menu["modo"] == "comando" and eh_comando(in_buf.text):
+            _menu_fechar()
+            return False
         itens = menu["itens"]
         if not itens:
-            in_buf.reset()
             _menu_fechar()
-            return
+            return False
         item = itens[min(max(0, int(menu["cursor"])), len(itens) - 1)]
         if item["tipo"] == "up":
             _menu_trocar_pasta(menu, str(item["alvo"]))
-            return
+            return True
         if item["tipo"] == "dir":
             _menu_trocar_pasta(menu, str(item["alvo"]))
-            return
+            return True
         in_buf.text = menu_linha(item, menu["modo"])
         in_buf.cursor_position = len(in_buf.text)
         _menu_fechar()
+        return True
 
     # ----- layout: so a parte fixa (o resto e o historico do proprio terminal) --
     rule_top = Window(height=1, char="-", style="class:rule")
@@ -932,8 +994,8 @@ def run_tui(cfg: dict) -> int:
     @kb.add("enter")
     def _enter(event):
         menu = _menu_atual()
-        if menu is not None:
-            _menu_escolher(menu)   # ENTER escolhe no menu de @ e / (nao envia nada)
+        if menu is not None and _menu_escolher(menu):
+            # ENTER escolheu/entrou no menu de @ e / (nao envia nada).
             return
         text = in_buf.text
         # Barra invertida no fim = continuar na linha de baixo (regra de shell),
@@ -1135,13 +1197,14 @@ def run_tui(cfg: dict) -> int:
         _menu_abrir("arquivo")
 
     @kb.add("/")
-    def _gatilho_pasta(event):
-        # "/" com a linha VAZIA: menu de pastas/arquivos (ENTER abre/lista).
+    def _gatilho_comando(event):
+        # "/" com a linha VAZIA: menu de COMANDOS (setas, filtro pelo nome). Digitar
+        # o comando inteiro ("/modelo") e ENTER executa - o menu nao atrapalha.
         if in_buf.text or state.get("approval") is not None or state["busy"]:
             in_buf.insert_text("/")
             return
         in_buf.insert_text("/")
-        _menu_abrir("pasta")
+        _menu_abrir("comando")
 
     def _pinta_fundo() -> None:
         """Manda a cor de fundo para o terminal (OSC 11); ignorada se nao aceitar."""
